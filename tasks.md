@@ -75,31 +75,33 @@
 - [x] Deploy to Vercel
 - [x] Verify live deployment
 
-## Phase 6 — Live Data & AI Features
-- [ ] Integrate CEPEA API (commodity prices)
+## Phase 6 — Automated Data Ingestion
+- [ ] Implement Vercel cron jobs for scheduled data refresh
+- [ ] Integrate CEPEA API & Web Scraping (commodity prices)
 - [ ] Integrate BCB API (USD/BRL, SELIC)
 - [ ] Integrate CONAB data feeds (crop forecasts)
 - [ ] Integrate MDIC/ComexStat (exports)
-- [ ] Set up Vercel cron jobs for scheduled data refresh
-- [ ] Integrate LLM API for content idea generation
-- [ ] Implement auto-generated blog outlines
-- [ ] Add social media copy suggestions
 - [ ] Set up RSS/news feeds for competitor monitoring
 - [ ] Implement public hiring signal detection
 
-## Phase 6 — Security & Authentication
-- [x] Set up Supabase Auth
-- [x] Create Login screen (Email/Password or Magic Link)
-- [x] Implement Next.js Middleware for route protection
-- [x] Update RLS policies to restrict read access to authenticated users
-- [x] Test authentication flow
+## Phase 7 — Vector Database & AI Integration
+- [ ] Enable `pgvector` extension in Supabase
+- [ ] Create vector database schema and embeddings tables
+- [ ] Implement data chunking and embedding generation pipeline (e.g., OpenAI `text-embedding-3-small`)
+- [ ] Integrate LLM API (OpenAI) for content idea generation using Vector Search (RAG)
+- [ ] Implement auto-generated blog outlines and social media copy suggestions
 
-## Phase 7 — Polish & Scale
-- [ ] Add data visualization charts
-- [x] Implement responsive design (mobile/tablet)
-- [ ] Add optional user authentication
-- [ ] Performance optimization (ISR, caching)
-- [ ] SEO optimization
+## Phase 8 — Proprietary Data Module (New Feature)
+- [ ] Review and lift "public-data-only" constraint for authenticated users
+- [ ] Design secure database schema for proprietary data (internal reports, client feedback, sales data)
+- [ ] Implement strict Row Level Security (RLS) policies to ensure proprietary data is fully isolated
+- [ ] Build UX/UI for "Internal Insights Vault" module (accessible only to team members)
+- [ ] Create data capture forms and API routes for manual/automated proprietary data ingestion
+
+## Phase 9 — Polish & Scale
+- [ ] Add data visualization charts (Recharts or Chart.js)
+- [ ] Performance optimization (Next.js ISR, caching)
+- [ ] SEO optimization and Metadata
 - [ ] Error monitoring (Sentry)
 - [ ] Analytics integration
 - [ ] Accessibility audit (WCAG 2.1)
