@@ -54,14 +54,14 @@ export function MarketPulse({ lang }: { lang: Lang }) {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 md:mb-8">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">{tr.marketPulse.title}</h2>
-          <p className="text-slate-500 mt-1">{tr.marketPulse.subtitle}</p>
+          <h2 className="text-2xl md:text-3xl font-extrabold text-slate-900 tracking-tight">{tr.marketPulse.title}</h2>
+          <p className="text-slate-500 mt-1 text-sm md:text-base">{tr.marketPulse.subtitle}</p>
         </div>
         <button
           onClick={fetchData}
-          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm transition-colors"
+          className="flex items-center justify-center gap-2 px-5 py-2.5 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 font-medium text-sm transition-all shadow-sm active:scale-95"
         >
           <RefreshCw size={16} />
           {lang === "pt" ? "Atualizar" : "Refresh"}
@@ -69,71 +69,78 @@ export function MarketPulse({ lang }: { lang: Lang }) {
       </div>
 
       {/* Key Indicators */}
-      <div className="grid grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 md:gap-6 gap-4 mb-8">
         {indicators.slice(0, 3).map((ind) => (
-          <div key={ind.id} className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-slate-500">{lang === "pt" ? ind.name_pt : ind.name_en}</p>
-              {ind.trend === "up" && <TrendingUp size={16} className="text-emerald-500" />}
-              {ind.trend === "down" && <TrendingDown size={16} className="text-red-500" />}
-              {ind.trend === "stable" && <Minus size={16} className="text-slate-400" />}
+          <div key={ind.id} className="bg-white rounded-2xl p-6 shadow-[0_2px_15px_-3px_rgba(0,0,0,0.05)] border border-slate-100/60 hover:shadow-lg transition-shadow duration-300">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-medium text-slate-500">{lang === "pt" ? ind.name_pt : ind.name_en}</p>
+              <div className={`p-2 rounded-lg ${ind.trend === "up" ? "bg-emerald-50" : ind.trend === "down" ? "bg-red-50" : "bg-slate-50"}`}>
+                {ind.trend === "up" && <TrendingUp size={18} className="text-emerald-500" />}
+                {ind.trend === "down" && <TrendingDown size={18} className="text-red-500" />}
+                {ind.trend === "stable" && <Minus size={18} className="text-slate-400" />}
+              </div>
             </div>
-            <p className="text-2xl font-bold text-slate-900 mt-2">{ind.value}</p>
-            <p className="text-xs text-slate-400 mt-1">{tr.marketPulse.source}: {ind.source}</p>
+            <p className="text-3xl font-extrabold text-slate-900 tracking-tighter">{ind.value}</p>
+            <p className="text-xs text-slate-400 mt-2 font-medium">{tr.marketPulse.source}: {ind.source}</p>
           </div>
         ))}
       </div>
 
       {/* Commodity Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mb-8">
-        <div className="px-6 py-4 border-b border-gray-100">
-          <h3 className="font-semibold text-slate-900">{lang === "pt" ? "Preços de Commodities" : "Commodity Prices"}</h3>
+      <div className="bg-white rounded-2xl shadow-[0_2px_15px_-3px_rgba(0,0,0,0.05)] border border-slate-100/60 overflow-hidden mb-8 md:mb-10">
+        <div className="px-6 py-5 border-b border-gray-100/80 bg-slate-50/50">
+          <h3 className="font-bold text-lg text-slate-900">{lang === "pt" ? "Preços de Commodities" : "Commodity Prices"}</h3>
         </div>
-        <table className="w-full">
-          <thead>
-            <tr className="bg-gray-50 text-xs text-slate-500 uppercase">
-              <th className="px-6 py-3 text-left">{tr.marketPulse.commodity}</th>
-              <th className="px-6 py-3 text-right">{tr.marketPulse.price}</th>
-              <th className="px-6 py-3 text-right">{tr.marketPulse.change} (24h)</th>
-              <th className="px-6 py-3 text-left">{tr.marketPulse.source}</th>
-              <th className="px-6 py-3 text-left">{tr.marketPulse.lastUpdate}</th>
-            </tr>
-          </thead>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-white text-xs font-semibold text-slate-500 uppercase tracking-wider border-b border-gray-100">
+                <th className="px-6 py-4 text-left whitespace-nowrap">{tr.marketPulse.commodity}</th>
+                <th className="px-6 py-4 text-right whitespace-nowrap">{tr.marketPulse.price}</th>
+                <th className="px-6 py-4 text-right whitespace-nowrap">{tr.marketPulse.change} (24h)</th>
+                <th className="px-6 py-4 text-left whitespace-nowrap">{tr.marketPulse.source}</th>
+                <th className="px-6 py-4 text-left whitespace-nowrap">{tr.marketPulse.lastUpdate}</th>
+              </tr>
+            </thead>
           <tbody>
             {commodities.map((cp) => (
-              <tr key={cp.id} className="border-t border-gray-50 hover:bg-gray-50 transition-colors">
-                <td className="px-6 py-4 font-medium text-slate-900">{lang === "pt" ? cp.name_pt : cp.name_en}</td>
-                <td className="px-6 py-4 text-right font-mono text-slate-900">
+              <tr key={cp.id} className="border-b border-gray-50 hover:bg-slate-50/50 transition-colors last:border-0">
+                <td className="px-6 py-4 font-semibold text-slate-900 whitespace-nowrap">{lang === "pt" ? cp.name_pt : cp.name_en}</td>
+                <td className="px-6 py-4 text-right font-mono text-slate-900 font-medium whitespace-nowrap">
                   {cp.price.toLocaleString(lang === "pt" ? "pt-BR" : "en-US", { minimumFractionDigits: 2 })} {cp.unit}
                 </td>
-                <td className="px-6 py-4 text-right">
-                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-sm font-medium ${
-                    cp.change_24h > 0 ? "text-emerald-700 bg-emerald-50" : cp.change_24h < 0 ? "text-red-700 bg-red-50" : "text-slate-500 bg-slate-50"
+                <td className="px-6 py-4 text-right whitespace-nowrap">
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold ${
+                    cp.change_24h > 0 ? "text-emerald-700 bg-emerald-100/50" : cp.change_24h < 0 ? "text-red-700 bg-red-100/50" : "text-slate-600 bg-slate-100"
                   }`}>
-                    {cp.change_24h > 0 ? <TrendingUp size={12} /> : cp.change_24h < 0 ? <TrendingDown size={12} /> : <Minus size={12} />}
+                    {cp.change_24h > 0 ? <TrendingUp size={14} /> : cp.change_24h < 0 ? <TrendingDown size={14} /> : <Minus size={14} />}
                     {cp.change_24h > 0 ? "+" : ""}{cp.change_24h}%
                   </span>
                 </td>
-                <td className="px-6 py-4 text-sm text-slate-500">{cp.source}</td>
-                <td className="px-6 py-4 text-sm text-slate-500">{cp.last_update}</td>
+                <td className="px-6 py-4 text-slate-500 whitespace-nowrap">{cp.source}</td>
+                <td className="px-6 py-4 text-slate-500 whitespace-nowrap">{new Date(cp.last_update).toLocaleDateString(lang === "pt" ? "pt-BR" : "en-US")}</td>
               </tr>
             ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* Additional Indicators */}
-      <div className="grid grid-cols-3 gap-4">
+      <h3 className="font-bold text-lg text-slate-900 mb-4 px-1">{lang === "pt" ? "Macroeconomia" : "Macroeconomy"}</h3>
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 md:gap-6 pb-4">
         {indicators.slice(3).map((ind) => (
-          <div key={ind.id} className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-slate-500">{lang === "pt" ? ind.name_pt : ind.name_en}</p>
-              {ind.trend === "up" && <TrendingUp size={16} className="text-emerald-500" />}
-              {ind.trend === "down" && <TrendingDown size={16} className="text-red-500" />}
-              {ind.trend === "stable" && <Minus size={16} className="text-slate-400" />}
+          <div key={ind.id} className="bg-white rounded-2xl p-6 shadow-[0_2px_15px_-3px_rgba(0,0,0,0.05)] border border-slate-100/60 hover:shadow-lg transition-shadow duration-300">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-medium text-slate-500">{lang === "pt" ? ind.name_pt : ind.name_en}</p>
+              <div className={`p-2 rounded-lg ${ind.trend === "up" ? "bg-emerald-50" : ind.trend === "down" ? "bg-red-50" : "bg-slate-50"}`}>
+                {ind.trend === "up" && <TrendingUp size={18} className="text-emerald-500" />}
+                {ind.trend === "down" && <TrendingDown size={18} className="text-red-500" />}
+                {ind.trend === "stable" && <Minus size={18} className="text-slate-400" />}
+              </div>
             </div>
-            <p className="text-2xl font-bold text-slate-900 mt-2">{ind.value}</p>
-            <p className="text-xs text-slate-400 mt-1">{tr.marketPulse.source}: {ind.source}</p>
+            <p className="text-3xl font-extrabold text-slate-900 tracking-tighter">{ind.value}</p>
+            <p className="text-xs text-slate-400 mt-2 font-medium">{tr.marketPulse.source}: {ind.source}</p>
           </div>
         ))}
       </div>

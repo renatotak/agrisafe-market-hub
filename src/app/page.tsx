@@ -17,6 +17,7 @@ import {
   Shield,
   LayoutDashboard,
   LogOut,
+  Menu,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
@@ -43,24 +44,42 @@ export default function Home() {
   ];
 
   return (
-    <div className="min-h-screen flex">
-      {/* Sidebar */}
-      <aside className="w-64 bg-slate-900 text-white flex flex-col fixed h-full">
-        <div className="p-5 border-b border-slate-700">
+    <div className="min-h-screen flex flex-col md:flex-row bg-slate-50 font-sans">
+      
+      {/* --- MOBILE TOP HEADER --- */}
+      <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-slate-900 text-white flex items-center justify-between px-4 z-40 shadow-md">
+        <div className="flex items-center gap-2">
           <h1 className="text-lg font-bold text-emerald-400">🌾 {tr.appName}</h1>
-          <p className="text-xs text-slate-400 mt-1">{tr.tagline}</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button onClick={() => setLang(lang === "pt" ? "en" : "pt")} className="p-2 text-slate-300 hover:text-white">
+            <Globe size={20} />
+          </button>
+          <button onClick={handleLogout} className="p-2 text-red-400 hover:text-red-300">
+            <LogOut size={20} />
+          </button>
+        </div>
+      </div>
+
+      {/* --- DESKTOP SIDEBAR --- */}
+      <aside className="w-64 bg-slate-900 text-white hidden md:flex flex-col fixed h-full z-40 border-r border-slate-800 shadow-xl">
+        <div className="p-6 border-b border-slate-800">
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold text-emerald-400">🌾 {tr.appName}</h1>
+          </div>
+          <p className="text-xs text-slate-400 mt-2 font-medium">{tr.tagline}</p>
         </div>
 
-        <nav className="flex-1 p-3 space-y-1">
+        <nav className="flex-1 p-4 space-y-1.5 overflow-y-auto">
           <button
             onClick={() => setActiveModule("dashboard")}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 ${
               activeModule === "dashboard"
-                ? "bg-slate-700 text-white"
-                : "text-slate-300 hover:bg-slate-800"
+                ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-inner"
+                : "text-slate-400 hover:bg-slate-800/80 hover:text-slate-200"
             }`}
           >
-            <LayoutDashboard size={18} />
+            <LayoutDashboard size={20} className={activeModule === "dashboard" ? "text-emerald-400" : "text-slate-500"} />
             {tr.nav.dashboard}
           </button>
 
@@ -68,57 +87,85 @@ export default function Home() {
             <button
               key={mod.id}
               onClick={() => setActiveModule(mod.id)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 ${
                 activeModule === mod.id
-                  ? "bg-slate-700 text-white"
-                  : "text-slate-300 hover:bg-slate-800"
+                  ? "bg-slate-800 text-white shadow-md border border-slate-700/50"
+                  : "text-slate-400 hover:bg-slate-800/50 hover:text-slate-200"
               }`}
             >
-              <mod.icon size={18} />
+              <mod.icon size={20} className={activeModule === mod.id ? mod.color.replace('bg-', 'text-') : "text-slate-500"} />
               {mod.label}
             </button>
           ))}
         </nav>
 
         {/* Privacy Badge */}
-        <div className="p-4 border-t border-slate-700">
-          <div className="flex items-center gap-2 text-xs text-emerald-400 bg-emerald-900/30 px-3 py-2 rounded-lg">
-            <Shield size={14} />
+        <div className="p-5 border-t border-slate-800">
+          <div className="flex items-center gap-2 text-xs font-medium text-emerald-400/90 bg-emerald-900/20 px-4 py-3 rounded-xl border border-emerald-800/30">
+            <Shield size={16} className="text-emerald-500" />
             {tr.privacy.badge}
           </div>
         </div>
 
         {/* Settings & Logout */}
-        <div className="p-4 border-t border-slate-700 flex flex-col gap-2">
+        <div className="p-5 border-t border-slate-800 flex flex-col gap-3">
           <button
             onClick={() => setLang(lang === "pt" ? "en" : "pt")}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm transition-colors"
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-800/50 hover:bg-slate-700 border border-slate-700 rounded-xl text-sm font-medium transition-colors"
           >
-            <Globe size={16} />
-            {lang === "pt" ? "English" : "Português"}
+            <Globe size={18} className="text-slate-400" />
+            {lang === "pt" ? "🇺🇸 EN" : "🇧🇷 PT"}
           </button>
           
           <button
             onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-red-900/20 hover:bg-red-900/40 text-red-400 rounded-lg text-sm transition-colors"
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-xl text-sm font-medium transition-colors"
           >
-            <LogOut size={16} />
+            <LogOut size={18} />
             {lang === "pt" ? "Sair" : "Logout"}
           </button>
         </div>
       </aside>
 
-      {/* Main Content */}
-      <main className="flex-1 ml-64 p-8">
-        {activeModule === "dashboard" && (
-          <DashboardOverview lang={lang} modules={modules} setActiveModule={setActiveModule} />
-        )}
-        {activeModule === "market" && <MarketPulse lang={lang} />}
-        {activeModule === "campaigns" && <CampaignCenter lang={lang} />}
-        {activeModule === "content" && <ContentEngine lang={lang} />}
-        {activeModule === "competitors" && <CompetitorRadar lang={lang} />}
-        {activeModule === "events" && <EventTracker lang={lang} />}
+      {/* --- MAIN CONTENT AREA --- */}
+      <main className="flex-1 md:ml-64 w-full max-w-[100vw] pt-20 pb-24 md:pt-8 md:pb-8 px-4 md:px-8 xl:px-12 mx-auto">
+        <div className="max-w-7xl mx-auto">
+          {activeModule === "dashboard" && (
+            <DashboardOverview lang={lang} modules={modules} setActiveModule={setActiveModule} />
+          )}
+          {activeModule === "market" && <MarketPulse lang={lang} />}
+          {activeModule === "campaigns" && <CampaignCenter lang={lang} />}
+          {activeModule === "content" && <ContentEngine lang={lang} />}
+          {activeModule === "competitors" && <CompetitorRadar lang={lang} />}
+          {activeModule === "events" && <EventTracker lang={lang} />}
+        </div>
       </main>
+
+      {/* --- MOBILE BOTTOM NAVIGATION --- */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-white/90 backdrop-blur-md border-t border-slate-200 flex items-center justify-between px-2 z-50 shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)] pb-safe">
+        <button
+          onClick={() => setActiveModule("dashboard")}
+          className={`flex flex-col items-center justify-center w-full h-full gap-1 transition-colors ${
+            activeModule === "dashboard" ? "text-emerald-600" : "text-slate-400 hover:text-slate-600"
+          }`}
+        >
+          <LayoutDashboard size={20} className={activeModule === "dashboard" ? "drop-shadow-sm" : ""} />
+          <span className="text-[10px] font-medium truncate max-w-[60px]">Dash</span>
+        </button>
+        
+        {modules.map((mod) => (
+          <button
+            key={mod.id}
+            onClick={() => setActiveModule(mod.id)}
+            className={`flex flex-col items-center justify-center w-full h-full gap-1 transition-colors ${
+              activeModule === mod.id ? mod.color.replace('bg-', 'text-') : "text-slate-400 hover:text-slate-600"
+            }`}
+          >
+            <mod.icon size={20} className={activeModule === mod.id ? "drop-shadow-sm" : ""} />
+            <span className="text-[10px] font-medium truncate max-w-[60px] px-1">{mod.label.split(' ')[0]}</span>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -129,7 +176,7 @@ function DashboardOverview({
   setActiveModule,
 }: {
   lang: Lang;
-  modules: { id: string; icon: React.ComponentType<{ size?: number }>; label: string; color: string }[];
+  modules: { id: string; icon: React.ComponentType<{ size?: number, className?: string }>; label: string; color: string }[];
   setActiveModule: (m: Module) => void;
 }) {
   const tr = t(lang);
@@ -143,44 +190,47 @@ function DashboardOverview({
   ];
 
   return (
-    <div>
-      <div className="mb-8">
-        <h2 className="text-2xl font-bold text-slate-900">{tr.nav.dashboard}</h2>
-        <p className="text-slate-500 mt-1">{tr.tagline}</p>
-        <div className="mt-3 inline-flex items-center gap-2 text-xs bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-full border border-emerald-200">
-          <Shield size={12} />
+    <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
+      <div className="mb-6 md:mb-10 text-center md:text-left">
+        <h2 className="text-2xl md:text-3xl font-extrabold text-slate-900 tracking-tight">{tr.nav.dashboard}</h2>
+        <p className="text-slate-500 mt-2 text-sm md:text-base">{tr.tagline}</p>
+        <div className="mt-4 inline-flex items-center gap-2 text-xs font-semibold bg-emerald-50 text-emerald-700 px-4 py-2 rounded-full border border-emerald-200/50 shadow-sm">
+          <Shield size={14} className="text-emerald-500" />
           {tr.privacy.notice}
         </div>
       </div>
 
       {/* Stats Row */}
-      <div className="grid grid-cols-5 gap-4 mb-8">
-        {stats.map((stat) => (
-          <div key={stat.label} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-            <p className={`text-3xl font-bold ${stat.color}`}>{stat.value}</p>
-            <p className="text-xs text-slate-500 mt-1">{stat.label}</p>
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 md:gap-5 mb-8 md:mb-12">
+        {stats.map((stat, i) => (
+          <div key={stat.label} className={`bg-white rounded-2xl p-5 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] border border-slate-100 hover:shadow-md transition-shadow duration-300 ${i === 4 ? "col-span-2 md:col-span-1" : ""}`}>
+            <p className={`text-3xl md:text-4xl font-extrabold tracking-tighter ${stat.color} mb-1 drop-shadow-sm`}>{stat.value}</p>
+            <p className="text-xs md:text-sm font-medium text-slate-500 leading-tight">{stat.label}</p>
           </div>
         ))}
       </div>
 
       {/* Module Cards */}
-      <div className="grid grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
         {modules.map((mod) => (
           <button
             key={mod.id}
             onClick={() => setActiveModule(mod.id as Module)}
-            className="card-hover bg-white rounded-xl p-6 shadow-sm border border-gray-100 text-left"
+            className="group bg-white rounded-2xl p-6 shadow-[0_2px_15px_-3px_rgba(0,0,0,0.05)] border border-slate-100/60 hover:border-slate-200 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 text-left relative overflow-hidden"
           >
-            <div className={`w-12 h-12 ${mod.color} rounded-xl flex items-center justify-center mb-4`}>
-              <mod.icon size={24} />
+            <div className={`absolute top-0 right-0 w-32 h-32 ${mod.color} opacity-[0.03] rounded-bl-full -z-0 transition-transform group-hover:scale-110`} />
+            
+            <div className={`w-12 h-12 md:w-14 md:h-14 ${mod.color} rounded-2xl flex items-center justify-center mb-5 md:mb-6 shadow-sm text-white relative z-10`}>
+              <mod.icon size={24} className="md:w-7 md:h-7 drop-shadow-sm" />
             </div>
-            <h3 className="font-semibold text-slate-900">{mod.label}</h3>
-            <p className="text-sm text-slate-500 mt-1">
-              {mod.id === "market" && (lang === "pt" ? "Preços, câmbio e indicadores do agro" : "Prices, exchange rates and agro indicators")}
-              {mod.id === "campaigns" && (lang === "pt" ? "Planejamento e acompanhamento" : "Planning and tracking")}
-              {mod.id === "content" && (lang === "pt" ? "Ideias, artigos e calendário" : "Ideas, articles and calendar")}
-              {mod.id === "competitors" && (lang === "pt" ? "Movimentos do mercado" : "Market movements")}
-              {mod.id === "events" && (lang === "pt" ? "Conferências e oportunidades" : "Conferences and opportunities")}
+            
+            <h3 className="font-bold text-lg md:text-xl text-slate-800 mb-2 relative z-10 group-hover:text-slate-900">{mod.label}</h3>
+            <p className="text-sm text-slate-500 leading-relaxed font-medium relative z-10">
+              {mod.id === "market" && (lang === "pt" ? "Preços, câmbio e indicadores." : "Prices, Exchange and Indicators.")}
+              {mod.id === "campaigns" && (lang === "pt" ? "Planejamento estruturado." : "Structured Planning.")}
+              {mod.id === "content" && (lang === "pt" ? "Ideias e calendário editorial." : "Ideas & Editorial Calendar.")}
+              {mod.id === "competitors" && (lang === "pt" ? "Sinais e movimentos do mercado." : "Market movements & Signals.")}
+              {mod.id === "events" && (lang === "pt" ? "Conferências agro e networking." : "Agro conferences & Networking.")}
             </p>
           </button>
         ))}

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Lang, t } from "@/lib/i18n";
 import { supabase } from "@/lib/supabase";
-import { Plus, ChevronRight, Loader2 } from "lucide-react";
+import { Plus, ChevronRight, Loader2, Megaphone } from "lucide-react";
 
 interface Campaign {
   id: string;
@@ -67,33 +67,33 @@ export function CampaignCenter({ lang }: { lang: Lang }) {
   }
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
+    <div className="animate-in fade-in duration-500 pb-8">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 md:mb-8">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">{tr.campaigns.title}</h2>
-          <p className="text-slate-500 mt-1">{tr.campaigns.subtitle}</p>
+          <h2 className="text-2xl md:text-3xl font-extrabold text-slate-900 tracking-tight">{tr.campaigns.title}</h2>
+          <p className="text-slate-500 mt-1 text-sm md:text-base">{tr.campaigns.subtitle}</p>
         </div>
-        <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm transition-colors">
-          <Plus size={16} />
+        <button className="flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-medium text-sm transition-all shadow-sm active:scale-95">
+          <Plus size={18} />
           {tr.campaigns.newCampaign}
         </button>
       </div>
 
       {/* Pipeline Overview */}
-      <div className="grid grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-5 mb-8 md:mb-10">
         {(["draft", "planned", "active", "completed"] as const).map((status) => {
           const count = campaigns.filter((c) => c.status === status).length;
           return (
-            <div key={status} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-              <div className="flex items-center justify-between mb-2">
-                <span className={`text-xs font-medium px-2 py-0.5 rounded ${statusColors[status]}`}>
+            <div key={status} className="bg-white rounded-2xl p-5 shadow-[0_2px_15px_-3px_rgba(0,0,0,0.05)] border border-slate-100/60 hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between mb-3">
+                <span className={`text-xs font-bold px-2.5 py-1 rounded-md ${statusColors[status]}`}>
                   {statusLabel(status)}
                 </span>
-                <span className="text-2xl font-bold text-slate-900">{count}</span>
+                <span className="text-2xl font-extrabold text-slate-900">{count}</span>
               </div>
-              <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+              <div className="h-2 mt-4 bg-slate-100 rounded-full overflow-hidden">
                 <div
-                  className={`h-full rounded-full ${
+                  className={`h-full rounded-full transition-all duration-1000 ${
                     status === "draft" ? "bg-slate-400" : status === "planned" ? "bg-blue-500" : status === "active" ? "bg-emerald-500" : "bg-purple-500"
                   }`}
                   style={{ width: `${campaigns.length ? (count / campaigns.length) * 100 : 0}%` }}
@@ -104,80 +104,90 @@ export function CampaignCenter({ lang }: { lang: Lang }) {
         })}
       </div>
 
-      <div className="grid grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Campaign List */}
-        <div className="col-span-2 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-100">
-            <h3 className="font-semibold text-slate-900">{lang === "pt" ? "Todas as Campanhas" : "All Campaigns"}</h3>
+        <div className="col-span-1 lg:col-span-2 bg-white rounded-2xl shadow-[0_2px_15px_-3px_rgba(0,0,0,0.05)] border border-slate-100/60 overflow-hidden flex flex-col h-[500px]">
+          <div className="px-6 py-5 border-b border-gray-100/80 bg-slate-50/50">
+            <h3 className="font-bold text-lg text-slate-900">{lang === "pt" ? "Todas as Campanhas" : "All Campaigns"}</h3>
           </div>
-          <div className="divide-y divide-gray-50">
+          <div className="divide-y divide-gray-50 flex-1 overflow-y-auto">
             {campaigns.map((campaign) => (
               <button
                 key={campaign.id}
                 onClick={() => setSelectedCampaign(campaign)}
-                className={`w-full px-6 py-4 text-left hover:bg-gray-50 transition-colors flex items-center justify-between ${
-                  selectedCampaign?.id === campaign.id ? "bg-blue-50" : ""
+                className={`w-full px-6 py-5 text-left hover:bg-slate-50/80 transition-all flex items-center justify-between group ${
+                  selectedCampaign?.id === campaign.id ? "bg-blue-50/50 border-l-4 border-l-blue-500" : "border-l-4 border-l-transparent"
                 }`}
               >
-                <div>
-                  <p className="font-medium text-slate-900">{campaign.name}</p>
-                  <p className="text-sm text-slate-500 mt-0.5">{campaign.pillar}</p>
-                  <div className="flex items-center gap-2 mt-2">
-                    <span className={`text-xs px-2 py-0.5 rounded ${statusColors[campaign.status]}`}>
+                <div className="flex-1 min-w-0 pr-4">
+                  <p className="font-bold text-slate-900 truncate text-base">{campaign.name}</p>
+                  <p className="text-sm text-slate-500 mt-1 font-medium">{campaign.pillar}</p>
+                  <div className="flex flex-wrap items-center gap-2 mt-3">
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-md ${statusColors[campaign.status]}`}>
                       {statusLabel(campaign.status)}
                     </span>
-                    <span className="text-xs text-slate-400">
-                      {campaign.start_date} → {campaign.end_date}
+                    <span className="text-xs font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200/60">
+                      {new Date(campaign.start_date).toLocaleDateString(lang === "pt" ? "pt-BR" : "en-US", { month: "short", day: "numeric" })} → {new Date(campaign.end_date).toLocaleDateString(lang === "pt" ? "pt-BR" : "en-US", { month: "short", day: "numeric" })}
                     </span>
                   </div>
                 </div>
-                <ChevronRight size={16} className="text-slate-400" />
+                <ChevronRight size={20} className={`transform transition-transform ${selectedCampaign?.id === campaign.id ? "text-blue-500 translate-x-1" : "text-slate-300 group-hover:text-slate-500"}`} />
               </button>
             ))}
           </div>
         </div>
 
         {/* Campaign Detail */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <div className="col-span-1 bg-white rounded-2xl shadow-[0_2px_15px_-3px_rgba(0,0,0,0.05)] border border-slate-100/60 p-6 lg:p-8 flex flex-col h-[500px] overflow-y-auto">
           {selectedCampaign ? (
             <div>
-              <h3 className="font-semibold text-slate-900 mb-4">{selectedCampaign.name}</h3>
-              <p className="text-sm text-slate-600 mb-4">{selectedCampaign.description}</p>
+              <h3 className="font-extrabold text-xl text-slate-900 mb-2">{selectedCampaign.name}</h3>
+              <p className="text-sm text-slate-500 mb-6 leading-relaxed">{selectedCampaign.description}</p>
 
-              <div className="space-y-3">
-                <div>
-                  <p className="text-xs text-slate-500 uppercase">{tr.campaigns.status}</p>
-                  <span className={`text-sm px-2 py-0.5 rounded ${statusColors[selectedCampaign.status]}`}>
+              <div className="space-y-5">
+                <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">{tr.campaigns.status}</p>
+                  <span className={`text-sm font-bold px-2.5 py-1 rounded-md ${statusColors[selectedCampaign.status]}`}>
                     {statusLabel(selectedCampaign.status)}
                   </span>
                 </div>
-                <div>
-                  <p className="text-xs text-slate-500 uppercase">{lang === "pt" ? "Pilar" : "Pillar"}</p>
-                  <p className="text-sm font-medium text-slate-900">{selectedCampaign.pillar}</p>
+                
+                <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">{lang === "pt" ? "Pilar Mestre" : "Core Pillar"}</p>
+                  <p className="text-base font-bold text-slate-800">{selectedCampaign.pillar}</p>
                 </div>
+
                 <div>
-                  <p className="text-xs text-slate-500 uppercase">{lang === "pt" ? "Canais" : "Channels"}</p>
-                  <div className="flex gap-1 mt-1">
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">{lang === "pt" ? "Canais de Destino" : "Target Channels"}</p>
+                  <div className="flex flex-wrap gap-2">
                     {selectedCampaign.channels.map((ch) => (
-                      <span key={ch} className="text-sm bg-gray-100 px-2 py-0.5 rounded" title={ch}>
-                        {channelEmoji[ch]} {ch}
+                      <span key={ch} className="text-sm font-medium bg-white border border-slate-200 px-3 py-1.5 rounded-lg shadow-sm flex items-center gap-1.5" title={ch}>
+                        <span className="text-lg">{channelEmoji[ch]}</span> {ch.charAt(0).toUpperCase() + ch.slice(1)}
                       </span>
                     ))}
                   </div>
                 </div>
-                <div>
-                  <p className="text-xs text-slate-500 uppercase">{lang === "pt" ? "Peças de Conteúdo" : "Content Pieces"}</p>
-                  <p className="text-2xl font-bold text-slate-900">{selectedCampaign.content_pieces}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-500 uppercase">{lang === "pt" ? "Período" : "Period"}</p>
-                  <p className="text-sm text-slate-900">{selectedCampaign.start_date} → {selectedCampaign.end_date}</p>
+
+                <div className="grid grid-cols-2 gap-4 pt-2">
+                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 text-center">
+                    <p className="text-[10px] md:text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">{lang === "pt" ? "Peças" : "Assets"}</p>
+                    <p className="text-2xl md:text-3xl font-extrabold text-slate-900">{selectedCampaign.content_pieces}</p>
+                  </div>
+                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 flex flex-col justify-center text-center">
+                    <p className="text-[10px] md:text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">{lang === "pt" ? "Período" : "Period"}</p>
+                    <p className="text-xs md:text-sm font-bold text-slate-800">
+                      {new Date(selectedCampaign.start_date).toLocaleDateString(lang === "pt" ? "pt-BR" : "en-US", { month: "short", day: "numeric" })} <br className="hidden md:block" /> 
+                      <span className="text-slate-400 font-normal mx-1">até</span> <br className="hidden md:block" />
+                      {new Date(selectedCampaign.end_date).toLocaleDateString(lang === "pt" ? "pt-BR" : "en-US", { month: "short", day: "numeric" })}
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
           ) : (
-            <div className="text-center text-slate-400 py-12">
-              <p>{lang === "pt" ? "Selecione uma campanha" : "Select a campaign"}</p>
+            <div className="flex flex-col items-center justify-center h-full text-slate-400 py-12">
+              <Megaphone size={48} className="text-slate-200 mb-4" />
+              <p className="font-medium">{lang === "pt" ? "Selecione uma campanha ao lado" : "Select a campaign from the list"}</p>
             </div>
           )}
         </div>
