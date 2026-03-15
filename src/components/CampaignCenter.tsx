@@ -1,9 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Lang, t } from "@/lib/i18n";
-import { sampleCampaigns, Campaign } from "@/data/campaigns";
-import { Plus, ChevronRight } from "lucide-react";
+import { supabase } from "@/lib/supabase";
+import { Plus, ChevronRight, Loader2 } from "lucide-react";
+
+interface Campaign {
+  id: string;
+  name: string;
+  description: string;
+  status: string;
+  channels: string[];
+  start_date: string;
+  end_date: string;
+  pillar: string;
+  content_pieces: number;
+}
 
 const statusColors: Record<string, string> = {
   draft: "bg-slate-100 text-slate-600",
@@ -23,8 +35,18 @@ const channelEmoji: Record<string, string> = {
 
 export function CampaignCenter({ lang }: { lang: Lang }) {
   const tr = t(lang);
-  const [campaigns] = useState<Campaign[]>(sampleCampaigns);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchCampaigns() {
+      const { data } = await supabase.from("campaigns").select("*").order("start_date");
+      if (data) setCampaigns(data);
+      setLoading(false);
+    }
+    fetchCampaigns();
+  }, []);
 
   const statusLabel = (status: string) => {
     const labels: Record<string, Record<string, string>> = {
@@ -35,6 +57,14 @@ export function CampaignCenter({ lang }: { lang: Lang }) {
     };
     return labels[status]?.[lang] || status;
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 size={32} className="animate-spin text-blue-500" />
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -66,7 +96,7 @@ export function CampaignCenter({ lang }: { lang: Lang }) {
                   className={`h-full rounded-full ${
                     status === "draft" ? "bg-slate-400" : status === "planned" ? "bg-blue-500" : status === "active" ? "bg-emerald-500" : "bg-purple-500"
                   }`}
-                  style={{ width: `${(count / campaigns.length) * 100}%` }}
+                  style={{ width: `${campaigns.length ? (count / campaigns.length) * 100 : 0}%` }}
                 />
               </div>
             </div>
@@ -97,7 +127,7 @@ export function CampaignCenter({ lang }: { lang: Lang }) {
                       {statusLabel(campaign.status)}
                     </span>
                     <span className="text-xs text-slate-400">
-                      {campaign.startDate} → {campaign.endDate}
+                      {campaign.start_date} → {campaign.end_date}
                     </span>
                   </div>
                 </div>
@@ -137,11 +167,11 @@ export function CampaignCenter({ lang }: { lang: Lang }) {
                 </div>
                 <div>
                   <p className="text-xs text-slate-500 uppercase">{lang === "pt" ? "Peças de Conteúdo" : "Content Pieces"}</p>
-                  <p className="text-2xl font-bold text-slate-900">{selectedCampaign.contentPieces}</p>
+                  <p className="text-2xl font-bold text-slate-900">{selectedCampaign.content_pieces}</p>
                 </div>
                 <div>
                   <p className="text-xs text-slate-500 uppercase">{lang === "pt" ? "Período" : "Period"}</p>
-                  <p className="text-sm text-slate-900">{selectedCampaign.startDate} → {selectedCampaign.endDate}</p>
+                  <p className="text-sm text-slate-900">{selectedCampaign.start_date} → {selectedCampaign.end_date}</p>
                 </div>
               </div>
             </div>

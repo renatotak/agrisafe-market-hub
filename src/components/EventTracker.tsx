@@ -1,8 +1,24 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Lang, t } from "@/lib/i18n";
-import { agroEvents } from "@/data/events";
-import { MapPin, ExternalLink, Lightbulb, CalendarDays } from "lucide-react";
+import { supabase } from "@/lib/supabase";
+import { MapPin, ExternalLink, Lightbulb, CalendarDays, Loader2 } from "lucide-react";
+
+interface AgroEvent {
+  id: string;
+  name: string;
+  date: string;
+  end_date: string | null;
+  location: string;
+  type: string;
+  description_pt: string;
+  description_en: string;
+  content_opportunity_pt: string;
+  content_opportunity_en: string;
+  website: string | null;
+  upcoming: boolean;
+}
 
 const typeColors: Record<string, string> = {
   conference: "bg-blue-100 text-blue-700",
@@ -14,10 +30,17 @@ const typeColors: Record<string, string> = {
 
 export function EventTracker({ lang }: { lang: Lang }) {
   const tr = t(lang);
+  const [events, setEvents] = useState<AgroEvent[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const sortedEvents = [...agroEvents].sort(
-    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
-  );
+  useEffect(() => {
+    async function fetchEvents() {
+      const { data } = await supabase.from("events").select("*").order("date");
+      if (data) setEvents(data);
+      setLoading(false);
+    }
+    fetchEvents();
+  }, []);
 
   const typeLabel = (type: string) => {
     const labels: Record<string, Record<string, string>> = {
@@ -30,6 +53,14 @@ export function EventTracker({ lang }: { lang: Lang }) {
     return labels[type]?.[lang] || type;
   };
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 size={32} className="animate-spin text-rose-500" />
+      </div>
+    );
+  }
+
   return (
     <div>
       <div className="mb-6">
@@ -39,8 +70,8 @@ export function EventTracker({ lang }: { lang: Lang }) {
 
       {/* Timeline */}
       <div className="space-y-4">
-        {sortedEvents.map((event, idx) => {
-          const eventDate = new Date(event.date);
+        {events.map((event, idx) => {
+          const eventDate = new Date(event.date + "T12:00:00");
           const month = eventDate.toLocaleString(lang === "pt" ? "pt-BR" : "en-US", { month: "short" }).toUpperCase();
           const day = eventDate.getDate();
 
@@ -52,7 +83,7 @@ export function EventTracker({ lang }: { lang: Lang }) {
                   <p className="text-xs font-bold text-slate-500">{month}</p>
                   <p className="text-2xl font-bold text-slate-900">{day}</p>
                 </div>
-                {idx < sortedEvents.length - 1 && (
+                {idx < events.length - 1 && (
                   <div className="w-px h-8 bg-gray-200 mx-auto mt-2" />
                 )}
               </div>
@@ -70,10 +101,10 @@ export function EventTracker({ lang }: { lang: Lang }) {
                         <MapPin size={12} />
                         {event.location}
                       </span>
-                      {event.endDate && (
+                      {event.end_date && (
                         <span className="flex items-center gap-1 text-sm text-slate-500">
                           <CalendarDays size={12} />
-                          {event.date} → {event.endDate}
+                          {event.date} → {event.end_date}
                         </span>
                       )}
                     </div>
@@ -101,7 +132,7 @@ export function EventTracker({ lang }: { lang: Lang }) {
                       {lang === "pt" ? "Oportunidade de Conteúdo" : "Content Opportunity"}
                     </p>
                     <p className="text-sm text-amber-700">
-                      {lang === "pt" ? event.contentOpportunity_pt : event.contentOpportunity_en}
+                      {lang === "pt" ? event.content_opportunity_pt : event.content_opportunity_en}
                     </p>
                   </div>
                 </div>

@@ -1,11 +1,56 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Lang, t } from "@/lib/i18n";
-import { commodityPrices, marketIndicators } from "@/data/market";
-import { TrendingUp, TrendingDown, Minus, RefreshCw } from "lucide-react";
+import { supabase } from "@/lib/supabase";
+import { TrendingUp, TrendingDown, Minus, RefreshCw, Loader2 } from "lucide-react";
+
+interface CommodityPrice {
+  id: string;
+  name_pt: string;
+  name_en: string;
+  price: number;
+  unit: string;
+  change_24h: number;
+  source: string;
+  last_update: string;
+}
+
+interface MarketIndicator {
+  id: string;
+  name_pt: string;
+  name_en: string;
+  value: string;
+  trend: "up" | "down" | "stable";
+  source: string;
+}
 
 export function MarketPulse({ lang }: { lang: Lang }) {
   const tr = t(lang);
+  const [commodities, setCommodities] = useState<CommodityPrice[]>([]);
+  const [indicators, setIndicators] = useState<MarketIndicator[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchData = async () => {
+    setLoading(true);
+    const [{ data: comms }, { data: inds }] = await Promise.all([
+      supabase.from("commodity_prices").select("*").order("id"),
+      supabase.from("market_indicators").select("*").order("id"),
+    ]);
+    if (comms) setCommodities(comms);
+    if (inds) setIndicators(inds);
+    setLoading(false);
+  };
+
+  useEffect(() => { fetchData(); }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 size={32} className="animate-spin text-emerald-500" />
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -14,7 +59,10 @@ export function MarketPulse({ lang }: { lang: Lang }) {
           <h2 className="text-2xl font-bold text-slate-900">{tr.marketPulse.title}</h2>
           <p className="text-slate-500 mt-1">{tr.marketPulse.subtitle}</p>
         </div>
-        <button className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm transition-colors">
+        <button
+          onClick={fetchData}
+          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm transition-colors"
+        >
           <RefreshCw size={16} />
           {lang === "pt" ? "Atualizar" : "Refresh"}
         </button>
@@ -22,7 +70,7 @@ export function MarketPulse({ lang }: { lang: Lang }) {
 
       {/* Key Indicators */}
       <div className="grid grid-cols-3 gap-4 mb-8">
-        {marketIndicators.slice(0, 3).map((ind) => (
+        {indicators.slice(0, 3).map((ind) => (
           <div key={ind.id} className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
             <div className="flex items-center justify-between">
               <p className="text-sm text-slate-500">{lang === "pt" ? ind.name_pt : ind.name_en}</p>
@@ -52,7 +100,7 @@ export function MarketPulse({ lang }: { lang: Lang }) {
             </tr>
           </thead>
           <tbody>
-            {commodityPrices.map((cp) => (
+            {commodities.map((cp) => (
               <tr key={cp.id} className="border-t border-gray-50 hover:bg-gray-50 transition-colors">
                 <td className="px-6 py-4 font-medium text-slate-900">{lang === "pt" ? cp.name_pt : cp.name_en}</td>
                 <td className="px-6 py-4 text-right font-mono text-slate-900">
@@ -60,14 +108,14 @@ export function MarketPulse({ lang }: { lang: Lang }) {
                 </td>
                 <td className="px-6 py-4 text-right">
                   <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-sm font-medium ${
-                    cp.change24h > 0 ? "text-emerald-700 bg-emerald-50" : cp.change24h < 0 ? "text-red-700 bg-red-50" : "text-slate-500 bg-slate-50"
+                    cp.change_24h > 0 ? "text-emerald-700 bg-emerald-50" : cp.change_24h < 0 ? "text-red-700 bg-red-50" : "text-slate-500 bg-slate-50"
                   }`}>
-                    {cp.change24h > 0 ? <TrendingUp size={12} /> : cp.change24h < 0 ? <TrendingDown size={12} /> : <Minus size={12} />}
-                    {cp.change24h > 0 ? "+" : ""}{cp.change24h}%
+                    {cp.change_24h > 0 ? <TrendingUp size={12} /> : cp.change_24h < 0 ? <TrendingDown size={12} /> : <Minus size={12} />}
+                    {cp.change_24h > 0 ? "+" : ""}{cp.change_24h}%
                   </span>
                 </td>
                 <td className="px-6 py-4 text-sm text-slate-500">{cp.source}</td>
-                <td className="px-6 py-4 text-sm text-slate-500">{cp.lastUpdate}</td>
+                <td className="px-6 py-4 text-sm text-slate-500">{cp.last_update}</td>
               </tr>
             ))}
           </tbody>
@@ -76,7 +124,7 @@ export function MarketPulse({ lang }: { lang: Lang }) {
 
       {/* Additional Indicators */}
       <div className="grid grid-cols-3 gap-4">
-        {marketIndicators.slice(3).map((ind) => (
+        {indicators.slice(3).map((ind) => (
           <div key={ind.id} className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
             <div className="flex items-center justify-between">
               <p className="text-sm text-slate-500">{lang === "pt" ? ind.name_pt : ind.name_en}</p>

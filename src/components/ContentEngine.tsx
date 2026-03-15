@@ -1,8 +1,22 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Lang, t } from "@/lib/i18n";
-import { contentIdeas } from "@/data/campaigns";
-import { Sparkles, ArrowUpRight, Calendar } from "lucide-react";
+import { supabase } from "@/lib/supabase";
+import { Sparkles, ArrowUpRight, Calendar, Loader2 } from "lucide-react";
+
+interface ContentIdea {
+  id: string;
+  title_pt: string;
+  title_en: string;
+  type: string;
+  pillar: string;
+  description_pt: string;
+  description_en: string;
+  keywords: string[];
+  trend_score: number;
+  suggested_date: string | null;
+}
 
 const typeColors: Record<string, string> = {
   blog: "bg-blue-100 text-blue-700",
@@ -22,6 +36,25 @@ const pillarColors: Record<string, string> = {
 
 export function ContentEngine({ lang }: { lang: Lang }) {
   const tr = t(lang);
+  const [ideas, setIdeas] = useState<ContentIdea[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchIdeas() {
+      const { data } = await supabase.from("content_ideas").select("*").order("trend_score", { ascending: false });
+      if (data) setIdeas(data);
+      setLoading(false);
+    }
+    fetchIdeas();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 size={32} className="animate-spin text-purple-500" />
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -67,7 +100,7 @@ export function ContentEngine({ lang }: { lang: Lang }) {
 
       {/* Content Ideas Grid */}
       <div className="grid grid-cols-2 gap-4">
-        {contentIdeas.map((idea) => (
+        {ideas.map((idea) => (
           <div
             key={idea.id}
             className={`bg-white rounded-xl p-5 shadow-sm border-l-4 ${pillarColors[idea.pillar] || "border-l-gray-300"} border border-gray-100 card-hover`}
@@ -81,7 +114,7 @@ export function ContentEngine({ lang }: { lang: Lang }) {
               </span>
               <div className="flex items-center gap-1">
                 <div className="w-8 h-8 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center text-white text-xs font-bold">
-                  {idea.trendScore}
+                  {idea.trend_score}
                 </div>
               </div>
             </div>
@@ -100,10 +133,10 @@ export function ContentEngine({ lang }: { lang: Lang }) {
             <div className="flex items-center justify-between pt-3 border-t border-gray-100">
               <span className="text-xs text-slate-500">{idea.pillar}</span>
               <div className="flex gap-2">
-                {idea.suggestedDate && (
+                {idea.suggested_date && (
                   <span className="flex items-center gap-1 text-xs text-slate-500">
                     <Calendar size={12} />
-                    {idea.suggestedDate}
+                    {idea.suggested_date}
                   </span>
                 )}
                 <button className="flex items-center gap-1 text-xs text-purple-600 hover:text-purple-700 font-medium">

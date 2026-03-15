@@ -1,8 +1,29 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Lang, t } from "@/lib/i18n";
-import { competitors } from "@/data/competitors";
-import { ExternalLink, AlertCircle, Rocket, Handshake, Users, Newspaper } from "lucide-react";
+import { supabase } from "@/lib/supabase";
+import { ExternalLink, AlertCircle, Rocket, Handshake, Users, Newspaper, Loader2 } from "lucide-react";
+
+interface CompetitorSignal {
+  id: string;
+  competitor_id: string;
+  type: string;
+  title_pt: string;
+  title_en: string;
+  date: string;
+  source: string;
+}
+
+interface Competitor {
+  id: string;
+  name: string;
+  segment: string;
+  website: string;
+  description_pt: string;
+  description_en: string;
+  competitor_signals: CompetitorSignal[];
+}
 
 const signalIcons: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
   product_launch: Rocket,
@@ -22,6 +43,20 @@ const signalColors: Record<string, string> = {
 
 export function CompetitorRadar({ lang }: { lang: Lang }) {
   const tr = t(lang);
+  const [competitors, setCompetitors] = useState<Competitor[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchCompetitors() {
+      const { data } = await supabase
+        .from("competitors")
+        .select("*, competitor_signals(*)")
+        .order("name");
+      if (data) setCompetitors(data);
+      setLoading(false);
+    }
+    fetchCompetitors();
+  }, []);
 
   const signalTypeLabel = (type: string) => {
     const labels: Record<string, Record<string, string>> = {
@@ -34,6 +69,14 @@ export function CompetitorRadar({ lang }: { lang: Lang }) {
     return labels[type]?.[lang] || type;
   };
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 size={32} className="animate-spin text-orange-500" />
+      </div>
+    );
+  }
+
   return (
     <div>
       <div className="mb-6">
@@ -44,7 +87,7 @@ export function CompetitorRadar({ lang }: { lang: Lang }) {
       {/* Signal Summary */}
       <div className="grid grid-cols-5 gap-3 mb-8">
         {Object.entries(signalIcons).map(([type, Icon]) => {
-          const count = competitors.reduce((acc, c) => acc + c.signals.filter((s) => s.type === type).length, 0);
+          const count = competitors.reduce((acc, c) => acc + (c.competitor_signals?.filter((s) => s.type === type).length || 0), 0);
           return (
             <div key={type} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 text-center">
               <Icon size={20} className="mx-auto text-slate-600 mb-2" />
@@ -83,7 +126,7 @@ export function CompetitorRadar({ lang }: { lang: Lang }) {
                 {lang === "pt" ? comp.description_pt : comp.description_en}
               </p>
               <div className="space-y-2">
-                {comp.signals.map((signal) => {
+                {(comp.competitor_signals || []).map((signal) => {
                   const Icon = signalIcons[signal.type] || Newspaper;
                   return (
                     <div key={signal.id} className="flex items-center gap-3 py-2 border-t border-gray-50">
