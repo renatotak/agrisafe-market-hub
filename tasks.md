@@ -87,6 +87,13 @@
 - [ ] Set up RSS/news feeds for competitor monitoring
 - [ ] Implement public hiring signal detection
 
+## Phase 6 — Security & Authentication (In Progress)
+- [x] Set up Supabase Auth
+- [x] Create Login screen (Email/Password or Magic Link)
+- [x] Implement Next.js Middleware for route protection
+- [x] Update RLS policies to restrict read access to authenticated users
+- [ ] Test authentication flow
+
 ## Phase 7 — Polish & Scale
 - [ ] Add data visualization charts
 - [ ] Implement responsive design (mobile/tablet)

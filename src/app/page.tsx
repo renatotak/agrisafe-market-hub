@@ -16,7 +16,10 @@ import {
   Globe,
   Shield,
   LayoutDashboard,
+  LogOut,
 } from "lucide-react";
+import { supabase } from "@/lib/supabase";
+import { useRouter } from "next/navigation";
 
 type Module = "dashboard" | "market" | "campaigns" | "content" | "competitors" | "events";
 
@@ -24,6 +27,12 @@ export default function Home() {
   const [lang, setLang] = useState<Lang>("pt");
   const [activeModule, setActiveModule] = useState<Module>("dashboard");
   const tr = t(lang);
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push("/login");
+  };
 
   const modules = [
     { id: "market" as Module, icon: BarChart3, label: tr.modules.marketPulse, color: "bg-emerald-500" },
@@ -79,14 +88,22 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Language Toggle */}
-        <div className="p-4 border-t border-slate-700">
+        {/* Settings & Logout */}
+        <div className="p-4 border-t border-slate-700 flex flex-col gap-2">
           <button
             onClick={() => setLang(lang === "pt" ? "en" : "pt")}
             className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-sm transition-colors"
           >
             <Globe size={16} />
             {lang === "pt" ? "English" : "Português"}
+          </button>
+          
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-red-900/20 hover:bg-red-900/40 text-red-400 rounded-lg text-sm transition-colors"
+          >
+            <LogOut size={16} />
+            {lang === "pt" ? "Sair" : "Logout"}
           </button>
         </div>
       </aside>

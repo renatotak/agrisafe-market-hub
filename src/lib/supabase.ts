@@ -1,6 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient as createBrowserClient } from '@/utils/supabase/client'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Legacy export for client components that relied on this singleton
+export const supabase = createBrowserClient()
