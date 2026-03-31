@@ -1,7 +1,7 @@
 {
   "crons": [
     {
-      "path": "/api/cron/sync-market-data",
+      "path": "/api/cron/sync-all",
       "schedule": "0 8 * * *"
     }
   ]

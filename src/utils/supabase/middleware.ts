@@ -32,10 +32,11 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  // Protect all routes except /login, /forgot-password, and api/auth
+  // Protect all routes except /login and /api/cron (cron jobs authenticate via Bearer token)
   const isAuthRoute = request.nextUrl.pathname.startsWith('/login')
-  
-  if (!user && !isAuthRoute) {
+  const isCronRoute = request.nextUrl.pathname.startsWith('/api/cron')
+
+  if (!user && !isAuthRoute && !isCronRoute) {
     // Redirect to login page if no user
     const url = request.nextUrl.clone()
     url.pathname = '/login'

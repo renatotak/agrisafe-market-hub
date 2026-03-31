@@ -10,6 +10,9 @@ export const translations = {
       content: "Motor de Conteúdo",
       competitors: "Radar Competitivo",
       events: "Eventos & Conferências",
+      news: "Notícias Agro",
+      retailers: "Diretório de Canais",
+      recuperacao: "Recuperação Judicial",
     },
     marketPulse: {
       title: "Pulso do Agro Mercado",
@@ -110,6 +113,9 @@ export const translations = {
       content: "Content Engine",
       competitors: "Competitor Radar",
       events: "Events & Conferences",
+      news: "Agro News",
+      retailers: "Retailers Directory",
+      recuperacao: "Judicial Recovery",
     },
     marketPulse: {
       title: "Agro Market Pulse",

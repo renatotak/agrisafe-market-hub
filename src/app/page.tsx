@@ -7,6 +7,9 @@ import { CampaignCenter } from "@/components/CampaignCenter";
 import { ContentEngine } from "@/components/ContentEngine";
 import { CompetitorRadar } from "@/components/CompetitorRadar";
 import { EventTracker } from "@/components/EventTracker";
+import { AgroNews } from "@/components/AgroNews";
+import { RetailersDirectory } from "@/components/RetailersDirectory";
+import { RecuperacaoJudicial } from "@/components/RecuperacaoJudicial";
 import {
   BarChart3,
   Megaphone,
@@ -18,11 +21,14 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
+  Newspaper,
+  Store,
+  Scale,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 
-type Module = "dashboard" | "market" | "campaigns" | "content" | "competitors" | "events";
+type Module = "dashboard" | "market" | "campaigns" | "content" | "competitors" | "events" | "news" | "retailers" | "recuperacao";
 
 export default function Home() {
   const [lang, setLang] = useState<Lang>("pt");
@@ -41,6 +47,9 @@ export default function Home() {
     { id: "content" as Module, icon: PenTool, label: tr.modules.content, color: "bg-purple-500" },
     { id: "competitors" as Module, icon: Radar, label: tr.modules.competitors, color: "bg-orange-500" },
     { id: "events" as Module, icon: Calendar, label: tr.modules.events, color: "bg-rose-500" },
+    { id: "news" as Module, icon: Newspaper, label: tr.modules.news, color: "bg-teal-500" },
+    { id: "retailers" as Module, icon: Store, label: tr.modules.retailers, color: "bg-cyan-500" },
+    { id: "recuperacao" as Module, icon: Scale, label: tr.modules.recuperacao, color: "bg-red-500" },
   ];
 
   return (
@@ -138,34 +147,18 @@ export default function Home() {
           {activeModule === "content" && <ContentEngine lang={lang} />}
           {activeModule === "competitors" && <CompetitorRadar lang={lang} />}
           {activeModule === "events" && <EventTracker lang={lang} />}
+          {activeModule === "news" && <AgroNews lang={lang} />}
+          {activeModule === "retailers" && <RetailersDirectory lang={lang} />}
+          {activeModule === "recuperacao" && <RecuperacaoJudicial lang={lang} />}
         </div>
       </main>
 
       {/* --- MOBILE BOTTOM NAVIGATION --- */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-white/90 backdrop-blur-md border-t border-slate-200 flex items-center justify-between px-2 z-50 shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)] pb-safe">
-        <button
-          onClick={() => setActiveModule("dashboard")}
-          className={`flex flex-col items-center justify-center w-full h-full gap-1 transition-colors ${
-            activeModule === "dashboard" ? "text-emerald-600" : "text-slate-400 hover:text-slate-600"
-          }`}
-        >
-          <LayoutDashboard size={20} className={activeModule === "dashboard" ? "drop-shadow-sm" : ""} />
-          <span className="text-[10px] font-medium truncate max-w-[60px]">Dash</span>
-        </button>
-        
-        {modules.map((mod) => (
-          <button
-            key={mod.id}
-            onClick={() => setActiveModule(mod.id)}
-            className={`flex flex-col items-center justify-center w-full h-full gap-1 transition-colors ${
-              activeModule === mod.id ? mod.color.replace('bg-', 'text-') : "text-slate-400 hover:text-slate-600"
-            }`}
-          >
-            <mod.icon size={20} className={activeModule === mod.id ? "drop-shadow-sm" : ""} />
-            <span className="text-[10px] font-medium truncate max-w-[60px] px-1">{mod.label.split(' ')[0]}</span>
-          </button>
-        ))}
-      </div>
+      <MobileBottomNav
+        modules={modules}
+        activeModule={activeModule}
+        setActiveModule={setActiveModule}
+      />
     </div>
   );
 }
@@ -184,9 +177,9 @@ function DashboardOverview({
   const stats = [
     { label: lang === "pt" ? "Commodities Monitoradas" : "Commodities Tracked", value: "6", color: "text-emerald-600" },
     { label: lang === "pt" ? "Campanhas Ativas" : "Active Campaigns", value: "2", color: "text-blue-600" },
-    { label: lang === "pt" ? "Ideias de Conteúdo" : "Content Ideas", value: "6", color: "text-purple-600" },
     { label: lang === "pt" ? "Concorrentes Monitorados" : "Competitors Tracked", value: "5", color: "text-orange-600" },
-    { label: lang === "pt" ? "Eventos Próximos" : "Upcoming Events", value: "6", color: "text-rose-600" },
+    { label: lang === "pt" ? "Canais Mapeados" : "Retailers Mapped", value: "10K+", color: "text-cyan-600" },
+    { label: lang === "pt" ? "Módulos Ativos" : "Active Modules", value: "8", color: "text-teal-600" },
   ];
 
   return (
@@ -231,10 +224,88 @@ function DashboardOverview({
               {mod.id === "content" && (lang === "pt" ? "Ideias e calendário editorial." : "Ideas & Editorial Calendar.")}
               {mod.id === "competitors" && (lang === "pt" ? "Sinais e movimentos do mercado." : "Market movements & Signals.")}
               {mod.id === "events" && (lang === "pt" ? "Conferências agro e networking." : "Agro conferences & Networking.")}
+              {mod.id === "news" && (lang === "pt" ? "Notícias do agronegócio em tempo real." : "Real-time agribusiness news.")}
+              {mod.id === "retailers" && (lang === "pt" ? "Distribuidores e revendas de insumos." : "Input distributors and retailers.")}
+              {mod.id === "recuperacao" && (lang === "pt" ? "Monitoramento de processos judiciais." : "Judicial recovery monitoring.")}
             </p>
           </button>
         ))}
       </div>
     </div>
+  );
+}
+
+function MobileBottomNav({
+  modules,
+  activeModule,
+  setActiveModule,
+}: {
+  modules: { id: string; icon: React.ComponentType<{ size?: number; className?: string }>; label: string; color: string }[];
+  activeModule: Module;
+  setActiveModule: (m: Module) => void;
+}) {
+  const [showMore, setShowMore] = useState(false);
+  const primaryModules = modules.slice(0, 4);
+  const overflowModules = modules.slice(4);
+  const isOverflowActive = overflowModules.some((m) => m.id === activeModule);
+
+  return (
+    <>
+      {showMore && (
+        <div className="md:hidden fixed bottom-16 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-200 z-50 p-3 shadow-[0_-4px_20px_-5px_rgba(0,0,0,0.1)]">
+          <div className="grid grid-cols-4 gap-2">
+            {overflowModules.map((mod) => (
+              <button
+                key={mod.id}
+                onClick={() => { setActiveModule(mod.id as Module); setShowMore(false); }}
+                className={`flex flex-col items-center justify-center py-3 rounded-xl transition-colors ${
+                  activeModule === mod.id ? `${mod.color.replace("bg-", "text-")} bg-slate-50` : "text-slate-500"
+                }`}
+              >
+                <mod.icon size={20} />
+                <span className="text-[10px] font-medium mt-1 truncate max-w-[70px] px-1">{mod.label.split(" ")[0]}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-white/90 backdrop-blur-md border-t border-slate-200 flex items-center justify-between px-1 z-50 shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)] pb-safe">
+        <button
+          onClick={() => { setActiveModule("dashboard"); setShowMore(false); }}
+          className={`flex flex-col items-center justify-center w-full h-full gap-1 transition-colors ${
+            activeModule === "dashboard" ? "text-emerald-600" : "text-slate-400"
+          }`}
+        >
+          <LayoutDashboard size={20} />
+          <span className="text-[10px] font-medium">Dash</span>
+        </button>
+
+        {primaryModules.map((mod) => (
+          <button
+            key={mod.id}
+            onClick={() => { setActiveModule(mod.id as Module); setShowMore(false); }}
+            className={`flex flex-col items-center justify-center w-full h-full gap-1 transition-colors ${
+              activeModule === mod.id ? mod.color.replace("bg-", "text-") : "text-slate-400"
+            }`}
+          >
+            <mod.icon size={20} />
+            <span className="text-[10px] font-medium truncate max-w-[50px]">{mod.label.split(" ")[0]}</span>
+          </button>
+        ))}
+
+        {overflowModules.length > 0 && (
+          <button
+            onClick={() => setShowMore(!showMore)}
+            className={`flex flex-col items-center justify-center w-full h-full gap-1 transition-colors ${
+              isOverflowActive || showMore ? "text-teal-600" : "text-slate-400"
+            }`}
+          >
+            <Menu size={20} />
+            <span className="text-[10px] font-medium">{isOverflowActive ? "•••" : "Mais"}</span>
+          </button>
+        )}
+      </div>
+    </>
   );
 }
