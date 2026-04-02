@@ -15,6 +15,8 @@ import {
   MapPin,
 } from "lucide-react";
 import { ENTITY_TYPES, RJ_STATUS, type RecuperacaoJudicial as RJType } from "@/data/recuperacao";
+import { mockRecuperacaoJudicial } from "@/data/mock";
+import { MockBadge } from "@/components/ui/MockBadge";
 
 const PAGE_SIZE = 15;
 
@@ -27,6 +29,7 @@ export function RecuperacaoJudicial({ lang }: { lang: Lang }) {
   const [stateFilter, setStateFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [stats, setStats] = useState<Record<string, number>>({});
+  const [isMock, setIsMock] = useState(true);
 
   useEffect(() => {
     fetchStats();
@@ -67,8 +70,18 @@ export function RecuperacaoJudicial({ lang }: { lang: Lang }) {
     if (statusFilter) query = query.eq("status", statusFilter);
 
     const { data, count } = await query;
-    if (data) setItems(data);
-    if (count != null) setTotalCount(count);
+    if (data?.length) {
+      setItems(data);
+      if (count != null) setTotalCount(count);
+      setIsMock(false);
+    } else {
+      const mock = mockRecuperacaoJudicial.map((m) => ({
+        ...m, entity_cnpj: null, court: null, case_number: null, status: "em_andamento",
+        filing_date: m.published_at, source_url: m.source_url, source_name: m.source_name,
+      })) as RJType[];
+      setItems(mock);
+      setTotalCount(mock.length);
+    }
     setLoading(false);
   };
 
@@ -78,15 +91,18 @@ export function RecuperacaoJudicial({ lang }: { lang: Lang }) {
   return (
     <div>
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 md:mb-8">
-        <div>
-          <h2 className="text-2xl md:text-3xl font-extrabold text-slate-900 tracking-tight">
-            {lang === "pt" ? "Recuperação Judicial" : "Judicial Recovery"}
-          </h2>
-          <p className="text-slate-500 mt-1 text-sm md:text-base">
-            {lang === "pt"
-              ? "Monitoramento de processos no agronegócio"
-              : "Monitoring agribusiness judicial recovery cases"}
-          </p>
+        <div className="flex items-center gap-3">
+          <div>
+            <h2 className="text-2xl md:text-3xl font-extrabold text-neutral-900 tracking-tight">
+              {lang === "pt" ? "Recuperação Judicial" : "Judicial Recovery"}
+            </h2>
+            <p className="text-neutral-500 mt-1 text-sm md:text-base">
+              {lang === "pt"
+                ? "Monitoramento de processos no agronegócio"
+                : "Monitoring agribusiness judicial recovery cases"}
+            </p>
+          </div>
+          {isMock && <MockBadge />}
         </div>
         <button
           onClick={() => { setPage(0); fetchItems(); fetchStats(); }}

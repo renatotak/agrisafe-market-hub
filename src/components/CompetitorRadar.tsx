@@ -3,7 +3,13 @@
 import { useEffect, useState } from "react";
 import { Lang, t } from "@/lib/i18n";
 import { supabase } from "@/lib/supabase";
-import { ExternalLink, AlertCircle, Rocket, Handshake, Users, Newspaper, Loader2 } from "lucide-react";
+import { ExternalLink, AlertCircle, Rocket, Handshake, Users, Newspaper, Loader2, BarChart3 } from "lucide-react";
+import { mockCompetitors } from "@/data/mock";
+import { MockBadge } from "@/components/ui/MockBadge";
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
+  ScatterChart, Scatter, ZAxis, CartesianGrid,
+} from "recharts";
 
 interface CompetitorSignal {
   id: string;
@@ -26,25 +32,27 @@ interface Competitor {
 }
 
 const signalIcons: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
-  product_launch: Rocket,
-  funding: AlertCircle,
-  partnership: Handshake,
-  hiring: Users,
-  news: Newspaper,
+  product_launch: Rocket, funding: AlertCircle, partnership: Handshake, hiring: Users, news: Newspaper,
 };
 
 const signalColors: Record<string, string> = {
   product_launch: "bg-blue-100 text-blue-700",
-  funding: "bg-emerald-100 text-emerald-700",
+  funding: "bg-green-100 text-green-700",
   partnership: "bg-purple-100 text-purple-700",
   hiring: "bg-amber-100 text-amber-700",
-  news: "bg-slate-100 text-slate-700",
+  news: "bg-neutral-100 text-neutral-700",
+};
+
+const SIGNAL_CHART_COLORS: Record<string, string> = {
+  product_launch: "#3b82f6", funding: "#22c55e", partnership: "#8b5cf6", hiring: "#f59e0b", news: "#6b7280",
 };
 
 export function CompetitorRadar({ lang }: { lang: Lang }) {
   const tr = t(lang);
   const [competitors, setCompetitors] = useState<Competitor[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showCharts, setShowCharts] = useState(true);
+  const [isMock, setIsMock] = useState(true);
 
   useEffect(() => {
     async function fetchCompetitors() {
@@ -52,7 +60,9 @@ export function CompetitorRadar({ lang }: { lang: Lang }) {
         .from("competitors")
         .select("*, competitor_signals(*)")
         .order("name");
-      if (data) setCompetitors(data);
+      const hasLive = data?.length;
+      setCompetitors(hasLive ? data : mockCompetitors);
+      setIsMock(!hasLive);
       setLoading(false);
     }
     fetchCompetitors();
@@ -60,11 +70,11 @@ export function CompetitorRadar({ lang }: { lang: Lang }) {
 
   const signalTypeLabel = (type: string) => {
     const labels: Record<string, Record<string, string>> = {
-      product_launch: { pt: "Lançamento", en: "Launch" },
-      funding: { pt: "Captação", en: "Funding" },
+      product_launch: { pt: "Lan\u00e7amento", en: "Launch" },
+      funding: { pt: "Capta\u00e7\u00e3o", en: "Funding" },
       partnership: { pt: "Parceria", en: "Partnership" },
-      hiring: { pt: "Contratação", en: "Hiring" },
-      news: { pt: "Notícia", en: "News" },
+      hiring: { pt: "Contrata\u00e7\u00e3o", en: "Hiring" },
+      news: { pt: "Not\u00edcia", en: "News" },
     };
     return labels[type]?.[lang] || type;
   };
@@ -72,86 +82,195 @@ export function CompetitorRadar({ lang }: { lang: Lang }) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <Loader2 size={32} className="animate-spin text-orange-500" />
+        <Loader2 size={32} className="animate-spin text-brand-primary" />
       </div>
     );
   }
 
+  // Signal type distribution for bar chart
+  const signalTypeCounts = Object.keys(signalIcons).map((type) => ({
+    type,
+    label: signalTypeLabel(type),
+    count: competitors.reduce((acc, c) => acc + (c.competitor_signals?.filter((s) => s.type === type).length || 0), 0),
+    color: SIGNAL_CHART_COLORS[type],
+  }));
+
+  // Timeline scatter data
+  const allSignals = competitors.flatMap((c) =>
+    (c.competitor_signals || []).map((s) => ({
+      ...s,
+      competitorName: c.name,
+      dateTs: new Date(s.date).getTime(),
+      typeIndex: Object.keys(signalIcons).indexOf(s.type),
+    }))
+  );
+
   return (
-    <div className="animate-in fade-in duration-500 pb-8">
-      <div className="mb-6 md:mb-8 text-center md:text-left">
-        <h2 className="text-2xl md:text-3xl font-extrabold text-slate-900 tracking-tight">{tr.competitors.title}</h2>
-        <p className="text-slate-500 mt-1 text-sm md:text-base">{tr.competitors.subtitle}</p>
+    <div className="pb-8">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+        <div className="flex items-center gap-3">
+          <div>
+            <h2 className="text-2xl font-bold text-neutral-800 tracking-tight">{tr.competitors.title}</h2>
+            <p className="text-neutral-500 mt-1 text-sm">{tr.competitors.subtitle}</p>
+          </div>
+          {isMock && <MockBadge />}
+        </div>
+        <button
+          onClick={() => setShowCharts(!showCharts)}
+          className={`p-2 rounded-lg text-sm transition-colors ${showCharts ? "bg-brand-primary/10 text-brand-primary" : "text-neutral-400 hover:bg-neutral-100"}`}
+        >
+          <BarChart3 size={18} />
+        </button>
       </div>
 
-      {/* Signal Summary */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-5 mb-8 md:mb-10">
-        {Object.entries(signalIcons).map(([type, Icon]) => {
-          const count = competitors.reduce((acc, c) => acc + (c.competitor_signals?.filter((s) => s.type === type).length || 0), 0);
-          return (
-            <div key={type} className={`bg-white rounded-2xl p-5 shadow-[0_2px_15px_-3px_rgba(0,0,0,0.05)] border border-slate-100/60 hover:-translate-y-1 transition-transform duration-300 text-center ${count > 0 ? "" : "opacity-75"}`}>
-              <div className={`w-12 h-12 mx-auto rounded-xl flex items-center justify-center mb-3 ${signalColors[type].replace('text-', 'bg-opacity-20 text-').replace('bg-', 'bg-')}`}>
-                <Icon size={24} />
+      {/* Analytics Section */}
+      {showCharts && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+          {/* Signal Type Distribution */}
+          <div className="bg-white rounded-lg p-5 shadow-sm border border-neutral-200/60">
+            <h3 className="text-sm font-semibold text-neutral-700 mb-4">
+              {lang === "pt" ? "Distribui\u00e7\u00e3o por Tipo de Sinal" : "Signal Type Distribution"}
+            </h3>
+            <div className="h-48">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={signalTypeCounts} layout="vertical" barSize={18}>
+                  <XAxis type="number" tick={{ fontSize: 11, fill: "#9CA3AF" }} />
+                  <YAxis type="category" dataKey="label" tick={{ fontSize: 11, fill: "#6B7280" }} width={90} />
+                  <Tooltip
+                    contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid #E5E7EB" }}
+                    formatter={(value) => [value, lang === "pt" ? "Sinais" : "Signals"]}
+                  />
+                  <Bar dataKey="count" radius={[0, 4, 4, 0]}>
+                    {signalTypeCounts.map((entry) => (
+                      <Cell key={entry.type} fill={entry.color} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Signal Timeline */}
+          <div className="bg-white rounded-lg p-5 shadow-sm border border-neutral-200/60">
+            <h3 className="text-sm font-semibold text-neutral-700 mb-4">
+              {lang === "pt" ? "Timeline de Sinais" : "Signal Timeline"}
+            </h3>
+            {allSignals.length > 0 ? (
+              <div className="h-48">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ScatterChart>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
+                    <XAxis
+                      dataKey="dateTs"
+                      type="number"
+                      domain={["dataMin", "dataMax"]}
+                      tickFormatter={(ts) => new Date(ts).toLocaleDateString(lang === "pt" ? "pt-BR" : "en-US", { month: "short" })}
+                      tick={{ fontSize: 11, fill: "#9CA3AF" }}
+                    />
+                    <YAxis
+                      dataKey="typeIndex"
+                      type="number"
+                      domain={[-0.5, Object.keys(signalIcons).length - 0.5]}
+                      ticks={Object.keys(signalIcons).map((_, i) => i)}
+                      tickFormatter={(i) => signalTypeLabel(Object.keys(signalIcons)[i])}
+                      tick={{ fontSize: 10, fill: "#6B7280" }}
+                      width={80}
+                    />
+                    <ZAxis range={[40, 40]} />
+                    <Tooltip
+                      contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid #E5E7EB" }}
+                      content={({ payload }) => {
+                        if (!payload?.length) return null;
+                        const d = payload[0].payload;
+                        return (
+                          <div className="bg-white p-3 rounded-lg border border-neutral-200 shadow-lg text-xs">
+                            <p className="font-semibold text-neutral-800">{d.competitorName}</p>
+                            <p className="text-neutral-500">{lang === "pt" ? d.title_pt : d.title_en}</p>
+                            <p className="text-neutral-400 mt-1">{new Date(d.date).toLocaleDateString(lang === "pt" ? "pt-BR" : "en-US")}</p>
+                          </div>
+                        );
+                      }}
+                    />
+                    <Scatter data={allSignals} fill="#5B7A2F" />
+                  </ScatterChart>
+                </ResponsiveContainer>
               </div>
-              <p className="text-2xl md:text-3xl font-extrabold text-slate-900">{count}</p>
-              <p className="text-[11px] md:text-xs font-bold text-slate-500 uppercase tracking-wider mt-1">{signalTypeLabel(type)}</p>
+            ) : (
+              <p className="text-sm text-neutral-400 italic py-8 text-center">
+                {lang === "pt" ? "Sem sinais para exibir" : "No signals to display"}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Signal Summary Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
+        {signalTypeCounts.map(({ type, label, count, color }) => {
+          const Icon = signalIcons[type];
+          return (
+            <div key={type} className="bg-white rounded-lg p-4 shadow-sm border border-neutral-200/60 text-center">
+              <div className="w-10 h-10 mx-auto rounded-lg flex items-center justify-center mb-2" style={{ backgroundColor: `${color}15`, color }}>
+                <Icon size={20} />
+              </div>
+              <p className="text-xl font-bold text-neutral-800">{count}</p>
+              <p className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider mt-0.5">{label}</p>
             </div>
           );
         })}
       </div>
 
       {/* Competitor Cards */}
-      <div className="space-y-4 md:space-y-6">
+      <div className="space-y-4">
         {competitors.map((comp) => (
-          <div key={comp.id} className="bg-white rounded-2xl shadow-[0_2px_15px_-3px_rgba(0,0,0,0.05)] border border-slate-100/60 overflow-hidden group hover:border-slate-200 transition-colors">
-            <div className="px-5 py-4 md:px-6 md:py-5 flex flex-col md:flex-row md:items-center justify-between border-b border-slate-50/80 bg-slate-50/50 gap-4">
-              <div className="flex-1">
-                <h3 className="font-extrabold text-lg md:text-xl text-slate-900 tracking-tight">{comp.name}</h3>
-                <p className="text-sm font-medium text-slate-500 mt-0.5">{comp.segment}</p>
+          <div key={comp.id} className="bg-white rounded-lg shadow-sm border border-neutral-200/60 overflow-hidden hover:border-neutral-300 transition-colors">
+            <div className="px-5 py-4 flex flex-col md:flex-row md:items-center justify-between border-b border-neutral-100 bg-neutral-50 gap-3">
+              <div>
+                <h3 className="font-bold text-lg text-neutral-800">{comp.name}</h3>
+                <p className="text-sm text-neutral-500">{comp.segment}</p>
               </div>
-              <div className="flex items-center gap-3">
-                <a
-                  href={`https://${comp.website}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 text-xs font-bold bg-white border border-slate-200 text-slate-600 px-3 py-1.5 rounded-lg shadow-sm hover:text-slate-900 hover:border-slate-300 transition-all active:scale-95"
-                >
-                  <span className="hidden sm:inline">{comp.website}</span>
-                  <ExternalLink size={14} />
-                </a>
-              </div>
+              <a
+                href={`https://${comp.website}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 text-xs font-medium bg-white border border-neutral-200 text-neutral-600 px-3 py-1.5 rounded-lg hover:text-neutral-800 transition-colors self-start"
+              >
+                <span className="hidden sm:inline">{comp.website}</span>
+                <ExternalLink size={14} />
+              </a>
             </div>
-            <div className="p-5 md:p-6">
-              <p className="text-sm md:text-base text-slate-600 mb-4 md:mb-6 leading-relaxed max-w-4xl">
+            <div className="p-5">
+              <p className="text-sm text-neutral-600 mb-4 leading-relaxed max-w-4xl">
                 {lang === "pt" ? comp.description_pt : comp.description_en}
               </p>
-              
-              {comp.competitor_signals && comp.competitor_signals.length > 0 ? (
-                <div className="bg-slate-50 rounded-xl p-4 md:p-5 border border-slate-100/80 space-y-3">
-                  <p className="text-[10px] md:text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">{lang === "pt" ? "Sinais Recentes" : "Recent Signals"}</p>
-                  {(comp.competitor_signals || []).map((signal) => {
+
+              {comp.competitor_signals?.length > 0 ? (
+                <div className="bg-neutral-50 rounded-lg p-4 border border-neutral-200/60 space-y-2">
+                  <p className="text-[11px] font-semibold text-neutral-400 uppercase tracking-wider mb-2">
+                    {lang === "pt" ? "Sinais Recentes" : "Recent Signals"}
+                  </p>
+                  {comp.competitor_signals.map((signal) => {
                     const Icon = signalIcons[signal.type] || Newspaper;
                     return (
-                      <div key={signal.id} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 py-3 border-b border-slate-200/60 last:border-0 last:pb-0">
-                        <span className={`inline-flex self-start sm:self-auto items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-md tracking-wide uppercase shadow-sm border border-white/20 ${signalColors[signal.type]}`}>
-                          <Icon size={14} />
+                      <div key={signal.id} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 py-2 border-b border-neutral-200/40 last:border-0 last:pb-0">
+                        <span className={`inline-flex self-start items-center gap-1.5 text-[11px] font-semibold px-2 py-0.5 rounded-md ${signalColors[signal.type]}`}>
+                          <Icon size={12} />
                           {signalTypeLabel(signal.type)}
                         </span>
-                        <p className="text-sm font-semibold text-slate-800 flex-1 leading-snug">
+                        <p className="text-sm font-medium text-neutral-700 flex-1">
                           {lang === "pt" ? signal.title_pt : signal.title_en}
                         </p>
-                        <div className="flex items-center gap-2 mt-1 sm:mt-0 opacity-70">
-                          <span className="text-xs font-bold text-slate-500 bg-slate-200/50 px-2 py-0.5 rounded border border-slate-200">{new Date(signal.date).toLocaleDateString(lang === "pt" ? "pt-BR" : "en-US", { month: "short", day: "numeric" })}</span>
-                          <span className="text-xs font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded border border-slate-200/50">{signal.source}</span>
-                        </div>
+                        <span className="text-xs text-neutral-400">
+                          {new Date(signal.date).toLocaleDateString(lang === "pt" ? "pt-BR" : "en-US", { month: "short", day: "numeric" })}
+                        </span>
                       </div>
                     );
                   })}
                 </div>
               ) : (
-                <div className="text-sm text-slate-400 italic px-2">
+                <p className="text-sm text-neutral-400 italic">
                   {lang === "pt" ? "Nenhum sinal recente registrado." : "No recent signals recorded."}
-                </div>
+                </p>
               )}
             </div>
           </div>

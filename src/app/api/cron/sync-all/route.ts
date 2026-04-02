@@ -28,6 +28,8 @@ export async function GET(request: Request) {
     { name: 'agro-news', path: '/api/cron/sync-agro-news' },
     { name: 'recuperacao-judicial', path: '/api/cron/sync-recuperacao-judicial' },
     { name: 'archive-old-news', path: '/api/cron/archive-old-news' },
+    { name: 'regulatory', path: '/api/cron/sync-regulatory' },
+    { name: 'events-na', path: '/api/cron/sync-events-na' },
   ]
 
   for (const job of jobs) {

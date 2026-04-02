@@ -1,45 +1,40 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Lang, t } from "@/lib/i18n";
+import { DataSources } from "@/components/DataSources";
+import { KnowledgeBase } from "@/components/KnowledgeBase";
 import { MarketPulse } from "@/components/MarketPulse";
-import { CampaignCenter } from "@/components/CampaignCenter";
-import { ContentEngine } from "@/components/ContentEngine";
 import { CompetitorRadar } from "@/components/CompetitorRadar";
-import { EventTracker } from "@/components/EventTracker";
-import { CRM } from "@/components/CRM";
-import { CompanyResearch } from "@/components/CompanyResearch";
-import { DistributionChannels } from "@/components/DistributionChannels";
 import { AgroNews } from "@/components/AgroNews";
-import { RetailersDirectory } from "@/components/RetailersDirectory";
+import { EventTracker } from "@/components/EventTracker";
+import { ContentHub } from "@/components/ContentHub";
+import { AgInputIntelligence } from "@/components/AgInputIntelligence";
+import { RegulatoryFramework } from "@/components/RegulatoryFramework";
 import { RecuperacaoJudicial } from "@/components/RecuperacaoJudicial";
+import { RetailersDirectory } from "@/components/RetailersDirectory";
+import { Header } from "@/components/Header";
+import { Sidebar, getModuleTitle } from "@/components/Sidebar";
 import {
-  BarChart3,
-  Megaphone,
-  PenTool,
-  Radar,
-  Calendar,
-  Globe,
-  Shield,
-  LayoutDashboard,
-  LogOut,
-  Users,
-  SearchCheck,
-  Network,
-  Newspaper,
-  Store,
-  Scale,
-  Menu,
+  mockDataSources, mockCommodities, mockMarketAlerts,
+  mockPublishedArticles, mockContentTopics, mockRegulatoryNorms,
+  mockCompetitors, mockNews, mockEvents, mockRecuperacaoJudicial
+} from "@/data/mock";
+import {
+  Database, BarChart3, TrendingUp, TrendingDown, PenTool,
+  BookOpen, AlertTriangle, Zap, ChevronRight, Newspaper, Radar, Calendar,
+  Circle, ExternalLink, Loader2, Settings, X, Check,
 } from "lucide-react";
+
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 
-type Module = "dashboard" | "market" | "campaigns" | "content" | "competitors" | "events" | "crm" | "research" | "channels" | "news" | "retailers" | "recuperacao";
+import type { Module } from "@/components/Sidebar";
 
 export default function Home() {
   const [lang, setLang] = useState<Lang>("pt");
   const [activeModule, setActiveModule] = useState<Module>("dashboard");
-  const tr = t(lang);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const router = useRouter();
 
   const handleLogout = async () => {
@@ -47,334 +42,686 @@ export default function Home() {
     router.push("/login");
   };
 
-  const marketModules = [
-    { id: "market" as Module, icon: BarChart3, label: tr.modules.marketPulse, color: "bg-emerald-500" },
-    { id: "campaigns" as Module, icon: Megaphone, label: tr.modules.campaigns, color: "bg-blue-500" },
-    { id: "content" as Module, icon: PenTool, label: tr.modules.content, color: "bg-purple-500" },
-    { id: "competitors" as Module, icon: Radar, label: tr.modules.competitors, color: "bg-orange-500" },
-    { id: "events" as Module, icon: Calendar, label: tr.modules.events, color: "bg-rose-500" },
-  ];
-
-  const salesModules = [
-    { id: "crm" as Module, icon: Users, label: tr.modules.crm, color: "bg-cyan-500" },
-    { id: "research" as Module, icon: SearchCheck, label: tr.modules.companyResearch, color: "bg-teal-500" },
-    { id: "channels" as Module, icon: Network, label: tr.modules.channels, color: "bg-indigo-500" },
-  ];
-
-  const dataModules = [
-    { id: "news" as Module, icon: Newspaper, label: tr.modules.news, color: "bg-sky-500" },
-    { id: "retailers" as Module, icon: Store, label: tr.modules.retailers, color: "bg-amber-500" },
-    { id: "recuperacao" as Module, icon: Scale, label: tr.modules.recuperacao, color: "bg-red-500" },
-  ];
-
-  const allModules = [...marketModules, ...salesModules, ...dataModules];
-
   return (
-    <div className="min-h-screen flex flex-col md:flex-row bg-slate-50 font-sans">
-
-      {/* --- MOBILE TOP HEADER --- */}
-      <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-slate-900 text-white flex items-center justify-between px-4 z-40 shadow-md">
-        <div className="flex items-center gap-2">
-          <h1 className="text-lg font-bold text-emerald-400">🌾 {tr.appName}</h1>
-        </div>
-        <div className="flex items-center gap-3">
-          <button onClick={() => setLang(lang === "pt" ? "en" : "pt")} className="p-2 text-slate-300 hover:text-white">
-            <Globe size={20} />
-          </button>
-          <button onClick={handleLogout} className="p-2 text-red-400 hover:text-red-300">
-            <LogOut size={20} />
-          </button>
-        </div>
-      </div>
-
-      {/* --- DESKTOP SIDEBAR --- */}
-      <aside className="w-64 bg-slate-900 text-white hidden md:flex flex-col fixed h-full z-40 border-r border-slate-800 shadow-xl">
-        <div className="p-6 border-b border-slate-800">
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold text-emerald-400">🌾 {tr.appName}</h1>
-          </div>
-          <p className="text-xs text-slate-400 mt-2 font-medium">{tr.tagline}</p>
-        </div>
-
-        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-          <button
-            onClick={() => setActiveModule("dashboard")}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 ${
-              activeModule === "dashboard"
-                ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-inner"
-                : "text-slate-400 hover:bg-slate-800/80 hover:text-slate-200"
-            }`}
-          >
-            <LayoutDashboard size={20} className={activeModule === "dashboard" ? "text-emerald-400" : "text-slate-500"} />
-            {tr.nav.dashboard}
-          </button>
-
-          {/* Market Intelligence Section */}
-          <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest pt-4 pb-1 px-4">
-            {lang === "pt" ? "Inteligência" : "Intelligence"}
-          </p>
-          {marketModules.map((mod) => (
-            <button
-              key={mod.id}
-              onClick={() => setActiveModule(mod.id)}
-              className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
-                activeModule === mod.id
-                  ? "bg-slate-800 text-white shadow-md border border-slate-700/50"
-                  : "text-slate-400 hover:bg-slate-800/50 hover:text-slate-200"
-              }`}
-            >
-              <mod.icon size={18} className={activeModule === mod.id ? mod.color.replace('bg-', 'text-') : "text-slate-500"} />
-              {mod.label}
-            </button>
-          ))}
-
-          {/* Sales & CRM Section */}
-          <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest pt-4 pb-1 px-4">
-            {lang === "pt" ? "Vendas & CRM" : "Sales & CRM"}
-          </p>
-          {salesModules.map((mod) => (
-            <button
-              key={mod.id}
-              onClick={() => setActiveModule(mod.id)}
-              className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
-                activeModule === mod.id
-                  ? "bg-slate-800 text-white shadow-md border border-slate-700/50"
-                  : "text-slate-400 hover:bg-slate-800/50 hover:text-slate-200"
-              }`}
-            >
-              <mod.icon size={18} className={activeModule === mod.id ? mod.color.replace('bg-', 'text-') : "text-slate-500"} />
-              {mod.label}
-            </button>
-          ))}
-
-          {/* Data & Legal Section */}
-          <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest pt-4 pb-1 px-4">
-            {lang === "pt" ? "Dados & Jurídico" : "Data & Legal"}
-          </p>
-          {dataModules.map((mod) => (
-            <button
-              key={mod.id}
-              onClick={() => setActiveModule(mod.id)}
-              className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
-                activeModule === mod.id
-                  ? "bg-slate-800 text-white shadow-md border border-slate-700/50"
-                  : "text-slate-400 hover:bg-slate-800/50 hover:text-slate-200"
-              }`}
-            >
-              <mod.icon size={18} className={activeModule === mod.id ? mod.color.replace('bg-', 'text-') : "text-slate-500"} />
-              {mod.label}
-            </button>
-          ))}
-        </nav>
-
-        {/* Privacy Badge */}
-        <div className="p-5 border-t border-slate-800">
-          <div className="flex items-center gap-2 text-xs font-medium text-emerald-400/90 bg-emerald-900/20 px-4 py-3 rounded-xl border border-emerald-800/30">
-            <Shield size={16} className="text-emerald-500" />
-            {tr.privacy.badge}
-          </div>
-        </div>
-
-        {/* Settings & Logout */}
-        <div className="p-5 border-t border-slate-800 flex flex-col gap-3">
-          <button
-            onClick={() => setLang(lang === "pt" ? "en" : "pt")}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-800/50 hover:bg-slate-700 border border-slate-700 rounded-xl text-sm font-medium transition-colors"
-          >
-            <Globe size={18} className="text-slate-400" />
-            {lang === "pt" ? "🇺🇸 EN" : "🇧🇷 PT"}
-          </button>
-
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-xl text-sm font-medium transition-colors"
-          >
-            <LogOut size={18} />
-            {lang === "pt" ? "Sair" : "Logout"}
-          </button>
-        </div>
-      </aside>
-
-      {/* --- MAIN CONTENT AREA --- */}
-      <main className="flex-1 md:ml-64 w-full max-w-[100vw] pt-20 pb-24 md:pt-8 md:pb-8 px-4 md:px-8 xl:px-12 mx-auto">
-        <div className="max-w-7xl mx-auto">
-          {activeModule === "dashboard" && (
-            <DashboardOverview lang={lang} modules={allModules} setActiveModule={setActiveModule} />
-          )}
-          {activeModule === "market" && <MarketPulse lang={lang} />}
-          {activeModule === "campaigns" && <CampaignCenter lang={lang} />}
-          {activeModule === "content" && <ContentEngine lang={lang} />}
-          {activeModule === "competitors" && <CompetitorRadar lang={lang} />}
-          {activeModule === "events" && <EventTracker lang={lang} />}
-          {activeModule === "crm" && <CRM lang={lang} />}
-          {activeModule === "research" && <CompanyResearch lang={lang} />}
-          {activeModule === "channels" && <DistributionChannels lang={lang} />}
-          {activeModule === "news" && <AgroNews lang={lang} />}
-          {activeModule === "retailers" && <RetailersDirectory lang={lang} />}
-          {activeModule === "recuperacao" && <RecuperacaoJudicial lang={lang} />}
+    <div className="min-h-screen" style={{ backgroundColor: "#F7F4EF" }}>
+      <Sidebar
+        lang={lang}
+        activeModule={activeModule}
+        onModuleChange={setActiveModule}
+        mobileOpen={mobileSidebarOpen}
+        onCloseMobile={() => setMobileSidebarOpen(false)}
+      />
+      <Header
+        lang={lang}
+        onToggleLang={() => setLang(lang === "pt" ? "en" : "pt")}
+        onLogout={handleLogout}
+        onToggleMobileSidebar={() => setMobileSidebarOpen(!mobileSidebarOpen)}
+        moduleTitle={getModuleTitle(activeModule, lang)}
+      />
+      <main className="md:ml-[var(--sidebar-width)] pt-[var(--header-height)] min-h-screen">
+        <div className="max-w-7xl mx-auto px-4 md:px-8 py-6">
+          {activeModule === "dashboard"    && <DashboardOverview lang={lang} setActiveModule={setActiveModule} />}
+          {activeModule === "dataSources"  && <DataSources lang={lang} />}
+          {activeModule === "market"       && <MarketPulse lang={lang} />}
+          {activeModule === "inputs"       && <AgInputIntelligence lang={lang} />}
+          {activeModule === "competitors"  && <CompetitorRadar lang={lang} />}
+          {activeModule === "news"         && <AgroNews lang={lang} />}
+          {activeModule === "events"       && <EventTracker lang={lang} />}
+          {activeModule === "contentHub"   && <ContentHub lang={lang} />}
+          {activeModule === "regulatory"   && <RegulatoryFramework lang={lang} />}
+          {activeModule === "recuperacao"  && <RecuperacaoJudicial lang={lang} />}
+          {activeModule === "retailers"    && <RetailersDirectory lang={lang} />}
+          {activeModule === "knowledgeBase"&& <KnowledgeBase lang={lang} />}
         </div>
       </main>
-
-      {/* --- MOBILE BOTTOM NAVIGATION --- */}
-      <MobileBottomNav
-        modules={allModules}
-        activeModule={activeModule}
-        setActiveModule={setActiveModule}
-      />
     </div>
   );
 }
 
-function MobileBottomNav({
-  modules,
-  activeModule,
-  setActiveModule,
-}: {
-  modules: { id: string; icon: React.ComponentType<{ size?: number; className?: string }>; label: string; color: string }[];
-  activeModule: Module;
-  setActiveModule: (m: Module) => void;
-}) {
-  const [showMore, setShowMore] = useState(false);
-  const primaryModules = modules.slice(0, 4);
-  const overflowModules = modules.slice(4);
-  const isOverflowActive = overflowModules.some((m) => m.id === activeModule);
+import { DashboardMap } from "@/components/DashboardMap";
+import { mockRetailers } from "@/data/mock";
+
+// ─── Executive Dashboard Overview ───
+
+function DashboardOverview({ lang, setActiveModule }: { lang: Lang; setActiveModule: (m: Module) => void }) {
+  // Source health
+  const healthyCt = mockDataSources.filter((s) => s.status === "healthy").length;
+  const totalSources = mockDataSources.length;
+
+  // Market intelligence
+  const biggestMover = [...mockCommodities].sort((a, b) => Math.abs(b.change_24h) - Math.abs(a.change_24h))[0];
+  const highAlerts = mockMarketAlerts.filter((a) => a.severity === "high");
+  const totalSignals = mockCompetitors.reduce((s, c) => s + (c.competitor_signals?.length || 0), 0);
+  const upcomingEvents = mockEvents.filter((e) => new Date(e.date_start) > new Date()).length;
+
+  // Content
+  const publishedThisMonth = mockPublishedArticles.filter((a) => a.published_at >= "2026-03-01").length;
+  const topicsInPipeline = mockContentTopics.filter((t) => t.status !== "published").length;
+
+  // Regulatory & Legal
+  const highImpactNorms = mockRegulatoryNorms.filter((n) => n.impact_level === "high");
+  const latestNorm = mockRegulatoryNorms[0];
+
+  // Knowledge Base & New items
+  const rjAlerts = mockRecuperacaoJudicial.length;
+  const numRetailers = mockRetailers.length;
+
+  // Live events from AgroAgenda
+  const [liveEvents, setLiveEvents] = useState<any[]>([]);
+  useEffect(() => {
+    fetch("/api/events-na")
+      .then((r) => r.json())
+      .then((json) => { if (json.success && json.data) setLiveEvents(json.data); })
+      .catch(() => {});
+  }, []);
 
   return (
-    <>
-      {showMore && (
-        <div className="md:hidden fixed bottom-16 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-200 z-50 p-3 shadow-[0_-4px_20px_-5px_rgba(0,0,0,0.1)]">
-          <div className="grid grid-cols-4 gap-2">
-            {overflowModules.map((mod) => (
-              <button
-                key={mod.id}
-                onClick={() => { setActiveModule(mod.id as Module); setShowMore(false); }}
-                className={`flex flex-col items-center justify-center py-3 rounded-xl transition-colors ${
-                  activeModule === mod.id ? `${mod.color.replace("bg-", "text-")} bg-slate-50` : "text-slate-500"
-                }`}
-              >
-                <mod.icon size={20} />
-                <span className="text-[10px] font-medium mt-1 truncate max-w-[70px] px-1">{mod.label.split(" ")[0]}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+    <div className="space-y-6">
 
-      <div className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-white/90 backdrop-blur-md border-t border-slate-200 flex items-center justify-between px-1 z-50 shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)] pb-safe">
-        <button
-          onClick={() => { setActiveModule("dashboard"); setShowMore(false); }}
-          className={`flex flex-col items-center justify-center w-full h-full gap-1 transition-colors ${
-            activeModule === "dashboard" ? "text-emerald-600" : "text-slate-400"
-          }`}
-        >
-          <LayoutDashboard size={20} />
-          <span className="text-[10px] font-medium">Dash</span>
+      {/* Row 1: Market & Competitors (Head Comercial & SEO) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Market Pulse */}
+        <button onClick={() => setActiveModule("market")} className="rounded-lg p-5 bg-white border border-neutral-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)] text-left hover:border-brand-primary transition-colors group">
+          <p className="text-[11px] font-semibold text-neutral-500 uppercase flex items-center justify-between">
+            {lang === "pt" ? "Pulso do Mercado" : "Market Pulse"}
+            <ChevronRight size={14} className="opacity-0 group-hover:opacity-100 transition-opacity text-brand-primary" />
+          </p>
+          <div className="mt-3 flex items-end gap-3">
+            <div>
+              <p className="text-[20px] font-bold text-neutral-900 leading-none">{lang === "pt" ? biggestMover.name_pt : biggestMover.name_en}</p>
+              <p className={`text-[13px] font-bold mt-1.5 ${biggestMover.change_24h >= 0 ? "text-success-dark" : "text-error"}`}>
+                {biggestMover.change_24h >= 0 ? <TrendingUp size={14} className="inline mr-1" /> : <TrendingDown size={14} className="inline mr-1" />}
+                {biggestMover.change_24h > 0 ? "+" : ""}{biggestMover.change_24h}%
+              </p>
+            </div>
+          </div>
         </button>
 
-        {primaryModules.map((mod) => (
-          <button
-            key={mod.id}
-            onClick={() => { setActiveModule(mod.id as Module); setShowMore(false); }}
-            className={`flex flex-col items-center justify-center w-full h-full gap-1 transition-colors ${
-              activeModule === mod.id ? mod.color.replace("bg-", "text-") : "text-slate-400"
-            }`}
-          >
-            <mod.icon size={20} />
-            <span className="text-[10px] font-medium truncate max-w-[50px]">{mod.label.split(" ")[0]}</span>
-          </button>
-        ))}
+        {/* Competitor Radar */}
+        <button onClick={() => setActiveModule("competitors")} className="rounded-lg p-5 bg-white border border-neutral-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)] text-left hover:border-brand-primary transition-colors group">
+          <p className="text-[11px] font-semibold text-neutral-500 uppercase flex items-center justify-between">
+            {lang === "pt" ? "Sinais Competitivos" : "Competitive Signals"}
+            <ChevronRight size={14} className="opacity-0 group-hover:opacity-100 transition-opacity text-brand-primary" />
+          </p>
+          <p className="text-[28px] font-bold text-neutral-900 mt-2 mb-1 leading-none">{totalSignals}</p>
+          <p className="text-[12px] text-neutral-500">{mockCompetitors.length} {lang === "pt" ? "concorrentes mapeados" : "mapped competitors"}</p>
+        </button>
 
-        {overflowModules.length > 0 && (
-          <button
-            onClick={() => setShowMore(!showMore)}
-            className={`flex flex-col items-center justify-center w-full h-full gap-1 transition-colors ${
-              isOverflowActive || showMore ? "text-teal-600" : "text-slate-400"
-            }`}
-          >
-            <Menu size={20} />
-            <span className="text-[10px] font-medium">{isOverflowActive ? "•••" : "Mais"}</span>
-          </button>
-        )}
+        {/* Ag Input Intelligence */}
+        <button onClick={() => setActiveModule("inputs")} className="rounded-lg p-5 bg-white border border-neutral-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)] text-left hover:border-brand-primary transition-colors group">
+          <p className="text-[11px] font-semibold text-neutral-500 uppercase flex items-center justify-between">
+            {lang === "pt" ? "Inteligência de Insumos" : "Input Intelligence"}
+            <ChevronRight size={14} className="opacity-0 group-hover:opacity-100 transition-opacity text-brand-primary" />
+          </p>
+          <p className="text-[14px] font-semibold text-brand-primary mt-2 flex items-center gap-1"><PenTool size={14} /> Relatório NPK</p>
+          <p className="text-[12px] text-neutral-500 mt-1 line-clamp-2">Atrasos de fertilizantes nos portos do sul.</p>
+        </button>
+
+        {/* Retailers Directory */}
+        <button onClick={() => setActiveModule("retailers")} className="rounded-lg p-5 bg-white border border-neutral-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)] text-left hover:border-brand-primary transition-colors group">
+          <p className="text-[11px] font-semibold text-neutral-500 uppercase flex items-center justify-between">
+            {lang === "pt" ? "Diretório de Revendas" : "Retailers Directory"}
+            <ChevronRight size={14} className="opacity-0 group-hover:opacity-100 transition-opacity text-brand-primary" />
+          </p>
+          <p className="text-[28px] font-bold text-neutral-900 mt-2 mb-1 leading-none">23k+</p>
+          <p className="text-[12px] text-neutral-500">{numRetailers} {lang === "pt" ? "monitoradas agos/26" : "monitored in Aug/26"}</p>
+        </button>
       </div>
-    </>
+
+      {/* Row 2: Content, Events & News (Digital Marketing & Sales) */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* News & Events */}
+        <div className="col-span-1 lg:col-span-2 bg-white rounded-lg border border-neutral-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5">
+           <div className="flex items-center justify-between mb-4">
+             <h3 className="text-[14px] font-semibold text-neutral-900">{lang === "pt" ? "Mídia & Eventos" : "Media & Events"}</h3>
+             <div className="flex gap-4">
+               <button onClick={() => setActiveModule("news")} className="text-[12px] font-medium text-brand-primary hover:underline">Ver Notícias</button>
+               <button onClick={() => setActiveModule("events")} className="text-[12px] font-medium text-brand-primary hover:underline">Ver Eventos</button>
+             </div>
+           </div>
+           <div className="flex gap-6">
+             <div className="flex-1">
+                <p className="text-[24px] font-bold text-neutral-900 leading-none">{mockNews.length}</p>
+                <p className="text-[11px] text-neutral-500 uppercase mt-1">{lang === "pt" ? "Notícias Ativas" : "Active News"}</p>
+             </div>
+             <div className="w-px bg-neutral-200"></div>
+             <div className="flex-1">
+                <p className="text-[24px] font-bold text-neutral-900 leading-none">{upcomingEvents}</p>
+                <p className="text-[11px] text-neutral-500 uppercase mt-1">{lang === "pt" ? "Eventos Próximos" : "Upcoming Events"}</p>
+             </div>
+           </div>
+        </div>
+
+        {/* Content Pipeline */}
+        <button onClick={() => setActiveModule("contentHub")} className="rounded-lg p-5 bg-brand-surface/20 border border-brand-light text-left hover:border-brand-primary transition-colors group">
+          <p className="text-[11px] font-semibold text-neutral-500 uppercase flex items-center justify-between">
+            {lang === "pt" ? "Pipeline de Conteúdo" : "Content Pipeline"}
+            <ChevronRight size={14} className="opacity-0 group-hover:opacity-100 transition-opacity text-brand-primary" />
+          </p>
+          <div className="flex items-center gap-3 mt-3">
+             <div className="bg-white p-2 rounded border border-brand-light">
+               <BookOpen size={16} className="text-brand-primary" />
+             </div>
+             <div>
+               <p className="text-[18px] font-bold text-neutral-900 leading-none">{publishedThisMonth}</p>
+               <p className="text-[11px] text-neutral-600 font-medium mt-0.5">{lang === "pt" ? "Publicados no Mês" : "Published this Month"}</p>
+             </div>
+          </div>
+          <p className="text-[12px] text-neutral-600 mt-3"><span className="font-semibold text-brand-primary">{topicsInPipeline}</span> {lang === "pt" ? "pautas em aprovação" : "topics pending approval"}</p>
+        </button>
+      </div>
+
+      {/* Row 3: Regulatory, Operations & Data Health (Data Analysts & Legal) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Rec Judiciais */}
+        <button onClick={() => setActiveModule("recuperacao")} className="rounded-lg p-5 bg-error-light/30 border border-error-light text-left hover:border-error transition-colors group">
+          <p className="text-[11px] font-semibold text-error uppercase flex items-center justify-between">
+            {lang === "pt" ? "Recuperação Judicial" : "Judicial Recovery"}
+            <ChevronRight size={14} className="opacity-0 group-hover:opacity-100 transition-opacity text-error" />
+          </p>
+          <p className="text-[28px] font-bold text-error-dark mt-2 mb-1 leading-none">{rjAlerts}</p>
+          <p className="text-[12px] text-error font-medium">{lang === "pt" ? "processos recentes" : "recent active cases"}</p>
+        </button>
+
+        {/* Regulatory */}
+        <button onClick={() => setActiveModule("regulatory")} className="rounded-lg p-5 bg-white border border-neutral-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)] text-left hover:border-brand-primary transition-colors group">
+          <p className="text-[11px] font-semibold text-neutral-500 uppercase flex items-center justify-between">
+            {lang === "pt" ? "Regulatório" : "Regulatory Watch"}
+            <ChevronRight size={14} className="opacity-0 group-hover:opacity-100 transition-opacity text-brand-primary" />
+          </p>
+          {latestNorm ? (
+            <div className="mt-2">
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#1565C0] text-white">{latestNorm.body}</span>
+              <p className="text-[12px] font-semibold text-neutral-900 line-clamp-2 mt-1.5">{latestNorm.title}</p>
+            </div>
+          ) : (
+            <p className="text-[14px] text-neutral-500 mt-2 font-medium">Clear</p>
+          )}
+        </button>
+
+        {/* Knowledge Base */}
+        <button onClick={() => setActiveModule("knowledgeBase")} className="rounded-lg p-5 bg-white border border-neutral-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)] text-left hover:border-brand-primary transition-colors group">
+          <p className="text-[11px] font-semibold text-neutral-500 uppercase flex items-center justify-between">
+            {lang === "pt" ? "Base de Conhecimento" : "Knowledge Base"}
+            <ChevronRight size={14} className="opacity-0 group-hover:opacity-100 transition-opacity text-brand-primary" />
+          </p>
+          <div className="mt-2 flex items-center gap-2">
+            <Database size={18} className="text-brand-primary" />
+             <p className="text-[13px] font-medium text-neutral-900">8 Acervos Indexados</p>
+          </div>
+          <p className="text-[11px] text-neutral-500 mt-1 line-clamp-1">{lang === "pt" ? "Pronto para RAG / OpenAI" : "Ready for RAG / OpenAI"}</p>
+        </button>
+
+        {/* Data Health & Registry */}
+        <button onClick={() => setActiveModule("dataSources")} className="rounded-lg p-5 bg-neutral-900 text-left hover:bg-black transition-colors group flex flex-col justify-between">
+          <p className="text-[11px] font-semibold text-neutral-400 uppercase flex items-center justify-between">
+            {lang === "pt" ? "Saúde dos Dados" : "Data Health"}
+            <ChevronRight size={14} className="opacity-0 group-hover:opacity-100 transition-opacity text-white" />
+          </p>
+          <div>
+            <div className="flex items-center gap-1.5 mb-2 mt-3 flex-wrap">
+              {mockDataSources.slice(0, 10).map((s) => (
+                <div key={s.id} className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: s.status === "healthy" ? "#4CAF50" : s.status === "warning" ? "#FF9800" : s.status === "stale" ? "#F44336" : "#9E9E9E" }} />
+              ))}
+            </div>
+            <p className="text-[12px] text-neutral-300">
+               <span className="font-bold text-white leading-none text-[16px] mr-1">{healthyCt}/{totalSources}</span> {lang === "pt" ? "fontes operantes" : "sources operating"}
+            </p>
+          </div>
+        </button>
+      </div>
+
+      {/* Intelligence Map */}
+      <div className="bg-white rounded-lg border border-neutral-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
+        <div className="p-4 border-b border-neutral-200 flex items-center justify-between bg-neutral-50">
+          <div className="flex items-center gap-2">
+            <h3 className="text-[15px] font-bold text-neutral-900">{lang === "pt" ? "Mapa de Inteligência Integrada" : "Integrated Intelligence Map"}</h3>
+          </div>
+          <p className="text-[12px] text-neutral-500 hidden sm:block">{lang === "pt" ? "Eventos, Revendas & Alertas" : "Events, Retailers & Alerts"}</p>
+        </div>
+        <DashboardMap events={mockEvents} liveEvents={liveEvents} retailers={mockRetailers.slice(0, 4)} alerts={highAlerts} lang={lang} />
+      </div>
+
+      {/* Notícias Agrícolas — Cotações + News side by side */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <NACotacoesWidget lang={lang} />
+        <NANoticiasWidget lang={lang} />
+      </div>
+    </div>
   );
 }
 
-function DashboardOverview({
-  lang,
-  modules,
-  setActiveModule,
-}: {
-  lang: Lang;
-  modules: { id: string; icon: React.ComponentType<{ size?: number, className?: string }>; label: string; color: string }[];
-  setActiveModule: (m: Module) => void;
-}) {
-  const tr = t(lang);
+// ─── Notícias Agrícolas — Cotações Widget ───
 
-  const stats = [
-    { label: lang === "pt" ? "Commodities" : "Commodities", value: "6", color: "text-emerald-600" },
-    { label: lang === "pt" ? "Campanhas" : "Campaigns", value: "4", color: "text-blue-600" },
-    { label: lang === "pt" ? "Conteúdo" : "Content", value: "6", color: "text-purple-600" },
-    { label: lang === "pt" ? "Concorrentes" : "Competitors", value: "5", color: "text-orange-600" },
-    { label: lang === "pt" ? "Contatos CRM" : "CRM Contacts", value: "1,009", color: "text-cyan-600" },
-    { label: lang === "pt" ? "Empresas CRM" : "CRM Companies", value: "11,132", color: "text-teal-600" },
-    { label: lang === "pt" ? "Canais Mapeados" : "Mapped Channels", value: "23,861", color: "text-indigo-600" },
-    { label: lang === "pt" ? "Revendas" : "Retailers", value: "10K+", color: "text-amber-600" },
-    { label: lang === "pt" ? "Módulos Ativos" : "Active Modules", value: "11", color: "text-sky-600" },
-  ];
+const NA_COTACOES_URL = "https://www.noticiasagricolas.com.br/cotacoes/";
+
+const COMMODITY_COLORS: Record<string, string> = {
+  soja: "#5B7A2F", milho: "#E8722A", "boi-gordo": "#8B4513", cafe: "#6F4E37",
+  algodao: "#7FA02B", trigo: "#DAA520", acucar: "#2196F3", leite: "#9C27B0",
+  arroz: "#795548", frango: "#FF5722", etanol: "#009688", cacau: "#4E342E",
+  suinos: "#E91E63", amendoim: "#FF9800", "suco-de-laranja": "#F57C00",
+  feijao: "#8D6E63", ovos: "#FFC107", latex: "#607D8B", sorgo: "#CDDC39",
+};
+
+const COMMODITY_EN: Record<string, string> = {
+  "Soja": "Soybean", "Milho": "Corn", "Boi Gordo": "Cattle", "Café": "Coffee",
+  "Algodão": "Cotton", "Trigo": "Wheat", "Açúcar": "Sugar", "Leite": "Milk",
+  "Arroz": "Rice", "Frango": "Chicken", "Etanol": "Ethanol", "Cacau": "Cocoa",
+  "Suínos": "Pork", "Amendoim": "Peanut", "Suco de Laranja": "Orange Juice",
+  "Feijão": "Beans", "Ovos": "Eggs", "Látex": "Rubber", "Sorgo": "Sorghum",
+};
+
+interface NAPriceItem { label: string; price: string; variation: string; direction: "up" | "down" | "stable" }
+interface NACommodity { commodity: string; slug: string; unit?: string; items: NAPriceItem[] }
+
+const NA_STORAGE_KEY = "agsf-na-visible-commodities";
+
+function NACotacoesWidget({ lang }: { lang: Lang }) {
+  const [data, setData] = useState<NACommodity[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [updatedAt, setUpdatedAt] = useState("");
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [visibleSlugs, setVisibleSlugs] = useState<Set<string> | null>(null); // null = show all
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  // Load saved selection from localStorage
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(NA_STORAGE_KEY);
+      if (saved) setVisibleSlugs(new Set(JSON.parse(saved)));
+    } catch { /* ignore */ }
+  }, []);
+
+  // Close settings panel on outside click
+  useEffect(() => {
+    if (!settingsOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (panelRef.current && !panelRef.current.contains(e.target as Node)) setSettingsOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [settingsOpen]);
+
+  useEffect(() => {
+    fetch("/api/prices-na")
+      .then((r) => r.json())
+      .then((json) => {
+        if (json.success && json.data?.length > 0) {
+          const filtered = (json.data as NACommodity[]).filter(
+            (c) => c.items.some((it) => !it.price.includes("s/ cotação"))
+          ).map((c) => ({
+            ...c,
+            items: c.items.filter((it) => !it.price.includes("s/ cotação")),
+          }));
+          setData(filtered);
+          setUpdatedAt(json.updated_at);
+        } else {
+          setError(true);
+        }
+      })
+      .catch(() => setError(true))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const toggleSlug = useCallback((slug: string) => {
+    setVisibleSlugs((prev) => {
+      const allSlugs = data.map((c) => c.slug);
+      // If null (show all), start from all selected minus this one
+      const current = prev ?? new Set(allSlugs);
+      const next = new Set(current);
+      if (next.has(slug)) next.delete(slug);
+      else next.add(slug);
+      // If all are selected, store null (show all)
+      const result = next.size === allSlugs.length ? null : next;
+      try {
+        if (result) localStorage.setItem(NA_STORAGE_KEY, JSON.stringify([...result]));
+        else localStorage.removeItem(NA_STORAGE_KEY);
+      } catch { /* ignore */ }
+      return result;
+    });
+  }, [data]);
+
+  const selectAll = useCallback(() => {
+    setVisibleSlugs(null);
+    try { localStorage.removeItem(NA_STORAGE_KEY); } catch { /* ignore */ }
+  }, []);
+
+  const displayed = visibleSlugs ? data.filter((c) => visibleSlugs.has(c.slug)) : data;
 
   return (
-    <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
-      <div className="mb-6 md:mb-10 text-center md:text-left">
-        <h2 className="text-2xl md:text-3xl font-extrabold text-slate-900 tracking-tight">{tr.nav.dashboard}</h2>
-        <p className="text-slate-500 mt-2 text-sm md:text-base">{tr.tagline}</p>
-        <div className="mt-4 inline-flex items-center gap-2 text-xs font-semibold bg-emerald-50 text-emerald-700 px-4 py-2 rounded-full border border-emerald-200/50 shadow-sm">
-          <Shield size={14} className="text-emerald-500" />
-          {tr.privacy.notice}
+    <div className="bg-white rounded-lg border border-neutral-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
+      {/* Header */}
+      <div className="p-4 border-b border-neutral-200 flex items-center justify-between bg-neutral-50">
+        <div className="flex items-center gap-2">
+          <BarChart3 size={16} className="text-brand-primary" />
+          <h3 className="text-[15px] font-bold text-neutral-900">
+            {lang === "pt" ? "Cotações Agro em Tempo Real" : "Real-Time Agro Prices"}
+          </h3>
+          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-brand-primary/10 text-brand-primary uppercase tracking-wider">
+            Live
+          </span>
+          {visibleSlugs && (
+            <span className="text-[10px] text-neutral-400">{visibleSlugs.size}/{data.length}</span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {updatedAt && (
+            <span className="text-[11px] text-neutral-400 hidden sm:block">
+              {new Date(updatedAt).toLocaleTimeString(lang === "pt" ? "pt-BR" : "en-US", { hour: "2-digit", minute: "2-digit" })}
+            </span>
+          )}
+          {/* Settings button */}
+          <div className="relative" ref={panelRef}>
+            <button
+              onClick={() => setSettingsOpen(!settingsOpen)}
+              className={`p-1.5 rounded-md transition-colors ${settingsOpen ? "bg-brand-primary/10 text-brand-primary" : "text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100"}`}
+              title={lang === "pt" ? "Configurar commodities visíveis" : "Configure visible commodities"}
+            >
+              <Settings size={15} />
+            </button>
+            {settingsOpen && data.length > 0 && (
+              <div className="absolute right-0 top-full mt-1 z-50 w-64 bg-white rounded-lg border border-neutral-200 shadow-lg">
+                <div className="p-3 border-b border-neutral-100 flex items-center justify-between">
+                  <span className="text-[12px] font-semibold text-neutral-900">
+                    {lang === "pt" ? "Commodities visíveis" : "Visible commodities"}
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={selectAll}
+                      className="text-[10px] font-medium text-brand-primary hover:underline"
+                    >
+                      {lang === "pt" ? "Todas" : "All"}
+                    </button>
+                    <button onClick={() => setSettingsOpen(false)} className="p-0.5 text-neutral-400 hover:text-neutral-600">
+                      <X size={14} />
+                    </button>
+                  </div>
+                </div>
+                <div className="p-2 max-h-72 overflow-y-auto space-y-0.5">
+                  {data.map((c) => {
+                    const isVisible = !visibleSlugs || visibleSlugs.has(c.slug);
+                    return (
+                      <button
+                        key={c.slug}
+                        onClick={() => toggleSlug(c.slug)}
+                        className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded text-left transition-colors ${isVisible ? "bg-brand-primary/5" : "hover:bg-neutral-50"}`}
+                      >
+                        <div className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition-colors ${isVisible ? "bg-brand-primary border-brand-primary" : "border-neutral-300"}`}>
+                          {isVisible && <Check size={11} className="text-white" />}
+                        </div>
+                        <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: COMMODITY_COLORS[c.slug] || "#9E9E9E" }} />
+                        <span className={`text-[12px] ${isVisible ? "font-semibold text-neutral-900" : "text-neutral-500"}`}>
+                          {lang === "pt" ? c.commodity : (COMMODITY_EN[c.commodity] || c.commodity)}
+                        </span>
+                        {c.unit && <span className="text-[9px] text-neutral-400 ml-auto">{c.unit}</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+          <a
+            href={NA_COTACOES_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 text-[12px] font-medium text-brand-primary hover:underline"
+          >
+            Notícias Agrícolas
+            <ExternalLink size={12} />
+          </a>
         </div>
       </div>
 
-      {/* Stats Row */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-9 gap-3 md:gap-4 mb-8 md:mb-12">
-        {stats.map((stat) => (
-          <div key={stat.label} className="bg-white rounded-2xl p-4 md:p-5 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] border border-slate-100 hover:shadow-md transition-shadow duration-300">
-            <p className={`text-2xl md:text-3xl font-extrabold tracking-tighter ${stat.color} mb-1 drop-shadow-sm`}>{stat.value}</p>
-            <p className="text-[11px] md:text-xs font-medium text-slate-500 leading-tight">{stat.label}</p>
-          </div>
+      {/* Body */}
+      {loading ? (
+        <div className="flex items-center justify-center py-16">
+          <Loader2 size={24} className="animate-spin text-neutral-400" />
+        </div>
+      ) : error || data.length === 0 ? (
+        <NACotacoesFallback lang={lang} />
+      ) : displayed.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-12 text-neutral-400">
+          <Settings size={24} className="mb-2" />
+          <p className="text-[13px]">{lang === "pt" ? "Nenhuma commodity selecionada" : "No commodities selected"}</p>
+          <button onClick={() => setSettingsOpen(true)} className="mt-2 text-[12px] font-medium text-brand-primary hover:underline">
+            {lang === "pt" ? "Configurar" : "Configure"}
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-neutral-100">
+          {displayed.map((c) => (
+            <a
+              key={c.slug}
+              href={`https://www.noticiasagricolas.com.br/cotacoes/${c.slug}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block p-4 hover:bg-neutral-50 transition-colors group"
+            >
+              <div className="flex items-center gap-2 mb-2.5">
+                <div
+                  className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: COMMODITY_COLORS[c.slug] || "#9E9E9E" }}
+                />
+                <span className="text-[12px] font-bold text-neutral-900 uppercase tracking-wide group-hover:text-brand-primary transition-colors">
+                  {lang === "pt" ? c.commodity : (COMMODITY_EN[c.commodity] || c.commodity)}
+                </span>
+                {c.unit && (
+                  <span className="text-[10px] text-neutral-400 font-normal normal-case">{c.unit}</span>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                {c.items.map((item, i) => (
+                  <div key={i} className="flex items-center justify-between text-[12px]">
+                    <span className="text-neutral-500 truncate mr-2">{item.label}</span>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className="font-semibold text-neutral-900">{item.price}</span>
+                      {item.variation && (
+                        <span className={`text-[11px] font-semibold ${
+                          item.direction === "up" ? "text-green-600" :
+                          item.direction === "down" ? "text-red-500" :
+                          "text-neutral-400"
+                        }`}>
+                          {item.direction === "up" && <TrendingUp size={11} className="inline mr-0.5" />}
+                          {item.direction === "down" && <TrendingDown size={11} className="inline mr-0.5" />}
+                          {item.variation}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Fallback when scraper can't reach NA
+function NACotacoesFallback({ lang }: { lang: Lang }) {
+  const commodities = [
+    { name: "Soja", en: "Soybean", slug: "soja" },
+    { name: "Milho", en: "Corn", slug: "milho" },
+    { name: "Boi Gordo", en: "Cattle", slug: "boi-gordo" },
+    { name: "Café", en: "Coffee", slug: "cafe" },
+    { name: "Algodão", en: "Cotton", slug: "algodao" },
+    { name: "Trigo", en: "Wheat", slug: "trigo" },
+    { name: "Açúcar", en: "Sugar", slug: "acucar" },
+    { name: "Leite", en: "Milk", slug: "leite" },
+  ];
+
+  return (
+    <div className="p-5">
+      <p className="text-[13px] text-neutral-500 mb-4">
+        {lang === "pt"
+          ? "Cotações indisponíveis no momento. Acesse diretamente:"
+          : "Prices temporarily unavailable. Access directly:"}
+      </p>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {commodities.map((c) => (
+          <a
+            key={c.slug}
+            href={`https://www.noticiasagricolas.com.br/cotacoes/${c.slug}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-3 px-4 py-3 rounded-lg border border-neutral-200 hover:border-brand-primary hover:bg-brand-primary/5 transition-colors group"
+          >
+            <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: COMMODITY_COLORS[c.slug] }} />
+            <div>
+              <p className="text-[13px] font-semibold text-neutral-900 group-hover:text-brand-primary transition-colors">
+                {lang === "pt" ? c.name : c.en}
+              </p>
+              <p className="text-[10px] text-neutral-400 flex items-center gap-0.5">
+                {lang === "pt" ? "Ver cotação" : "View price"} <ExternalLink size={9} />
+              </p>
+            </div>
+          </a>
         ))}
       </div>
+    </div>
+  );
+} // end NACotacoesFallback
 
-      {/* Module Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-5">
-        {modules.map((mod) => (
-          <button
-            key={mod.id}
-            onClick={() => setActiveModule(mod.id as Module)}
-            className="group bg-white rounded-2xl p-5 md:p-6 shadow-[0_2px_15px_-3px_rgba(0,0,0,0.05)] border border-slate-100/60 hover:border-slate-200 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 text-left relative overflow-hidden"
-          >
-            <div className={`absolute top-0 right-0 w-28 h-28 ${mod.color} opacity-[0.03] rounded-bl-full -z-0 transition-transform group-hover:scale-110`} />
+// ─── Notícias Agrícolas — News Widget ────────────────────────────────────────
 
-            <div className={`w-11 h-11 md:w-12 md:h-12 ${mod.color} rounded-xl flex items-center justify-center mb-4 shadow-sm text-white relative z-10`}>
-              <mod.icon size={22} className="drop-shadow-sm" />
-            </div>
+const NA_NOTICIAS_URL = "https://www.noticiasagricolas.com.br/noticias/";
 
-            <h3 className="font-bold text-base md:text-lg text-slate-800 mb-1.5 relative z-10 group-hover:text-slate-900">{mod.label}</h3>
-            <p className="text-xs md:text-sm text-slate-500 leading-relaxed font-medium relative z-10">
-              {mod.id === "market" && (lang === "pt" ? "Preços, câmbio e indicadores." : "Prices, exchange and indicators.")}
-              {mod.id === "campaigns" && (lang === "pt" ? "Planejamento estruturado." : "Structured planning.")}
-              {mod.id === "content" && (lang === "pt" ? "Ideias e calendário editorial." : "Ideas & editorial calendar.")}
-              {mod.id === "competitors" && (lang === "pt" ? "Sinais e movimentos do mercado." : "Market movements & signals.")}
-              {mod.id === "events" && (lang === "pt" ? "Conferências agro e networking." : "Agro conferences & networking.")}
-              {mod.id === "crm" && (lang === "pt" ? "Contatos, empresas e funil de vendas." : "Contacts, companies and sales funnel.")}
-              {mod.id === "research" && (lang === "pt" ? "Análise por CNPJ com SWOT e notícias." : "CNPJ analysis with SWOT and news.")}
-              {mod.id === "channels" && (lang === "pt" ? "23.861 empresas em 27 estados." : "23,861 companies across 27 states.")}
-              {mod.id === "news" && (lang === "pt" ? "Notícias do agronegócio em tempo real." : "Real-time agribusiness news.")}
-              {mod.id === "retailers" && (lang === "pt" ? "Distribuidores e revendas de insumos." : "Input distributors and retailers.")}
-              {mod.id === "recuperacao" && (lang === "pt" ? "Monitoramento de processos judiciais." : "Judicial recovery monitoring.")}
-            </p>
+const NA_CATEGORIES: { slug: string; label: string }[] = [
+  { slug: "",                label: "Todas" },
+  { slug: "agronegocio",    label: "Agronegócio" },
+  { slug: "soja",           label: "Soja" },
+  { slug: "milho",          label: "Milho" },
+  { slug: "boi",            label: "Boi Gordo" },
+  { slug: "cafe",           label: "Café" },
+  { slug: "algodao",        label: "Algodão" },
+  { slug: "biocombustivel", label: "Biocomb." },
+  { slug: "clima",          label: "Clima" },
+];
+
+const CAT_COLORS: Record<string, string> = {
+  agronegocio: "#5B7A2F", soja: "#8B6914", milho: "#E8722A",
+  boi: "#8B4513", cafe: "#6F4E37", algodao: "#7FA02B",
+  biocombustivel: "#009688", clima: "#1565C0",
+};
+
+interface NANewsItem {
+  title: string; url: string;
+  time?: string; date: string; category: string;
+}
+
+function NANoticiasWidget({ lang }: { lang: Lang }) {
+  const [category, setCategory] = useState("");
+  const [items, setItems] = useState<NANewsItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [fetchedAt, setFetchedAt] = useState("");
+
+  useEffect(() => {
+    setLoading(true);
+    setError(false);
+    fetch(`/api/news-na?category=${category}&limit=12`)
+      .then(r => r.json())
+      .then(json => {
+        if (json.success && json.data?.length > 0) {
+          setItems(json.data as NANewsItem[]);
+          setFetchedAt(json.fetched_at);
+        } else {
+          setError(true);
+        }
+      })
+      .catch(() => setError(true))
+      .finally(() => setLoading(false));
+  }, [category]);
+
+  return (
+    <div className="bg-white rounded-lg border border-neutral-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
+      {/* Header */}
+      <div className="p-4 border-b border-neutral-200 flex items-center justify-between bg-neutral-50 flex-wrap gap-3">
+        <div className="flex items-center gap-2">
+          <Newspaper size={16} className="text-brand-primary" />
+          <h3 className="text-[15px] font-bold text-neutral-900">
+            {lang === "pt" ? "Notícias Agro em Tempo Real" : "Real-Time Agro News"}
+          </h3>
+          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-brand-primary/10 text-brand-primary uppercase tracking-wider">
+            Live
+          </span>
+        </div>
+        <div className="flex items-center gap-3">
+          {fetchedAt && (
+            <span className="text-[11px] text-neutral-400 hidden sm:block">
+              {new Date(fetchedAt).toLocaleTimeString(lang === "pt" ? "pt-BR" : "en-US", { hour: "2-digit", minute: "2-digit" })}
+            </span>
+          )}
+          <a href={NA_NOTICIAS_URL} target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-1 text-[12px] font-medium text-brand-primary hover:underline">
+            Notícias Agrícolas <ExternalLink size={12} />
+          </a>
+        </div>
+      </div>
+
+      {/* Category tabs */}
+      <div className="flex gap-1 px-4 pt-3 pb-0 overflow-x-auto scrollbar-hide">
+        {NA_CATEGORIES.map(cat => (
+          <button key={cat.slug} onClick={() => setCategory(cat.slug)}
+            className={`flex-shrink-0 px-3 py-1.5 rounded-full text-[11px] font-semibold transition-colors whitespace-nowrap ${
+              category === cat.slug
+                ? "text-white"
+                : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
+            }`}
+            style={category === cat.slug ? { backgroundColor: CAT_COLORS[cat.slug] || "#5B7A2F" } : {}}>
+            {cat.label}
           </button>
         ))}
       </div>
+
+      {/* Body */}
+      {loading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 size={24} className="animate-spin text-neutral-400" />
+        </div>
+      ) : error || items.length === 0 ? (
+        <div className="p-5">
+          <p className="text-[13px] text-neutral-500 mb-4">
+            {lang === "pt"
+              ? "Notícias indisponíveis no momento. Acesse diretamente:"
+              : "News temporarily unavailable. Access directly:"}
+          </p>
+          <a href={NA_NOTICIAS_URL} target="_blank" rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 text-[13px] font-medium text-brand-primary hover:underline">
+            noticiasagricolas.com.br/noticias/ <ExternalLink size={13} />
+          </a>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-0 divide-y sm:divide-y-0">
+          {items.map((item, i) => {
+            const catColor = CAT_COLORS[item.category] || "#5B7A2F";
+            const timeStr = item.time || "";
+            return (
+              <a key={i} href={item.url} target="_blank" rel="noopener noreferrer"
+                className="block p-4 hover:bg-neutral-50 transition-colors group border-neutral-100 sm:border-r last:border-r-0">
+                {/* Category dot + date */}
+                <div className="flex items-center justify-between mb-2">
+                  <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide"
+                    style={{ color: catColor }}>
+                    <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: catColor }} />
+                    {NA_CATEGORIES.find(c => c.slug === item.category)?.label || item.category}
+                  </span>
+                  {timeStr && (
+                    <span className="text-[10px] text-neutral-400">{timeStr}</span>
+                  )}
+                </div>
+                {/* Title */}
+                <p className="text-[12px] font-semibold text-neutral-900 leading-snug line-clamp-3 group-hover:text-brand-primary transition-colors">
+                  {item.title}
+                </p>
+              </a>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

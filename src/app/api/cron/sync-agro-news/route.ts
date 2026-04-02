@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/utils/supabase/admin'
+import { logSync } from '@/lib/sync-logger'
 import Parser from 'rss-parser'
 import { NEWS_SOURCES } from '@/data/news'
 
@@ -42,6 +43,8 @@ export async function GET(request: Request) {
   ) {
     return new Response('Unauthorized', { status: 401 })
   }
+
+  const startedAt = new Date().toISOString()
 
   try {
     const supabase = createAdminClient()
@@ -106,6 +109,17 @@ export async function GET(request: Request) {
       }
     }
 
+    await logSync(supabase, {
+      source: 'sync-agro-news',
+      started_at: startedAt,
+      finished_at: new Date().toISOString(),
+      records_fetched: totalNew + totalSkipped,
+      records_inserted: totalNew,
+      errors: errors.length,
+      status: errors.length === 0 ? 'success' : totalNew > 0 ? 'partial' : 'error',
+      error_message: errors.length > 0 ? errors.join('; ') : undefined,
+    })
+
     return NextResponse.json({
       success: true,
       message: 'Agro news synchronized',
@@ -115,6 +129,17 @@ export async function GET(request: Request) {
     })
   } catch (error: any) {
     console.error('Error syncing agro news:', error)
+    try {
+      const supabase = createAdminClient()
+      await logSync(supabase, {
+        source: 'sync-agro-news',
+        started_at: startedAt,
+        finished_at: new Date().toISOString(),
+        records_fetched: 0, records_inserted: 0, errors: 1,
+        status: 'error',
+        error_message: error.message,
+      })
+    } catch {}
     return NextResponse.json(
       { success: false, error: error.message || 'Failed to sync news' },
       { status: 500 }

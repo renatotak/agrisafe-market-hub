@@ -1,20 +1,81 @@
 @import "tailwindcss";
 
+@theme {
+  /* ─── Brand Colors (from admin portal) ─── */
+  --color-brand-primary: #5B7A2F;
+  --color-brand-secondary: #7FA02B;
+  --color-brand-dark: #4A6328;
+  --color-brand-light: #B8C4A8;
+  --color-brand-surface: #E5ECD5;
+  --color-brand-muted: #CDDAAF;
+
+  /* ─── Neutral Palette (warm brown, NOT cool grey) ─── */
+  --color-neutral-50: #FAFAF8;
+  --color-neutral-100: #F7F4EF;
+  --color-neutral-200: #EFEADF;
+  --color-neutral-300: #E0D8CA;
+  --color-neutral-400: #C5BAA8;
+  --color-neutral-500: #A69B87;
+  --color-neutral-600: #7D7365;
+  --color-neutral-700: #5C5447;
+  --color-neutral-800: #3D382F;
+  --color-neutral-900: #1F1C17;
+
+  /* ─── Semantic Colors ─── */
+  --color-success: #4CAF50;
+  --color-success-dark: #2E7D32;
+  --color-success-light: #E8F5E9;
+  --color-warning: #E8722A;
+  --color-warning-light: #FFF3E0;
+  --color-warning-dark: #E65100;
+  --color-error: #F44336;
+  --color-error-light: #FFEBEE;
+  --color-error-dark: #D32F2F;
+  --color-info: #2196F3;
+  --color-info-light: #E3F2FD;
+  --color-info-dark: #1565C0;
+
+  /* ─── Layout ─── */
+  --sidebar-width: 240px;
+  --header-height: 64px;
+}
+
 :root {
-  --agri-green: #16a34a;
-  --agri-dark: #0f172a;
-  --agri-light: #f0fdf4;
-  --agri-accent: #eab308;
+  --agri-green: #5B7A2F;
+  --agri-dark: #1F1C17;
+  --agri-light: #F7F4EF;
+  --agri-accent: #E8722A;
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background-color: #F7F4EF;
+  color: #3D382F;
+  font-size: 14px;
+  line-height: 1.5;
 }
 
+/* ─── Utility classes ─── */
 .card-hover {
-  transition: all 0.2s ease;
+  transition: all 150ms ease;
 }
 .card-hover:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+}
+
+/* ─── Material Icons ─── */
+.material-icons-outlined {
+  font-family: 'Material Icons Outlined';
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-smoothing: antialiased;
 }

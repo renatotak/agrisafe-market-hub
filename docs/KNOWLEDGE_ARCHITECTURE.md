@@ -66,3 +66,38 @@ To search and sort effectively, all entries within the Core Hierarchy MUST be ta
 1. **Source Rigor:** Speculative content without transparent methodology is rejected. All statistical claims must cite origin.
 2. **Client Data Restrictions:** Proprietary data involving specific AgriSafe clients must be aggregated and anonymized unless explicitly cleared via the CRM (LGPD).
 3. **Hybrid Cross-indexing:** The UI should retrieve data structurally (e.g., searching strictly the "Market Data" folder) and simultaneously apply tag filters (e.g., filtering for "Credit Analysis" specifically).
+
+---
+
+## 5. Source Registry (Implementation)
+
+As of April 2026, the platform maintains a registry of **166 public data sources** catalogued from 4 internal crawler lists + active app pipelines. Sources are categorized by:
+
+| Category | Count | Examples |
+|----------|-------|---------|
+| Fiscal | 38 | Receita Federal (CAFIR, CNPJ), SEFAZ estaduais, CND |
+| Agropecuaria | 33 | CONAB, IBGE PAM, CEPEA, INMET, Aenda |
+| Socioambiental | 20 | IBAMA embargos, ICMBio UCs, INCRA SIGEF/SNCR, FUNAI |
+| Financeiro | 17 | BCB SGS, SICOR, BNDES, MAPA PSR, PGFN |
+| Geografias | 8 | IBGE municipios, PRODES, Biomas, ZARC, ANTT |
+| Agronomico | 3 | CAR estaduais (MT, MS, TO) |
+| Logistica | 3 | CONAB armazens, usinas, ONTL |
+
+**URL Health:** 112 active, 54 inactive (checked 2026-04-02)
+
+**Source Orchestration Workflow:**
+When adding a new source: Analyze scraping method → Check conflicts with existing sources → Register in source-registry.json → Build cron ingestion → Run sample check → Validate against personas.
+
+See `CLAUDE.md` for the full data source orchestration workflow.
+
+---
+
+## 6. Data Freshness Tiers
+
+| Frequency | Sources | Pipeline |
+|-----------|---------|----------|
+| Daily | BCB SGS (8 series), RSS news (4 feeds), Legal RSS (3 feeds), IBAMA embargos | Vercel cron 08:00 UTC |
+| Weekly | MTP trabalho escravo, CNPJ Receita Federal | Manual/planned |
+| Monthly | SICOR, BACEN agencias, INMET, CAFIR | Manual/planned |
+| Annual | IBGE PAM, PRODES, CONAB safra, ZARC, Biomas | Manual/planned |
+| On-demand | Oraculo Canais (retailers), State registries | Script import |

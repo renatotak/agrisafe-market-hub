@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/utils/supabase/admin'
+import { logSync } from '@/lib/sync-logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -39,6 +40,8 @@ export async function GET(request: Request) {
     return new Response('Unauthorized', { status: 401 })
   }
 
+  const startedAt = new Date().toISOString()
+
   try {
     const supabase = createAdminClient()
     const results: Record<string, unknown> = {}
@@ -56,6 +59,7 @@ export async function GET(request: Request) {
         const prevPrice = previous ? parseFloat(previous.valor) : null
         const change24h = prevPrice ? parseFloat(((price - prevPrice) / prevPrice * 100).toFixed(2)) : 0
 
+        // Update latest view
         const { error } = await supabase
           .from('commodity_prices')
           .update({
@@ -68,6 +72,17 @@ export async function GET(request: Request) {
           .eq('id', id)
 
         if (error) throw error
+
+        // Insert daily history row (upsert on commodity_id + recorded_at)
+        await supabase
+          .from('commodity_price_history')
+          .upsert({
+            commodity_id: id,
+            price,
+            change_24h: change24h,
+            recorded_at: parseBCBDate(latest.data),
+          }, { onConflict: 'commodity_id,recorded_at' })
+
         results[id] = { price, change24h, date: latest.data }
       } catch (e: any) {
         errors.push(`${id}: ${e.message}`)
@@ -107,6 +122,18 @@ export async function GET(request: Request) {
       }
     }
 
+    const recordCount = Object.keys(results).length
+    await logSync(supabase, {
+      source: 'sync-market-data',
+      started_at: startedAt,
+      finished_at: new Date().toISOString(),
+      records_fetched: Object.keys(COMMODITY_SERIES).length + Object.keys(INDICATOR_SERIES).length,
+      records_inserted: recordCount,
+      errors: errors.length,
+      status: errors.length === 0 ? 'success' : recordCount > 0 ? 'partial' : 'error',
+      error_message: errors.length > 0 ? errors.join('; ') : undefined,
+    })
+
     return NextResponse.json({
       success: true,
       message: 'Market data synchronized from BCB SGS',
@@ -116,6 +143,17 @@ export async function GET(request: Request) {
     })
   } catch (error: any) {
     console.error('Error syncing market data:', error)
+    try {
+      const supabase = createAdminClient()
+      await logSync(supabase, {
+        source: 'sync-market-data',
+        started_at: startedAt,
+        finished_at: new Date().toISOString(),
+        records_fetched: 0, records_inserted: 0, errors: 1,
+        status: 'error',
+        error_message: error.message,
+      })
+    } catch {}
     return NextResponse.json(
       { success: false, error: error.message || 'Failed to sync data' },
       { status: 500 }
