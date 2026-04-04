@@ -7,7 +7,8 @@ export interface NACommodityPrice {
   commodity: string;
   slug: string;
   unit: string;
-  items: { label: string; price: string; variation: string; direction: "up" | "down" | "stable" }[];
+  headers: string[];
+  items: { label: string; price: string; extra?: string; variation: string; direction: "up" | "down" | "stable" }[];
 }
 
 const SLUG_MAP: Record<string, { slug: string; en: string }> = {
@@ -70,11 +71,11 @@ export async function GET() {
       if (!matched) return;
       if (results.find((r) => r.slug === SLUG_MAP[matched].slug)) return;
 
-      // Extract unit from the table header row
+      // Extract full header row
       const headerRow = $(section).find("table.cot-fisicas th");
       const headers: string[] = [];
       headerRow.each((_j, th) => { headers.push($(th).text().trim()); });
-      // The price column header often contains the unit, e.g. "Preço (R$/sc 50 kg)"
+      // Unit from price column header, e.g. "Preço (R$/sc 50 kg)"
       const priceHeader = headers[1] || "";
       const unitMatch = priceHeader.match(/\(([^)]+)\)/);
       const unit = unitMatch ? unitMatch[1] : "";
@@ -86,14 +87,17 @@ export async function GET() {
 
         const label = $(tds[0]).text().trim();
         const price = $(tds[1]).text().trim();
-        if (!label || !price || price === "***") return;
+        if (!label || !price || price === "***" || price === "s/ cotação") return;
+        // Skip footer rows like "Dólar: 5,16"
+        if (label.toLowerCase().startsWith("dólar") || label.toLowerCase().startsWith("referência")) return;
 
-        // Variation is in the last td (could be col 2 or 3)
+        // Extra column (e.g. R$/@ for Algodão which has ¢/lb + R$/@)
+        const extra = tds.length >= 4 ? $(tds[2]).text().trim() : undefined;
+        // Variation is always the last column
         const variation = $(tds[tds.length - 1]).text().trim();
-        // Don't use variation if it equals price (2-column table)
-        const var_ = variation !== price ? variation : "";
+        const var_ = variation !== price && variation !== extra ? variation : "";
 
-        items.push({ label, price, variation: var_, direction: parseDirection(var_) });
+        items.push({ label, price, extra: extra || undefined, variation: var_, direction: parseDirection(var_) });
       });
 
       if (items.length > 0) {
@@ -101,7 +105,8 @@ export async function GET() {
           commodity: matched,
           slug: SLUG_MAP[matched].slug,
           unit,
-          items: items.slice(0, 3),
+          headers,
+          items, // all rows — no cap
         });
       }
     });

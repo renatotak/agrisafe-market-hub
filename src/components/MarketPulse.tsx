@@ -57,6 +57,9 @@ export function MarketPulse({ lang }: { lang: Lang }) {
   const [expandedCommodity, setExpandedCommodity] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"list" | "map">("list");
   const [isMockData, setIsMockData] = useState(true);
+  const [localPrices, setLocalPrices] = useState<any[]>([]);
+  const [localPricesLoading, setLocalPricesLoading] = useState(true);
+  const [expandedLocal, setExpandedLocal] = useState<string | null>(null);
 
   const fetchData = async () => {
     setLoading(true);
@@ -75,7 +78,19 @@ export function MarketPulse({ lang }: { lang: Lang }) {
     setLoading(false);
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { fetchData(); fetchLocalPrices(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const fetchLocalPrices = async () => {
+    setLocalPricesLoading(true);
+    try {
+      const res = await fetch("/api/prices-na");
+      const json = await res.json();
+      if (json.success && json.data) {
+        setLocalPrices(json.data.filter((c: any) => c.items.some((it: any) => !it.price.includes("s/ cotação"))));
+      }
+    } catch { /* ignore */ }
+    setLocalPricesLoading(false);
+  };
 
   if (loading) {
     return <div className="flex items-center justify-center py-20"><Loader2 size={32} className="animate-spin text-brand-primary" /></div>;
@@ -307,6 +322,104 @@ export function MarketPulse({ lang }: { lang: Lang }) {
           </div>
         </div>
       )}
+
+      {/* Cotações Locais — full NA prices */}
+      <div className="bg-white rounded-lg border border-neutral-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
+        <div className="px-5 py-3 border-b border-neutral-200 bg-neutral-50 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <h3 className="font-semibold text-neutral-900 text-[14px]">
+              {lang === "pt" ? "Cotações Locais — Mercado Físico & Futuros" : "Local Prices — Physical & Futures"}
+            </h3>
+            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-brand-primary/10 text-brand-primary uppercase tracking-wider">Live</span>
+          </div>
+          <a href="https://www.noticiasagricolas.com.br/cotacoes/" target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-1 text-[11px] font-medium text-brand-primary hover:underline">
+            Notícias Agrícolas <ExternalLink size={11} />
+          </a>
+        </div>
+
+        {localPricesLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 size={24} className="animate-spin text-neutral-400" />
+          </div>
+        ) : localPrices.length === 0 ? (
+          <div className="p-8 text-center text-neutral-400 text-[13px]">
+            {lang === "pt" ? "Cotações indisponíveis" : "Prices unavailable"}
+          </div>
+        ) : (
+          <div className="divide-y divide-neutral-100">
+            {localPrices.map((c: any) => {
+              const isOpen = expandedLocal === c.slug;
+              const firstItem = c.items[0];
+              const mainPrice = firstItem?.price || "";
+              const mainVar = firstItem?.variation || "";
+              const mainDir = firstItem?.direction || "stable";
+
+              return (
+                <div key={c.slug}>
+                  <button
+                    onClick={() => setExpandedLocal(isOpen ? null : c.slug)}
+                    className="w-full flex items-center px-5 py-3 text-left hover:bg-neutral-50 transition-colors"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[13px] font-bold text-neutral-900">{c.commodity}</span>
+                        {c.unit && <span className="text-[10px] text-neutral-400">{c.unit}</span>}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4 flex-shrink-0">
+                      <span className="text-[14px] font-bold text-neutral-900 font-mono">{mainPrice}</span>
+                      {mainVar && (
+                        <span className={`text-[12px] font-bold min-w-[50px] text-right ${
+                          mainDir === "up" ? "text-green-600" : mainDir === "down" ? "text-red-500" : "text-neutral-400"
+                        }`}>
+                          {mainDir === "up" ? "▲" : mainDir === "down" ? "▼" : ""} {mainVar}
+                        </span>
+                      )}
+                      <span className="text-[10px] text-neutral-300">{c.items.length} {lang === "pt" ? "linhas" : "rows"}</span>
+                      <ChevronDown size={14} className={`text-neutral-400 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+                    </div>
+                  </button>
+
+                  {isOpen && (
+                    <div className="bg-neutral-50 border-t border-neutral-100 px-5 py-3">
+                      <table className="w-full text-[12px]">
+                        <thead>
+                          <tr className="text-[9px] font-semibold text-neutral-400 uppercase tracking-wider">
+                            {c.headers?.map((h: string, i: number) => (
+                              <th key={i} className={`py-1.5 ${i === 0 ? "text-left" : "text-right"}`}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-neutral-200">
+                          {c.items.map((item: any, i: number) => (
+                            <tr key={i} className="hover:bg-white transition-colors">
+                              <td className="py-2 text-neutral-700 font-medium pr-4">{item.label}</td>
+                              <td className="py-2 text-right font-mono font-semibold text-neutral-900">{item.price}</td>
+                              {item.extra && <td className="py-2 text-right font-mono text-neutral-600">{item.extra}</td>}
+                              <td className={`py-2 text-right font-semibold ${
+                                item.direction === "up" ? "text-green-600" : item.direction === "down" ? "text-red-500" : "text-neutral-400"
+                              }`}>
+                                {item.direction === "up" ? "▲" : item.direction === "down" ? "▼" : ""} {item.variation}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      <div className="mt-2 text-right">
+                        <a href={`https://www.noticiasagricolas.com.br/cotacoes/${c.slug}`} target="_blank" rel="noopener noreferrer"
+                          className="text-[10px] font-medium text-brand-primary hover:underline inline-flex items-center gap-0.5">
+                          {lang === "pt" ? "Ver completo" : "View full"} <ExternalLink size={9} />
+                        </a>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
