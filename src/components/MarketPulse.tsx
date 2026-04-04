@@ -33,6 +33,20 @@ const COMMODITY_TAGS: Record<string, string[]> = {
   sugar: ["açúcar", "sugar", "acucar"], cotton: ["algodão", "cotton", "algodao"], citrus: ["laranja", "citrus", "orange"],
 };
 
+// TradingView symbols for Brazilian agro commodities
+const TV_SYMBOLS: Record<string, string> = {
+  soy: "CBOT:ZS1!", corn: "CBOT:ZC1!", coffee: "ICEUS:KC1!",
+  sugar: "ICEUS:SB1!", cotton: "ICEUS:CT1!", citrus: "ICEUS:OJ1!",
+};
+
+const SOURCE_COLORS: Record<string, string> = {
+  "BCB SGS": "#1565C0",
+  "CEPEA/BCB": "#5B7A2F",
+  "CEPEA": "#5B7A2F",
+  "BCB": "#1565C0",
+  "TradingView": "#2962FF",
+};
+
 export function MarketPulse({ lang }: { lang: Lang }) {
   const tr = t(lang);
   const [commodities, setCommodities] = useState<CommodityPrice[]>(mockCommodities);
@@ -161,9 +175,12 @@ export function MarketPulse({ lang }: { lang: Lang }) {
               {ruptures[cp.id] && <Zap size={10} className="text-amber-400" />}
             </div>
             <p className="text-[18px] font-bold text-white tracking-tight">{cp.price.toLocaleString(lang === "pt" ? "pt-BR" : "en-US", { minimumFractionDigits: 2 })}</p>
-            <p className={`text-[13px] font-bold ${cp.change_24h > 0 ? "text-green-400" : cp.change_24h < 0 ? "text-red-400" : "text-neutral-400"}`}>
-              {cp.change_24h > 0 ? "\u25b2" : cp.change_24h < 0 ? "\u25bc" : "\u25ac"} {cp.change_24h > 0 ? "+" : ""}{cp.change_24h}%
-            </p>
+            <div className="flex items-center justify-between">
+              <p className={`text-[13px] font-bold ${cp.change_24h > 0 ? "text-green-400" : cp.change_24h < 0 ? "text-red-400" : "text-neutral-400"}`}>
+                {cp.change_24h > 0 ? "\u25b2" : cp.change_24h < 0 ? "\u25bc" : "\u25ac"} {cp.change_24h > 0 ? "+" : ""}{cp.change_24h}%
+              </p>
+              <span className="text-[8px] font-semibold text-neutral-500 opacity-60">{cp.source}</span>
+            </div>
           </div>
         ))}
       </div>
@@ -179,6 +196,7 @@ export function MarketPulse({ lang }: { lang: Lang }) {
               {ind.trend === "down" && <TrendingDown size={14} className="text-error" />}
               {ind.trend === "stable" && <Minus size={14} className="text-neutral-400" />}
             </div>
+            <p className="text-[9px] font-semibold mt-1.5" style={{ color: SOURCE_COLORS[ind.source] || "#999" }}>{ind.source}</p>
           </div>
         ))}
       </div>
@@ -205,7 +223,13 @@ export function MarketPulse({ lang }: { lang: Lang }) {
                 <MapIcon size={14} /> Mapa
               </button>
             </div>
-            <span className="text-[11px] text-neutral-400 hidden sm:inline-block">{tr.marketPulse.source}: CEPEA/BCB</span>
+            <div className="hidden sm:flex items-center gap-2">
+              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ backgroundColor: "#5B7A2F20", color: "#5B7A2F" }}>CEPEA/BCB</span>
+              <a href="https://www.tradingview.com/markets/futures/quotes-agricultural/" target="_blank" rel="noopener noreferrer"
+                className="text-[9px] font-bold px-1.5 py-0.5 rounded flex items-center gap-1" style={{ backgroundColor: "#2962FF15", color: "#2962FF" }}>
+                TradingView <ExternalLink size={8} />
+              </a>
+            </div>
           </div>
         </div>
         
@@ -220,6 +244,7 @@ export function MarketPulse({ lang }: { lang: Lang }) {
                 <th className="px-4 py-2.5 text-right hidden sm:table-cell">{tr.marketPulse.high7d}</th>
                 <th className="px-4 py-2.5 text-right hidden sm:table-cell">{tr.marketPulse.low7d}</th>
                 <th className="px-4 py-2.5 text-center w-24 hidden md:table-cell">Spark</th>
+                <th className="px-4 py-2.5 text-left hidden lg:table-cell">{tr.marketPulse.source}</th>
                 <th className="px-4 py-2.5 text-left hidden lg:table-cell">{tr.marketPulse.lastUpdate}</th>
                 <th className="px-2 py-2.5 w-8"></th>
               </tr>
@@ -341,6 +366,11 @@ function CommodityRow({
             </div>
           )}
         </td>
+        <td className="px-4 py-2.5 hidden lg:table-cell">
+          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ backgroundColor: (SOURCE_COLORS[cp.source] || "#999") + "18", color: SOURCE_COLORS[cp.source] || "#999" }}>
+            {cp.source}
+          </span>
+        </td>
         <td className="px-4 py-2.5 text-neutral-500 text-[12px] hidden lg:table-cell">
           {new Date(cp.last_update).toLocaleDateString(lang === "pt" ? "pt-BR" : "en-US", { day: "numeric", month: "short" })}
         </td>
@@ -352,13 +382,36 @@ function CommodityRow({
       {/* Deep-dive expandable row */}
       {isExpanded && (
         <tr>
-          <td colSpan={8} className="bg-neutral-50 border-b border-neutral-200 p-0">
+          <td colSpan={9} className="bg-neutral-50 border-b border-neutral-200 p-0">
             <div className="p-5">
+              {/* TradingView Mini Chart */}
+              {TV_SYMBOLS[cp.id] && (
+                <div className="mb-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <h4 className="text-[12px] font-semibold text-neutral-500 uppercase tracking-wider">TradingView</h4>
+                    <a href={`https://www.tradingview.com/symbols/${TV_SYMBOLS[cp.id].replace(":", "-")}/`} target="_blank" rel="noopener noreferrer"
+                      className="text-[10px] font-medium flex items-center gap-0.5" style={{ color: "#2962FF" }}>
+                      {TV_SYMBOLS[cp.id]} <ExternalLink size={9} />
+                    </a>
+                  </div>
+                  <div className="bg-white rounded-lg border border-neutral-200 overflow-hidden" style={{ height: 220 }}>
+                    <iframe
+                      src={`https://s.tradingview.com/widgetembed/?symbol=${encodeURIComponent(TV_SYMBOLS[cp.id])}&interval=D&hidesidetoolbar=1&symboledit=0&saveimage=0&toolbarbg=f1f3f6&studies=&theme=light&style=2&timezone=America%2FSao_Paulo&locale=${lang === "pt" ? "br" : "en"}&utm_source=agsf-mkthub&utm_medium=widget&utm_campaign=chart`}
+                      className="w-full h-full border-0"
+                      allowTransparency
+                      sandbox="allow-scripts allow-same-origin allow-popups"
+                      loading="lazy"
+                    />
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                {/* Price chart */}
+                {/* Price chart (BCB/CEPEA) */}
                 <div>
-                  <h4 className="text-[12px] font-semibold text-neutral-500 uppercase tracking-wider mb-3">
+                  <h4 className="text-[12px] font-semibold text-neutral-500 uppercase tracking-wider mb-3 flex items-center gap-2">
                     {lang === "pt" ? "Hist\u00f3rico de Pre\u00e7os" : "Price History"}
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ backgroundColor: "#5B7A2F20", color: "#5B7A2F" }}>{cp.source}</span>
                   </h4>
                   {sparkData.length > 1 ? (
                     <div className="h-44 bg-white rounded-lg p-3 border border-neutral-200">
