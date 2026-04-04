@@ -70,6 +70,9 @@ Market Hub Knowledge Engine
 | 16c | AgroAgenda events integration: `/api/events-na` fetches from `api.agroagenda.agr.br/v1/home` (86 events, 10 categories). EventTracker rewritten with cards/list/calendar views, filters by type/UF/city/date range. No Supabase dependency. | Done |
 | 16d | Dashboard Map upgrade: live events from AgroAgenda plotted by city/state. Interactive layer control (Camadas) to toggle Eventos/Alertas/Revendas. Legend bar with counts. 55+ Brazilian city geocoder. | Done |
 | 16e | Dashboard layout: KPI indicators moved to top, map in middle, NA widgets at bottom side-by-side. | Done |
+| 16f | MarketPulse: source attribution on all values (BCB SGS, CEPEA/BCB badges), TradingView charts in deep-dive (CBOT/ICEUS futures), full NA cotações locais section (~100 price rows, professional format with original headers). | Done |
+| 16g | ContentHub rewrite: AgriSafe-only content (Tarken removed). 8 articles across 5 campaigns. Published/Pipeline/Calendar tabs. Spec doc at `docs/CONTENT_HUB_SPEC.md`. | Done |
+| 16h | RSS feeds fixed: Agrolink (403) → Portal do Agronegócio, CNA (404) → SNA. AgroTermos glossary added to Knowledge Base. | Done |
 
 ---
 
@@ -82,11 +85,18 @@ Market Hub Knowledge Engine
 - [x] Improve Painel UI — compact 8-KPI strip replacing 3 rows of cards
 - [x] Retailers Directory — already shows all fields from both tables (verified)
 - [x] Vercel env vars — AGROAPI keys + Google Maps key configured
+- [x] Fix RSS feeds — Agrolink → Portal do Agronegócio, CNA → SNA
+- [x] AgroTermos integration — glossary tab in Knowledge Base
+- [x] MarketPulse — source badges + TradingView charts + full NA cotações locais
+- [x] ContentHub — rewritten with AgriSafe-only content (Tarken removed), spec doc created
+- [x] BeefPoint RSS evaluated — works, recommended for addition
 
 ### Remaining tasks:
-1. **Remaining AgroAPI integrations** — AgroTermos (terminology for Knowledge Base/RAG), ClimAPI (weather layer for map), SmartSolosExpert (activate Soils tab in AgInputIntelligence).
-2. **Google Maps on production** — env var set but requires clean redeploy (no build cache) to bake NEXT_PUBLIC_ var into client bundle.
-3. **Fix broken RSS feeds** — Agrolink returns 406, CNA returns 404. Find alternatives or update URLs.
+1. **Add BeefPoint RSS** — CEPEA livestock data feed, tested OK (10 items, journalistic)
+2. **ClimAPI weather layer** — Embrapa climate data for map (1K req/mo free tier)
+3. **SmartSolosExpert** — Activate Soils tab in AgInputIntelligence
+4. **LinkedIn API** — Auto-fetch engagement for published articles (Phase 17)
+5. **Google Maps clean redeploy** — NEXT_PUBLIC_ var needs no-cache rebuild on Vercel
 
 ---
 
@@ -146,7 +156,7 @@ The platform flow: **Ingest → Analyze → Create → Comply**
 
 | Module | Component | Purpose |
 |--------|-----------|---------|
-| Central de Conteúdo | `ContentHub.tsx` | 4 tabs: Published Articles (LinkedIn + engagement), Topic Pipeline (10+ weeks, thesis + historical angle), Content Calendar (weekly view), Campaign Tracker |
+| Central de Conteúdo | `ContentHub.tsx` | AgriSafe-only content: Published (5 articles), Pipeline (drafts/scheduled), Calendar (weekly). 5 campaigns. Spec: `docs/CONTENT_HUB_SPEC.md` |
 
 ### Vertical 4: Regulatório (Regulatory)
 *Legal intelligence for compliance.*

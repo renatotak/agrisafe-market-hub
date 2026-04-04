@@ -49,7 +49,7 @@ INTELIGÊNCIA DE MERCADO (Market Intelligence)
   Diretório de Canais    — RetailersDirectory.tsx (9,328 companies, 24,275 locations)
 
 MARKETING & CONTEÚDO (Marketing & Content)
-  Central de Conteúdo    — ContentHub.tsx (4 tabs: articles, topics, calendar, campaigns)
+  Central de Conteúdo    — ContentHub.tsx (AgriSafe-only: published, pipeline, calendar). Spec: docs/CONTENT_HUB_SPEC.md
 
 REGULATÓRIO (Regulatory)
   Marco Regulatório      — RegulatoryFramework.tsx (CMN/CVM/BCB/MAPA norms)
