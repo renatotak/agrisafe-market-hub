@@ -1,15 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Lang, t } from "@/lib/i18n";
 import { supabase } from "@/lib/supabase";
 import {
   Store, Search, ChevronDown, ChevronUp, MapPin, Building2,
-  Loader2, ChevronLeft, ChevronRight, Filter, X,
+  Loader2, ChevronLeft, ChevronRight, Filter, X, Map as MapIcon, LayoutList,
 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
+import { APIProvider, Map as GMap, AdvancedMarker, InfoWindow } from "@vis.gl/react-google-maps";
 
 const PAGE_SIZE = 25;
+const MAP_LIMIT = 500; // max markers on map
 
 const CLASSIFICACAO_COLORS: Record<string, string> = {
   A: "bg-success-light text-success-dark",
@@ -58,6 +60,10 @@ export function RetailersDirectory({ lang }: { lang: Lang }) {
   const [showFilters, setShowFilters] = useState(false);
   const [ufs, setUfs] = useState<string[]>([]);
   const [grupos, setGrupos] = useState<string[]>([]);
+  const [viewMode, setViewMode] = useState<"list" | "map">("list");
+  const [mapLocations, setMapLocations] = useState<any[]>([]);
+  const [mapLoading, setMapLoading] = useState(false);
+  const [activeMapMarker, setActiveMapMarker] = useState<string | null>(null);
 
   // KPI stats
   const [stats, setStats] = useState({ total: 0, distribuidores: 0, cooperativas: 0, estados: 0 });
@@ -65,6 +71,7 @@ export function RetailersDirectory({ lang }: { lang: Lang }) {
   useEffect(() => { fetchRetailers(); fetchFilterOptions(); fetchStats(); }, []);
   useEffect(() => { setPage(0); }, [search, ufFilter, grupoFilter, classificacaoFilter]);
   useEffect(() => { fetchRetailers(); }, [page, search, ufFilter, grupoFilter, classificacaoFilter]);
+  useEffect(() => { if (viewMode === "map") fetchMapLocations(); }, [viewMode, ufFilter, grupoFilter, classificacaoFilter, search]);
 
   const fetchStats = async () => {
     const { count: total } = await supabase.from("retailers").select("*", { count: "exact", head: true });
@@ -111,6 +118,25 @@ export function RetailersDirectory({ lang }: { lang: Lang }) {
     setLoading(false);
   };
 
+  const fetchMapLocations = useCallback(async () => {
+    setMapLoading(true);
+    let query = supabase
+      .from("retailer_locations")
+      .select("id, cnpj, nome_fantasia, razao_social, logradouro, numero, bairro, municipio, uf, cep, latitude, longitude, geo_precision")
+      .not("latitude", "is", null)
+      .not("longitude", "is", null)
+      .limit(MAP_LIMIT);
+
+    if (ufFilter) query = query.eq("uf", ufFilter);
+    if (search.trim()) {
+      query = query.or(`razao_social.ilike.%${search.trim()}%,nome_fantasia.ilike.%${search.trim()}%,cnpj.ilike.%${search.trim()}%`);
+    }
+
+    const { data } = await query;
+    setMapLocations(data || []);
+    setMapLoading(false);
+  }, [ufFilter, search]);
+
   const fetchLocations = async (cnpjRaiz: string) => {
     if (locations[cnpjRaiz]) return;
     const { data } = await supabase.from("retailer_locations").select("*").eq("cnpj_raiz", cnpjRaiz).order("uf");
@@ -136,6 +162,16 @@ export function RetailersDirectory({ lang }: { lang: Lang }) {
               ? `${stats.total.toLocaleString("pt-BR")} canais mapeados em ${stats.estados} estados`
               : `${stats.total.toLocaleString("en-US")} channels mapped across ${stats.estados} states`}
           </p>
+        </div>
+        <div className="flex items-center bg-white border border-neutral-200 rounded-lg p-0.5">
+          <button onClick={() => setViewMode("list")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-[12px] font-semibold transition-colors ${viewMode === "list" ? "bg-brand-primary/10 text-brand-primary" : "text-neutral-500 hover:text-neutral-700"}`}>
+            <LayoutList size={14} /> {lang === "pt" ? "Lista" : "List"}
+          </button>
+          <button onClick={() => setViewMode("map")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-[12px] font-semibold transition-colors ${viewMode === "map" ? "bg-brand-primary/10 text-brand-primary" : "text-neutral-500 hover:text-neutral-700"}`}>
+            <MapIcon size={14} /> Mapa
+          </button>
         </div>
       </div>
 
@@ -215,54 +251,181 @@ export function RetailersDirectory({ lang }: { lang: Lang }) {
         )}
       </div>
 
-      {/* Table */}
-      {loading ? (
-        <div className="flex items-center justify-center py-20"><Loader2 size={32} className="animate-spin text-brand-primary" /></div>
-      ) : (
-        <div className="bg-white rounded-lg border border-neutral-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-[14px]">
-              <thead>
-                <tr className="bg-neutral-50 text-[10px] font-semibold text-neutral-500 uppercase tracking-[0.05em] border-b border-neutral-200">
-                  <th className="px-4 py-3 text-left">{lang === "pt" ? "Empresa" : "Company"}</th>
-                  <th className="px-4 py-3 text-left hidden md:table-cell">{lang === "pt" ? "Grupo" : "Group"}</th>
-                  <th className="px-4 py-3 text-center hidden md:table-cell">{lang === "pt" ? "Class." : "Class."}</th>
-                  <th className="px-4 py-3 text-left hidden lg:table-cell">{lang === "pt" ? "Faturamento" : "Revenue"}</th>
-                  <th className="px-4 py-3 text-left hidden xl:table-cell">{lang === "pt" ? "Porte" : "Size"}</th>
-                  <th className="px-4 py-3 w-8"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {retailers.map((r) => (
-                  <RetailerRow key={r.cnpj_raiz} retailer={r} lang={lang} expanded={expandedId === r.cnpj_raiz}
-                    onToggle={() => toggleExpand(r.cnpj_raiz)} locations={locations[r.cnpj_raiz]} />
-                ))}
-                {retailers.length === 0 && (
-                  <tr><td colSpan={6} className="px-4 py-12 text-center text-neutral-400">{lang === "pt" ? "Nenhum resultado" : "No results"}</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between px-4 py-3 border-t border-neutral-200 bg-neutral-50">
-              <p className="text-[12px] text-neutral-500">
-                {page * PAGE_SIZE + 1}\u2013{Math.min((page + 1) * PAGE_SIZE, totalCount)} {lang === "pt" ? "de" : "of"} {totalCount.toLocaleString()}
-              </p>
-              <div className="flex items-center gap-2">
-                <button onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0}
-                  className="p-1.5 rounded-md hover:bg-neutral-200 disabled:opacity-30 transition-colors"><ChevronLeft size={16} /></button>
-                <span className="text-[12px] font-medium text-neutral-600">{page + 1} / {totalPages}</span>
-                <button onClick={() => setPage(Math.min(totalPages - 1, page + 1))} disabled={page >= totalPages - 1}
-                  className="p-1.5 rounded-md hover:bg-neutral-200 disabled:opacity-30 transition-colors"><ChevronRight size={16} /></button>
-              </div>
+      {/* Content: List or Map */}
+      {viewMode === "list" ? (
+        loading ? (
+          <div className="flex items-center justify-center py-20"><Loader2 size={32} className="animate-spin text-brand-primary" /></div>
+        ) : (
+          <div className="bg-white rounded-lg border border-neutral-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-[14px]">
+                <thead>
+                  <tr className="bg-neutral-50 text-[10px] font-semibold text-neutral-500 uppercase tracking-[0.05em] border-b border-neutral-200">
+                    <th className="px-4 py-3 text-left">{lang === "pt" ? "Empresa" : "Company"}</th>
+                    <th className="px-4 py-3 text-left hidden md:table-cell">{lang === "pt" ? "Grupo" : "Group"}</th>
+                    <th className="px-4 py-3 text-center hidden md:table-cell">{lang === "pt" ? "Class." : "Class."}</th>
+                    <th className="px-4 py-3 text-left hidden lg:table-cell">{lang === "pt" ? "Faturamento" : "Revenue"}</th>
+                    <th className="px-4 py-3 text-left hidden xl:table-cell">{lang === "pt" ? "Porte" : "Size"}</th>
+                    <th className="px-4 py-3 w-8"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {retailers.map((r) => (
+                    <RetailerRow key={r.cnpj_raiz} retailer={r} lang={lang} expanded={expandedId === r.cnpj_raiz}
+                      onToggle={() => toggleExpand(r.cnpj_raiz)} locations={locations[r.cnpj_raiz]} />
+                  ))}
+                  {retailers.length === 0 && (
+                    <tr><td colSpan={6} className="px-4 py-12 text-center text-neutral-400">{lang === "pt" ? "Nenhum resultado" : "No results"}</td></tr>
+                  )}
+                </tbody>
+              </table>
             </div>
-          )}
-        </div>
+
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between px-4 py-3 border-t border-neutral-200 bg-neutral-50">
+                <p className="text-[12px] text-neutral-500">
+                  {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, totalCount)} {lang === "pt" ? "de" : "of"} {totalCount.toLocaleString()}
+                </p>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0}
+                    className="p-1.5 rounded-md hover:bg-neutral-200 disabled:opacity-30 transition-colors"><ChevronLeft size={16} /></button>
+                  <span className="text-[12px] font-medium text-neutral-600">{page + 1} / {totalPages}</span>
+                  <button onClick={() => setPage(Math.min(totalPages - 1, page + 1))} disabled={page >= totalPages - 1}
+                    className="p-1.5 rounded-md hover:bg-neutral-200 disabled:opacity-30 transition-colors"><ChevronRight size={16} /></button>
+                </div>
+              </div>
+            )}
+          </div>
+        )
+      ) : (
+        <RetailersMap locations={mapLocations} loading={mapLoading} lang={lang}
+          activeId={activeMapMarker} onMarkerClick={setActiveMapMarker} totalCount={totalCount}
+          grupoColors={GRUPO_COLORS} />
       )}
     </div>
   );
 }
+
+// ─── Map View ────────────────────────────────────────────────────────────────
+
+const GRUPO_MARKER_COLORS: Record<string, string> = {
+  DISTRIBUIDOR: "#5B7A2F",
+  COOPERATIVA: "#1565C0",
+  "CANAL RD": "#E8722A",
+  PLATAFORMA: "#9E9E9E",
+};
+
+function RetailersMap({ locations, loading, lang, activeId, onMarkerClick, totalCount, grupoColors }: {
+  locations: any[]; loading: boolean; lang: Lang; activeId: string | null;
+  onMarkerClick: (id: string | null) => void; totalCount: number;
+  grupoColors: Record<string, string>;
+}) {
+  const MAP_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
+  const active = locations.find((l) => String(l.id) === activeId);
+
+  if (!MAP_KEY) {
+    return (
+      <div className="bg-neutral-100 rounded-lg border border-neutral-200 p-8 text-center text-neutral-500 text-sm">
+        Google Maps API key not configured.
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white rounded-lg border border-neutral-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
+      {/* Map info bar */}
+      <div className="px-4 py-2.5 bg-neutral-50 border-b border-neutral-200 flex items-center justify-between">
+        <div className="flex items-center gap-3 text-[11px]">
+          {Object.entries(GRUPO_MARKER_COLORS).map(([grupo, color]) => {
+            const count = locations.filter((l) => l.razao_social?.includes("COOP") ? grupo === "COOPERATIVA" : true).length;
+            return (
+              <div key={grupo} className="flex items-center gap-1">
+                <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }} />
+                <span className="text-neutral-600 font-medium">{grupo}</span>
+              </div>
+            );
+          })}
+        </div>
+        <span className="text-[11px] text-neutral-400">
+          {loading ? (lang === "pt" ? "Carregando..." : "Loading...") :
+           `${locations.length}${locations.length >= MAP_LIMIT ? "+" : ""} ${lang === "pt" ? "pontos" : "points"}`}
+          {totalCount > MAP_LIMIT && (
+            <span className="ml-1 text-neutral-300">
+              ({lang === "pt" ? "use filtros para refinar" : "use filters to refine"})
+            </span>
+          )}
+        </span>
+      </div>
+
+      {/* Map */}
+      <div className="relative" style={{ height: 550 }}>
+        {loading && (
+          <div className="absolute inset-0 flex items-center justify-center bg-neutral-50 z-10">
+            <Loader2 size={28} className="animate-spin text-brand-primary" />
+          </div>
+        )}
+        <APIProvider apiKey={MAP_KEY}>
+          <GMap
+            defaultCenter={{ lat: -15.78, lng: -47.93 }}
+            defaultZoom={4}
+            mapId="retailers-map"
+            disableDefaultUI
+            zoomControl
+          >
+            {locations.map((loc) => {
+              const markerColor = loc.razao_social?.includes("COOP") ? GRUPO_MARKER_COLORS["COOPERATIVA"] :
+                                  GRUPO_MARKER_COLORS["DISTRIBUIDOR"];
+              return (
+                <AdvancedMarker
+                  key={loc.id}
+                  position={{ lat: loc.latitude, lng: loc.longitude }}
+                  onClick={() => onMarkerClick(String(loc.id))}
+                >
+                  <div
+                    className="w-3 h-3 rounded-full border border-white shadow-sm cursor-pointer hover:scale-150 transition-transform"
+                    style={{ backgroundColor: markerColor }}
+                  />
+                </AdvancedMarker>
+              );
+            })}
+
+            {active && (
+              <InfoWindow
+                position={{ lat: active.latitude, lng: active.longitude }}
+                onCloseClick={() => onMarkerClick(null)}
+                pixelOffset={[0, -5]}
+              >
+                <div className="p-1 max-w-[240px]">
+                  <h4 className="font-bold text-neutral-900 text-[13px] leading-tight">
+                    {active.nome_fantasia || active.razao_social}
+                  </h4>
+                  {active.nome_fantasia && (
+                    <p className="text-[11px] text-neutral-500 mt-0.5">{active.razao_social}</p>
+                  )}
+                  <div className="mt-1.5 space-y-0.5 text-[11px] text-neutral-600">
+                    <p className="flex items-center gap-1">
+                      <MapPin size={10} className="text-neutral-400 shrink-0" />
+                      {[active.logradouro, active.numero].filter(Boolean).join(", ")}
+                    </p>
+                    <p>{[active.bairro, active.municipio, active.uf].filter(Boolean).join(" - ")}</p>
+                    {active.cep && <p>CEP: {active.cep}</p>}
+                  </div>
+                  {active.geo_precision && active.geo_precision !== "address" && active.geo_precision !== "original" && (
+                    <p className="mt-1.5 text-[9px] text-amber-600 font-medium">
+                      {lang === "pt" ? "Localização aproximada" : "Approximate location"} ({active.geo_precision})
+                    </p>
+                  )}
+                </div>
+              </InfoWindow>
+            )}
+          </GMap>
+        </APIProvider>
+      </div>
+    </div>
+  );
+}
+
+// ─── Table Row ───────────────────────────────────────────────────────────────
 
 function RetailerRow({ retailer: r, lang, expanded, onToggle, locations }: {
   retailer: Retailer; lang: Lang; expanded: boolean; onToggle: () => void; locations?: any[];
