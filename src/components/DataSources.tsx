@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { Lang, t } from "@/lib/i18n";
+import { Lang, t, translations } from "@/lib/i18n";
 import { supabase } from "@/lib/supabase";
 import { mockSyncLogs } from "@/data/mock";
 import type { MockSyncLog } from "@/data/mock";
@@ -38,6 +38,7 @@ interface RegistrySource {
   http_status: number | null;
   last_checked_at: string | null;
   used_in_app: boolean;
+  moduleId?: string;
 }
 
 interface DomainGroup {
@@ -78,6 +79,32 @@ const FREQ_LABELS: Record<string, { pt: string; en: string }> = {
   nao_informado: { pt: "N/I",        en: "N/A" },
 };
 
+const CATEGORY_TO_MODULE: Record<string, string> = {
+  "financeiro":     "finance",
+  "agropecuaria":   "marketPulse",
+  "indicadores":    "marketPulse",
+  "insumos":        "inputs",
+  "clima":          "marketPulse",
+  "logistica":      "inputs",
+  "noticias":       "news",
+  "regulacao":      "regulatory",
+  "juridico":       "regulatory",
+  "socioambiental": "inputs",
+  "agronomico":     "inputs",
+  "fiscal":         "regulatory",
+  "geografias":     "dataSources",
+  "cadastral":      "retailers",
+  "outros":         "news"
+};
+
+/**
+ * Safely gets the module label from translations
+ */
+function getModuleLabel(mod: string, lang: Lang): string {
+  const modKey = mod as keyof typeof translations.pt.modules;
+  return (translations[lang].modules as any)[modKey] || mod;
+}
+
 // URL status display config (real data from registry JSON)
 const URL_STATUS_CONFIG = {
   active:    { labelPt: "Ativo",          labelEn: "Active",      dotColor: "#2E7D32" },
@@ -113,7 +140,7 @@ function computeOverallStatus(g: { activeCount: number; errorCount: number; inac
 export function DataSources({ lang }: { lang: Lang }) {
   const tr = t(lang);
   const [tab, setTab] = useState<Tab>("registry");
-  const [liveLogs, setLiveLogs] = useState<MockSyncLog[]>(mockSyncLogs);
+  const [liveLogs, setLiveLogs] = useState<MockSyncLog[]>([]);
   const [logsAreReal, setLogsAreReal] = useState(false);
 
   useEffect(() => {
@@ -194,7 +221,7 @@ export function DataSources({ lang }: { lang: Lang }) {
 
       {tab === "registry" && <RegistryTab lang={lang} />}
       {tab === "history"  && <HistoryTab lang={lang} logs={liveLogs} isReal={logsAreReal} />}
-      {tab === "quality"  && <QualityTab lang={lang} />}
+      {tab === "quality"  && <QualityTab lang={lang} logs={liveLogs} logsAreReal={logsAreReal} />}
     </div>
   );
 }
@@ -204,10 +231,12 @@ export function DataSources({ lang }: { lang: Lang }) {
 type SortField = "domain" | "org" | "count" | "status";
 
 function RegistryTab({ lang }: { lang: Lang }) {
+  const tr = t(lang);
   const [search, setSearch]                 = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [frequencyFilter, setFrequencyFilter] = useState("");
   const [statusFilter, setStatusFilter]     = useState("");
+  const [moduleFilter, setModuleFilter]     = useState("");
   const [usedFilter, setUsedFilter]         = useState<"all" | "used" | "unused">("all");
   const [sortField, setSortField]           = useState<SortField>("count");
   const [sortDir, setSortDir]               = useState<"asc" | "desc">("desc");
@@ -257,6 +286,9 @@ function RegistryTab({ lang }: { lang: Lang }) {
     if (categoryFilter) result = result.filter(g => g.categories.includes(categoryFilter));
     if (frequencyFilter) result = result.filter(g => g.frequencies.includes(frequencyFilter));
     if (statusFilter)   result = result.filter(g => g.overallStatus === statusFilter);
+    if (moduleFilter)   result = result.filter(g =>
+      g.sources.some(s => CATEGORY_TO_MODULE[s.category] === moduleFilter)
+    );
     if (usedFilter === "used")   result = result.filter(g => g.usedCount > 0);
     if (usedFilter === "unused") result = result.filter(g => g.usedCount === 0);
 
@@ -276,7 +308,17 @@ function RegistryTab({ lang }: { lang: Lang }) {
         : String(bv).localeCompare(String(av));
     });
     return result;
-  }, [allGroups, search, categoryFilter, frequencyFilter, statusFilter, usedFilter, sortField, sortDir]);
+  }, [allGroups, search, categoryFilter, frequencyFilter, statusFilter, usedFilter, sortField, sortDir, moduleFilter]);
+
+  const moduleStats = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const s of registrySources) {
+      const mod = CATEGORY_TO_MODULE[s.category] || "outros";
+      if (mod === "dataSources") continue; // Organization-only chapter
+      counts[mod] = (counts[mod] || 0) + 1;
+    }
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  }, []);
 
   const categories  = [...new Set(registrySources.map(s => s.category))].sort();
   const frequencies = [...new Set(registrySources.map(s => s.frequency))].sort();
@@ -304,6 +346,33 @@ function RegistryTab({ lang }: { lang: Lang }) {
             </button>
           );
         })}
+      </div>
+
+      {/* Chapter Summary - Horizontal Scroll */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
+        <div className="flex-shrink-0 text-[11px] font-bold text-neutral-400 uppercase tracking-wider mr-2">
+          {lang === "pt" ? "Por Capítulo:" : "By Chapter:"}
+        </div>
+        {moduleStats.map(([mod, count]) => (
+          <button
+            key={mod}
+            onClick={() => setModuleFilter(moduleFilter === mod ? "" : mod)}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-full border whitespace-nowrap transition-all ${
+              moduleFilter === mod
+                ? "bg-brand-primary text-white border-brand-primary"
+                : "bg-white text-neutral-600 border-neutral-200 hover:border-brand-primary/40"
+            }`}
+          >
+            <span className="text-[12px] font-semibold">
+              {getModuleLabel(mod, lang)}
+            </span>
+            <span className={`text-[10px] px-1.5 py-0.25 rounded-full ${
+              moduleFilter === mod ? "bg-white/20 text-white" : "bg-neutral-100 text-neutral-500"
+            }`}>
+              {count}
+            </span>
+          </button>
+        ))}
       </div>
 
       {/* Search + Filters */}
@@ -334,6 +403,17 @@ function RegistryTab({ lang }: { lang: Lang }) {
             <option value="error">Error</option>
             <option value="unchecked">{lang === "pt" ? "Não verificado" : "Unchecked"}</option>
           </select>
+          <select value={moduleFilter} onChange={e => setModuleFilter(e.target.value)}
+            className="px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-md text-[13px] font-medium text-neutral-700 focus:outline-none focus:ring-2 focus:ring-brand-primary/20">
+            <option value="">{tr.dataSources.targetChapter}</option>
+            {Object.keys(translations.pt.modules)
+              .filter(m => m !== "dataSources")
+              .map(mod => (
+                <option key={mod} value={mod}>
+                  {getModuleLabel(mod, lang)}
+                </option>
+              ))}
+          </select>
           <div className="flex bg-neutral-200/50 rounded-md p-0.5">
             {(["all", "used", "unused"] as const).map(v => (
               <button key={v} onClick={() => setUsedFilter(v)}
@@ -350,7 +430,9 @@ function RegistryTab({ lang }: { lang: Lang }) {
           </div>
           {hasFilters && (
             <button
-              onClick={() => { setSearch(""); setCategoryFilter(""); setFrequencyFilter(""); setStatusFilter(""); setUsedFilter("all"); }}
+              onClick={() => {
+                setSearch(""); setCategoryFilter(""); setFrequencyFilter(""); setStatusFilter(""); setUsedFilter("all"); setModuleFilter("");
+              }}
               className="flex items-center gap-1 px-3 py-2 text-[12px] text-error font-medium hover:text-error-dark">
               <X size={14} />{lang === "pt" ? "Limpar" : "Clear"}
             </button>
@@ -383,7 +465,7 @@ function RegistryTab({ lang }: { lang: Lang }) {
                   Org {sortField === "org" && (sortDir === "asc" ? "▲" : "▼")}
                 </th>
                 <th className="px-3 py-2.5 text-left hidden sm:table-cell">
-                  {lang === "pt" ? "Categorias" : "Categories"}
+                  {lang === "pt" ? "Capítulo" : "Chapter"}
                 </th>
                 <th className="px-3 py-2.5 text-center cursor-pointer hover:text-neutral-700 hidden lg:table-cell"
                   onClick={() => toggleSort("count")}>
@@ -451,19 +533,13 @@ function DomainRow({ group, lang, isExpanded, onToggle }: {
         </td>
         <td className="px-3 py-2.5 hidden sm:table-cell">
           <div className="flex flex-wrap gap-1">
-            {group.categories.slice(0, 3).map(cat => {
-              const ci = CATEGORY_LABELS[cat] || CATEGORY_LABELS.outros;
-              return (
-                <span key={cat} className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${ci.color}`}>
-                  {lang === "pt" ? ci.pt : ci.en}
+            {Array.from(new Set(group.sources.map(s => CATEGORY_TO_MODULE[s.category] || "outros")))
+              .filter(mod => mod !== "dataSources")
+              .map(mod => (
+                <span key={mod} className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-brand-surface text-brand-primary border border-brand-primary/20">
+                  {getModuleLabel(mod, lang)}
                 </span>
-              );
-            })}
-            {group.categories.length > 3 && (
-              <span className="text-[9px] text-neutral-400 font-medium">
-                +{group.categories.length - 3}
-              </span>
-            )}
+              ))}
           </div>
         </td>
         <td className="px-3 py-2.5 text-center hidden lg:table-cell">
@@ -561,6 +637,11 @@ function EndpointDetail({ s, lang }: { s: RegistrySource; lang: Lang }) {
           {s.automated && (
             <span className="text-[9px] text-brand-primary font-medium bg-brand-surface px-1.5 py-0.5 rounded">
               Auto
+            </span>
+          )}
+          {(CATEGORY_TO_MODULE[s.category] || "news") !== "dataSources" && (
+            <span className="text-[9px] text-neutral-500 font-medium bg-neutral-100 px-1.5 py-0.5 rounded">
+              {getModuleLabel(CATEGORY_TO_MODULE[s.category] || "news", lang)}
             </span>
           )}
         </div>
@@ -676,11 +757,11 @@ function HistoryTab({ lang, logs, isReal }: { lang: Lang; logs: MockSyncLog[]; i
 
 // ─── Tab: Data Quality ────────────────────────────────────────────────────────
 
-function QualityTab({ lang }: { lang: Lang }) {
+function QualityTab({ lang, logs, logsAreReal }: { lang: Lang; logs: MockSyncLog[]; logsAreReal: boolean }) {
   const tr = t(lang);
 
   const dailyVolume: Record<string, number> = {};
-  mockSyncLogs.forEach((log) => {
+  logs.forEach((log) => {
     const day = new Date(log.started_at).toLocaleDateString(
       lang === "pt" ? "pt-BR" : "en-US", { month: "short", day: "numeric" }
     );
@@ -750,11 +831,14 @@ function QualityTab({ lang }: { lang: Lang }) {
       <div>
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-[13px] font-semibold text-neutral-700">
-            {lang === "pt" ? "Volume de Sync Simulado" : "Simulated Sync Volume"}
+            {logsAreReal
+              ? (lang === "pt" ? "Volume de Sync" : "Sync Volume")
+              : (lang === "pt" ? "Volume de Sync Simulado" : "Simulated Sync Volume")}
           </h3>
-          <MockBadge />
+          {!logsAreReal && <MockBadge />}
         </div>
 
+        {!logsAreReal && (
         <div className="flex items-start gap-3 bg-neutral-50 border border-neutral-200 rounded-lg px-4 py-3 mb-3">
           <Info size={16} className="text-neutral-400 mt-0.5 flex-shrink-0" />
           <p className="text-[11px] text-neutral-500">
@@ -763,6 +847,7 @@ function QualityTab({ lang }: { lang: Lang }) {
               : "Volume and table health data below are simulated and represent the expected behavior once ETL jobs are active."}
           </p>
         </div>
+        )}
 
         <div className="bg-white rounded-lg p-5 border border-neutral-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
           <div className="h-48">

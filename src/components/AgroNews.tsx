@@ -64,7 +64,7 @@ export function AgroNews({ lang }: { lang: Lang }) {
         .select("id, category, source_name, published_at")
         .order("published_at", { ascending: false })
         .limit(500);
-      setAllNewsForCharts((data?.length ? data : mockNews) as AgroNewsType[]);
+      setAllNewsForCharts((data?.length ? data : []) as AgroNewsType[]);
     }
     fetchAllForCharts();
   }, []);
@@ -87,9 +87,9 @@ export function AgroNews({ lang }: { lang: Lang }) {
       if (count != null) setTotalCount(count);
       setIsMock(false);
     } else {
-      setNews(mockNews as AgroNewsType[]);
-      setTotalCount(mockNews.length);
-      setIsMock(true);
+      setNews([]);
+      setTotalCount(0);
+      setIsMock(false);
     }
     setLoading(false);
   };

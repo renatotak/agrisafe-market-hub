@@ -25,6 +25,7 @@ export interface HighlightedProducer {
 
 export const NEWS_CATEGORIES = [
   'commodities',
+  'livestock',
   'policy',
   'technology',
   'credit',

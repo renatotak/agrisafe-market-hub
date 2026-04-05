@@ -30,6 +30,12 @@ export async function GET(request: Request) {
     { name: 'archive-old-news', path: '/api/cron/archive-old-news' },
     { name: 'regulatory', path: '/api/cron/sync-regulatory' },
     { name: 'events-na', path: '/api/cron/sync-events-na' },
+    { name: 'competitors', path: '/api/cron/sync-competitors' },
+    { name: 'retailer-intelligence', path: '/api/cron/sync-retailer-intelligence' },
+    // Industry profiles — Sunday only (heavier AGROFIT API usage)
+    ...(new Date().getDay() === 0
+      ? [{ name: 'industry-profiles', path: '/api/cron/sync-industry-profiles' }]
+      : []),
   ]
 
   for (const job of jobs) {

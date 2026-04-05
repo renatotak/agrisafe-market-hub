@@ -19,15 +19,26 @@ interface CompetitorSignal {
   title_en: string;
   date: string;
   source: string;
+  url?: string;
+}
+
+interface CompetitorScores {
+  depth: number;
+  precision: number;
+  pulse: number;
+  regulatory: number;
+  ux: number;
+  credit: number;
 }
 
 interface Competitor {
   id: string;
   name: string;
-  segment: string;
+  vertical: string;
   website: string;
   description_pt: string;
   description_en: string;
+  scores: CompetitorScores;
   competitor_signals: CompetitorSignal[];
 }
 
@@ -47,26 +58,114 @@ const SIGNAL_CHART_COLORS: Record<string, string> = {
   product_launch: "#3b82f6", funding: "#22c55e", partnership: "#8b5cf6", hiring: "#f59e0b", news: "#6b7280",
 };
 
+function HarveyBall({ score }: { score: number }) {
+  // score is 0-4
+  const rotation = -90; // Start from top
+  const size = 18;
+  const center = size / 2;
+  const radius = (size / 2) - 1.5;
+
+  if (score >= 4) {
+    return (
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        <circle cx={center} cy={center} r={radius} fill="currentColor" stroke="currentColor" strokeWidth="1" />
+      </svg>
+    );
+  }
+
+  if (score <= 0) {
+    return (
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        <circle cx={center} cy={center} r={radius} fill="none" stroke="currentColor" strokeWidth="1" />
+      </svg>
+    );
+  }
+
+  // Draw slices for 1, 2, 3
+  const percentage = (score / 4) * 100;
+  const angle = (percentage / 100) * 360;
+  const x = center + radius * Math.cos((angle + rotation) * (Math.PI / 180));
+  const y = center + radius * Math.sin((angle + rotation) * (Math.PI / 180));
+  const largeArcFlag = angle > 180 ? 1 : 0;
+
+  const pathData = [
+    `M ${center} ${center}`,
+    `L ${center} ${center - radius}`,
+    `A ${radius} ${radius} 0 ${largeArcFlag} 1 ${x} ${y}`,
+    "Z"
+  ].join(" ");
+
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="rotate-0">
+      <circle cx={center} cy={center} r={radius} fill="none" stroke="currentColor" strokeWidth="1" />
+      <path d={pathData} fill="currentColor" />
+    </svg>
+  );
+}
+
 export function CompetitorRadar({ lang }: { lang: Lang }) {
   const tr = t(lang);
   const [competitors, setCompetitors] = useState<Competitor[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCharts, setShowCharts] = useState(true);
   const [isMock, setIsMock] = useState(true);
+  const [lastSync, setLastSync] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchCompetitors() {
+      // Fetch last sync log
+      const { data: logData } = await supabase
+        .from("sync_logs")
+        .select("finished_at")
+        .eq("source", "sync-competitors")
+        .eq("status", "success")
+        .order("finished_at", { ascending: false })
+        .limit(1);
+      
+      if (logData && logData.length > 0) {
+        setLastSync(logData[0].finished_at);
+      }
+
       const { data } = await supabase
         .from("competitors")
-        .select("*, competitor_signals(*)")
+        .select(`
+          *,
+          competitor_signals(*)
+        `)
         .order("name");
-      const hasLive = data?.length;
-      setCompetitors(hasLive ? data : mockCompetitors);
-      setIsMock(!hasLive);
+      
+      if (data && data.length > 0) {
+        const mapped = data.map(item => ({
+          ...item,
+          scores: {
+            depth: item.score_depth || 0,
+            precision: item.score_precision || 0,
+            pulse: item.score_pulse || 0,
+            regulatory: item.score_regulatory || 0,
+            ux: item.score_ux || 0,
+            credit: item.score_credit || 0
+          }
+        }));
+        setCompetitors(mapped);
+        setIsMock(false);
+      } else {
+        setCompetitors([]);
+        setIsMock(false);
+      }
       setLoading(false);
     }
     fetchCompetitors();
   }, []);
+
+  const formatDate = (dateStr: string) => {
+    return new Date(dateStr).toLocaleDateString(lang === "pt" ? "pt-BR" : "en-US", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+  };
 
   const signalTypeLabel = (type: string) => {
     const labels: Record<string, Record<string, string>> = {
@@ -111,7 +210,18 @@ export function CompetitorRadar({ lang }: { lang: Lang }) {
         <div className="flex items-center gap-3">
           <div>
             <h2 className="text-2xl font-bold text-neutral-800 tracking-tight">{tr.competitors.title}</h2>
-            <p className="text-neutral-500 mt-1 text-sm">{tr.competitors.subtitle}</p>
+            <div className="flex items-center gap-2 mt-1">
+              <p className="text-neutral-500 text-sm">{tr.competitors.subtitle}</p>
+              {lastSync && (
+                <>
+                  <span className="w-1 h-1 rounded-full bg-neutral-300" />
+                  <p className="text-[10px] text-neutral-400 font-medium whitespace-nowrap">
+                    {lang === "pt" ? "\u00daltima atualiza\u00e7\u00e3o: " : "Last updated: "}
+                    {formatDate(lastSync)}
+                  </p>
+                </>
+              )}
+            </div>
           </div>
           {isMock && <MockBadge />}
         </div>
@@ -204,6 +314,85 @@ export function CompetitorRadar({ lang }: { lang: Lang }) {
         </div>
       )}
 
+      {/* Comparison Matrix (Harvey Balls) */}
+      <div className="bg-white rounded-lg shadow-sm border border-neutral-200/60 overflow-hidden mb-6">
+        <div className="px-5 py-3 border-b border-neutral-100 bg-neutral-50/50 flex items-center justify-between">
+          <h3 className="text-sm font-bold text-neutral-800 uppercase tracking-wider">
+            {lang === "pt" ? "Matriz de Diferencia\u00e7\u00e3o Estrat\u00e9gica" : "Strategic Differentiation Matrix"}
+          </h3>
+          <div className="flex items-center gap-4 text-[10px] text-neutral-400 font-medium italic">
+            <div className="flex items-center gap-1"><HarveyBall score={1} /> 25%</div>
+            <div className="flex items-center gap-1"><HarveyBall score={2} /> 50%</div>
+            <div className="flex items-center gap-1"><HarveyBall score={3} /> 75%</div>
+            <div className="flex items-center gap-1"><HarveyBall score={4} /> 100%</div>
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-b border-neutral-100 bg-white">
+                <th className="px-5 py-3 text-[11px] font-bold text-neutral-400 uppercase tracking-wider w-40">Competidor</th>
+                <th className="px-4 py-3 text-[11px] font-bold text-neutral-400 uppercase tracking-wider text-center">{tr.competitors.vertical}</th>
+                <th className="px-4 py-3 text-[11px] font-bold text-neutral-400 uppercase tracking-wider text-center">{tr.competitors.depth}</th>
+                <th className="px-4 py-3 text-[11px] font-bold text-neutral-400 uppercase tracking-wider text-center">{tr.competitors.precision}</th>
+                <th className="px-4 py-3 text-[11px] font-bold text-neutral-400 uppercase tracking-wider text-center">{tr.competitors.pulse}</th>
+                <th className="px-4 py-3 text-[11px] font-bold text-neutral-400 uppercase tracking-wider text-center">{tr.competitors.regulatory}</th>
+                <th className="px-4 py-3 text-[11px] font-bold text-neutral-400 uppercase tracking-wider text-center">Credit</th>
+                <th className="px-4 py-3 text-[11px] font-bold text-neutral-400 uppercase tracking-wider text-center">{tr.competitors.ux}</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-neutral-50">
+              {/* AgriSafe always first */}
+              {[...competitors].sort((a) => a.id === "agrisafe" ? -1 : 1).map((comp) => (
+                <tr key={comp.id} className={`${comp.id === "agrisafe" ? "bg-brand-primary/[0.03]" : "hover:bg-neutral-50/30"} transition-colors`}>
+                  <td className="px-5 py-4 whitespace-nowrap">
+                    <span className={`text-sm font-bold ${comp.id === "agrisafe" ? "text-brand-primary" : "text-neutral-700"}`}>
+                      {comp.name}
+                      {comp.id === "agrisafe" && <span className="ml-2 text-[9px] bg-brand-primary text-white px-1.5 py-0.5 rounded uppercase tracking-tighter">Self</span>}
+                    </span>
+                  </td>
+                  <td className="px-4 py-4 text-center">
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded border border-neutral-200 text-neutral-500 uppercase tracking-tighter">
+                      {comp.vertical}
+                    </span>
+                  </td>
+                  <td className="px-4 py-4 text-center text-neutral-400">
+                    <div className={`flex justify-center ${comp.id === "agrisafe" ? "text-brand-primary" : "text-neutral-400"}`}>
+                      <HarveyBall score={comp.scores?.depth || 0} />
+                    </div>
+                  </td>
+                  <td className="px-4 py-4 text-center text-neutral-400">
+                    <div className={`flex justify-center ${comp.id === "agrisafe" ? "text-brand-primary" : "text-neutral-400"}`}>
+                      <HarveyBall score={comp.scores?.precision || 0} />
+                    </div>
+                  </td>
+                  <td className="px-4 py-4 text-center text-neutral-400">
+                    <div className={`flex justify-center ${comp.id === "agrisafe" ? "text-brand-primary" : "text-neutral-400"}`}>
+                      <HarveyBall score={comp.scores?.pulse || 0} />
+                    </div>
+                  </td>
+                  <td className="px-4 py-4 text-center text-neutral-400">
+                    <div className={`flex justify-center ${comp.id === "agrisafe" ? "text-brand-primary" : "text-neutral-400"}`}>
+                      <HarveyBall score={comp.scores?.regulatory || 0} />
+                    </div>
+                  </td>
+                  <td className="px-4 py-4 text-center text-neutral-400">
+                    <div className={`flex justify-center ${comp.id === "agrisafe" ? "text-brand-primary" : "text-neutral-400"}`}>
+                      <HarveyBall score={comp.scores?.credit || 0} />
+                    </div>
+                  </td>
+                  <td className="px-4 py-4 text-center text-neutral-400">
+                    <div className={`flex justify-center ${comp.id === "agrisafe" ? "text-brand-primary" : "text-neutral-400"}`}>
+                      <HarveyBall score={comp.scores?.ux || 0} />
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       {/* Signal Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
         {signalTypeCounts.map(({ type, label, count, color }) => {
@@ -227,7 +416,7 @@ export function CompetitorRadar({ lang }: { lang: Lang }) {
             <div className="px-5 py-4 flex flex-col md:flex-row md:items-center justify-between border-b border-neutral-100 bg-neutral-50 gap-3">
               <div>
                 <h3 className="font-bold text-lg text-neutral-800">{comp.name}</h3>
-                <p className="text-sm text-neutral-500">{comp.segment}</p>
+                <p className="text-sm text-neutral-500">{comp.vertical}</p>
               </div>
               <a
                 href={`https://${comp.website}`}

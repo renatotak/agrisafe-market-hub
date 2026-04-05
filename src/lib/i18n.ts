@@ -16,6 +16,7 @@ export const translations = {
       regulatory: "Marco Regulatório",
       recuperacao: "Recuperação Judicial",
       retailers: "Diretório de Revendas",
+      finance: "Inteligência Financeira",
     },
     dataSources: {
       title: "Fontes de Dados",
@@ -41,6 +42,7 @@ export const translations = {
       completeness: "Completude",
       freshness: "Atualidade",
       volume: "Volume",
+      targetChapter: "Capítulo Alvo",
     },
     marketPulse: {
       title: "Pulso do Mercado",
@@ -153,6 +155,13 @@ export const translations = {
       agrifintech: "Agrifintech",
       agtech: "Agtech",
       creditPlatform: "Plataforma de Cr\u00e9dito",
+      comparisonMatrix: "Matriz de Compara\u00e7\u00e3o",
+      vertical: "Vertical",
+      depth: "Profundidade",
+      precision: "Precis\u00e3o",
+      pulse: "Pulso",
+      regulatory: "Regulat\u00f3rio",
+      ux: "UX",
     },
     events: {
       title: "Eventos & Confer\u00eancias Agro",
@@ -193,6 +202,7 @@ export const translations = {
       regulatory: "Regulatory Framework",
       recuperacao: "Judicial Recovery",
       retailers: "Retailers Directory",
+      finance: "Financial Intelligence",
     },
     dataSources: {
       title: "Data Sources",
@@ -218,6 +228,7 @@ export const translations = {
       completeness: "Completeness",
       freshness: "Freshness",
       volume: "Volume",
+      targetChapter: "Target Chapter",
     },
     marketPulse: {
       title: "Market Pulse",
@@ -330,6 +341,13 @@ export const translations = {
       agrifintech: "Agrifintech",
       agtech: "Agtech",
       creditPlatform: "Credit Platform",
+      comparisonMatrix: "Comparison Matrix",
+      vertical: "Vertical",
+      depth: "Depth",
+      precision: "Precision",
+      pulse: "Pulse",
+      regulatory: "Regulatory",
+      ux: "UX",
     },
     events: {
       title: "Agro Events & Conferences",

@@ -49,14 +49,14 @@ const SOURCE_COLORS: Record<string, string> = {
 
 export function MarketPulse({ lang }: { lang: Lang }) {
   const tr = t(lang);
-  const [commodities, setCommodities] = useState<CommodityPrice[]>(mockCommodities);
-  const [indicators, setIndicators] = useState<MarketIndicator[]>(mockIndicators);
-  const [priceHistory, setPriceHistory] = useState<PriceHistory[]>(mockPriceHistory);
+  const [commodities, setCommodities] = useState<CommodityPrice[]>([]);
+  const [indicators, setIndicators] = useState<MarketIndicator[]>([]);
+  const [priceHistory, setPriceHistory] = useState<PriceHistory[]>([]);
   const [relatedNews, setRelatedNews] = useState<NewsItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedCommodity, setExpandedCommodity] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"list" | "map">("list");
-  const [isMockData, setIsMockData] = useState(true);
+  const [isMockData, setIsMockData] = useState(false);
   const [localPrices, setLocalPrices] = useState<any[]>([]);
   const [localPricesLoading, setLocalPricesLoading] = useState(true);
   const [expandedLocal, setExpandedLocal] = useState<string | null>(null);
@@ -70,11 +70,11 @@ export function MarketPulse({ lang }: { lang: Lang }) {
       supabase.from("agro_news").select("id, title, source_name, source_url, published_at, category").order("published_at", { ascending: false }).limit(50),
     ]);
     const hasLive = comms?.length;
-    setCommodities(hasLive ? comms : mockCommodities);
-    setIndicators(inds?.length ? inds : mockIndicators);
-    setPriceHistory(history?.length ? history : mockPriceHistory);
+    setCommodities(hasLive ? comms : []);
+    setIndicators(inds?.length ? inds : []);
+    setPriceHistory(history?.length ? history : []);
     if (news?.length) setRelatedNews(news);
-    setIsMockData(!hasLive);
+    setIsMockData(false);
     setLoading(false);
   };
 
@@ -297,7 +297,7 @@ export function MarketPulse({ lang }: { lang: Lang }) {
         ) : (
           <div className="p-4 bg-neutral-50 border-t border-neutral-200">
             <div className="max-w-5xl mx-auto">
-              <CommodityMap commodities={commodities} lang={lang} />
+              <CommodityMap lang={lang} />
             </div>
           </div>
         )}

@@ -1,12 +1,10 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/utils/supabase/admin'
-import OpenAI from 'openai'
+import { isGeminiConfigured, generateEmbedding, summarizeText } from '@/lib/gemini'
 
 export const dynamic = 'force-dynamic'
 
 const ARCHIVE_THRESHOLD_MONTHS = 3
-const EMBEDDING_MODEL = 'text-embedding-3-small'
-const SUMMARY_MODEL = 'gpt-4o-mini'
 
 interface NewsRow {
   id: string
@@ -30,7 +28,6 @@ function groupKey(row: NewsRow): string {
 }
 
 async function summarizeGroup(
-  openai: OpenAI,
   articles: NewsRow[],
   category: string,
   source: string,
@@ -40,27 +37,15 @@ async function summarizeGroup(
     .map((a) => `- ${a.title}${a.summary ? `: ${a.summary.slice(0, 150)}` : ''}`)
     .join('\n')
 
-  const response = await openai.chat.completions.create({
-    model: SUMMARY_MODEL,
-    temperature: 0.3,
-    max_tokens: 500,
-    messages: [
-      {
-        role: 'system',
-        content:
-          'You are an agribusiness market analyst. Summarize news articles into a concise knowledge entry. ' +
-          'Output JSON with "summary" (2-3 paragraph overview in Portuguese) and "key_topics" (array of 5-10 key topic strings in Portuguese).',
-      },
-      {
-        role: 'user',
-        content: `Summarize these ${articles.length} articles from ${source} in category "${category}" for ${period}:\n\n${articleList}`,
-      },
-    ],
-    response_format: { type: 'json_object' },
-  })
+  const systemPrompt =
+    'You are an agribusiness market analyst. Summarize news articles into a concise knowledge entry. ' +
+    'Output JSON with "summary" (2-3 paragraph overview in Portuguese) and "key_topics" (array of 5-10 key topic strings in Portuguese).'
+
+  const userPrompt = `Summarize these ${articles.length} articles from ${source} in category "${category}" for ${period}:\n\n${articleList}`
 
   try {
-    const parsed = JSON.parse(response.choices[0].message.content || '{}')
+    const raw = await summarizeText(systemPrompt, userPrompt)
+    const parsed = JSON.parse(raw)
     return {
       summary: parsed.summary || `${articles.length} articles from ${source} in ${category} (${period})`,
       key_topics: Array.isArray(parsed.key_topics) ? parsed.key_topics : [],
@@ -73,14 +58,6 @@ async function summarizeGroup(
   }
 }
 
-async function generateEmbedding(openai: OpenAI, text: string): Promise<number[]> {
-  const response = await openai.embeddings.create({
-    model: EMBEDDING_MODEL,
-    input: text.slice(0, 8000),
-  })
-  return response.data[0].embedding
-}
-
 export async function GET(request: Request) {
   const authHeader = request.headers.get('authorization')
   if (
@@ -90,17 +67,15 @@ export async function GET(request: Request) {
     return new Response('Unauthorized', { status: 401 })
   }
 
-  const openaiKey = process.env.OPENAI_API_KEY
-  if (!openaiKey || openaiKey.includes('your_')) {
+  if (!isGeminiConfigured()) {
     return NextResponse.json({
       success: false,
-      message: 'OPENAI_API_KEY not configured — skipping archival',
+      message: 'GEMINI_API_KEY not configured — skipping archival',
     })
   }
 
   try {
     const supabase = createAdminClient()
-    const openai = new OpenAI({ apiKey: openaiKey })
     const cutoff = getArchiveCutoff()
 
     // 1. Fetch old news
@@ -140,12 +115,12 @@ export async function GET(request: Request) {
         const periodStart = dates[0].split('T')[0]
         const periodEnd = dates[dates.length - 1].split('T')[0]
 
-        // Summarize with LLM
-        const { summary, key_topics } = await summarizeGroup(openai, articles, category, source, month)
+        // Summarize with Gemini
+        const { summary, key_topics } = await summarizeGroup(articles, category, source, month)
 
         // Generate embedding from summary
         const embeddingText = `${category} ${source} ${month}: ${summary} ${key_topics.join(', ')}`
-        const embedding = await generateEmbedding(openai, embeddingText)
+        const embedding = await generateEmbedding(embeddingText)
 
         // Store knowledge entry
         const knowledgeId = `knowledge-${category}-${source}-${month}`.toLowerCase().replace(/\s+/g, '-')

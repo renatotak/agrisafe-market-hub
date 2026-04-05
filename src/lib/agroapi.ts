@@ -116,3 +116,53 @@ export function searchAgrofitProducts(query: string, page = 1) {
 export function searchBioinsumos(query: string, page = 1) {
   return searchAgroApi("/bioinsumos/v2/search/produtos-biologicos", query, page);
 }
+
+// ─── SmartSolos Expert ───
+
+export interface SoilProfile {
+  id: string;
+  nome?: string;
+  uf?: string;
+  municipio?: string;
+  classificacao_sibcs?: string;
+  horizontes?: any[];
+}
+
+/** Get list of soil profiles from SmartSolos Expert. */
+export async function getSoilExpertProfiles(page = 1, query?: string): Promise<{ data: SoilProfile[]; total: number; pages: number }> {
+  const token = await getAgroApiToken();
+  const url = new URL("/smartsolos/expert/v1/profiles", API_BASE);
+  url.searchParams.set("page", String(page));
+  if (query) url.searchParams.set("query", query);
+
+  const res = await fetch(url.toString(), {
+    headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+  });
+
+  const total = parseInt(res.headers.get("X-Records-Count") || "0", 10);
+  const pages = parseInt(res.headers.get("X-Pages") || "1", 10);
+  const data = await res.json();
+
+  return { data: Array.isArray(data) ? data : [], total, pages };
+}
+
+/** POST classification request to SmartSolos Expert. */
+export async function classifySoilExpert(profile: any): Promise<any> {
+  const token = await getAgroApiToken();
+  const res = await fetch(`${API_BASE}/smartsolos/expert/v1/classify`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(profile),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`SmartSolos classification failed (${res.status}): ${body}`);
+  }
+
+  return res.json();
+}

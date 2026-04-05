@@ -1,168 +1,136 @@
-# CLAUDE.md
+# CLAUDE.md — AgriSafe Market Hub
 
-## Project Overview
+> Agent context file. For humans, see README.md. For the full roadmap, see ROADMAP.md.
 
-AgriSafe Market Hub is the **knowledge engine** of the AgriSafe ecosystem — a bilingual (PT-BR/EN) executive intelligence platform where AgriSafe captures, organizes, and transforms public market knowledge into proprietary insights. It is the foundation for an AI-first digital twin that will power client intelligence, content creation, and strategic decision-making.
+## Project in One Line
 
-The platform flow: **Ingest → Analyze → Create → Comply**
+**AgriSafe Market Hub** is a bilingual (PT-BR/EN) executive intelligence platform: it ingests public agribusiness data from 166+ sources, organizes it into a 4-tier knowledge hierarchy, and enables the AgriSafe team to generate proprietary insights, content, and compliance intelligence.
 
-- **Admin Portal** (`agsf_admin_page`) manages internal operations (clients, contracts, credits)
-- **Market Hub** (`agsf-mkthub`) provides external market intelligence and content creation tools
+**Platform flow:** Ingest → Analyze → Create → Comply
+
+## Tech Stack
+
+- **Framework:** Next.js 16 (App Router) + TypeScript strict mode
+- **Styling:** Tailwind CSS 4 via PostCSS
+- **Database:** Supabase (PostgreSQL + pgvector + RLS)
+- **Auth:** Supabase Auth + SSR middleware
+- **Charts:** Recharts. **Icons:** Lucide React + Material Icons Outlined
+- **Maps:** @vis.gl/react-google-maps (terrain + satellite views)
+- **Path alias:** `@/*` → `./src/*`
+- **Deployment:** Vercel (Hobby — single daily cron at 08:00 UTC)
 
 ## Commands
 
 ```bash
-npm run dev              # Start dev server (Next.js)
-npm run build            # Production build
-npm run start            # Start production server
-node src/scripts/import-canais.js     # Import oraculo canais CSV (24K channels)
-node src/scripts/build-source-registry.js  # Rebuild 166-source registry from crawler CSVs
-node src/scripts/seed-content.js      # Seed articles + topics to Supabase
+npm run dev                                      # Dev server
+npm run build                                    # Production build
+node src/scripts/build-source-registry.js        # Rebuild 166-source registry
+node src/scripts/seed-content.js                 # Seed articles + topics to Supabase
+node --env-file=.env.local src/scripts/geocode-retailers.js  # Geocode retailer locations
 ```
 
-No test runner or linter is currently configured.
+## Architecture: Four Verticals + 11 Modules
 
-## Architecture
+| Vertical | Key Components |
+|----------|---------------|
+| Ingestão de Dados | `DataSources.tsx`, `SourceRegistry.tsx` (166 sources) |
+| Inteligência de Mercado | `MarketPulse.tsx`, `CommodityMap.tsx` (live regional prices), `CompetitorRadar.tsx`, `AgroNews.tsx`, `EventTracker.tsx`, `RetailersDirectory.tsx` (23k+ channels, editable fields, company enrichment) |
+| Marketing & Conteúdo | `ContentHub.tsx` — see `docs/CONTENT_HUB_SPEC.md` |
+| Regulatório & Compliance | `RegulatoryFramework.tsx`, `RecuperacaoJudicial.tsx`, `AgInputIntelligence.tsx` (AGROFIT/Bioinsumos), `KnowledgeBase.tsx` (AgroTermos glossary) |
 
-- **Framework:** Next.js 16 (App Router) with TypeScript strict mode
-- **Styling:** Tailwind CSS 4 via PostCSS
-- **Backend:** Supabase (PostgreSQL with RLS + pgvector)
-- **Auth:** Supabase Auth + SSR with middleware-based route protection
-- **AI:** OpenAI (scaffolded; not yet live)
-- **Charts:** Recharts (MIT)
-- **Data ingestion:** BCB SGS API, RSS feeds (`rss-parser`), web scraping (`cheerio`), CSV/Excel imports
-- **Deployment:** Vercel with consolidated daily cron at 08:00 UTC
-- **Path alias:** `@/*` maps to `./src/*`
+**Cron pipeline** (`/api/cron/sync-all` → daily 08:00 UTC):
+1. `sync-market-data` — BCB SGS → `commodity_prices`, `market_indicators`
+2. `sync-agro-news` — 5 RSS feeds → `agro_news`
+3. `sync-recuperacao-judicial` — 2 legal RSS → `recuperacao_judicial`
+4. `archive-old-news` — OpenAI summaries + pgvector → `news_knowledge`
+5. `sync-regulatory` — 3 legal RSS → `regulatory_norms`
+6. `sync-events-na` — AgroAgenda API → `events`
 
-### Four-Vertical Architecture
-
-```
-INGESTÃO DE DADOS (Data Ingestion)
-  Fontes de Dados        — DataSources.tsx (sync monitoring, 3 tabs)
-  Registro de Fontes     — SourceRegistry.tsx (166 catalogued sources with URL health)
-
-INTELIGÊNCIA DE MERCADO (Market Intelligence)
-  Pulso do Mercado       — MarketPulse.tsx (Bloomberg-style: movers, alerts, ruptures, deep-dive)
-  Radar Competitivo      — CompetitorRadar.tsx (signals, charts, timeline)
-  Notícias Agro          — AgroNews.tsx (RSS aggregation, analytics)
-  Eventos                — EventTracker.tsx (industry events timeline)
-  Diretório de Canais    — RetailersDirectory.tsx (9,328 companies, 24,275 locations)
-
-MARKETING & CONTEÚDO (Marketing & Content)
-  Central de Conteúdo    — ContentHub.tsx (AgriSafe-only: published, pipeline, calendar). Spec: docs/CONTENT_HUB_SPEC.md
-
-REGULATÓRIO (Regulatory)
-  Marco Regulatório      — RegulatoryFramework.tsx (CMN/CVM/BCB/MAPA norms)
-  Recuperação Judicial   — RecuperacaoJudicial.tsx (legal RSS dual-filter)
-```
-
-### Cron Pipeline
-
-`/api/cron/sync-all` dispatches sequentially:
-1. **sync-market-data** — BCB SGS (6 commodities + USD/BRL + Selic) → `commodity_prices`, `market_indicators`, `commodity_price_history`
-2. **sync-agro-news** — 4 RSS feeds → `agro_news` (auto-categorize + producer matching)
-3. **sync-recuperacao-judicial** — 2 legal RSS → `recuperacao_judicial` (dual agro filter)
-4. **archive-old-news** — 3+ month articles → OpenAI summaries + pgvector embeddings → `news_knowledge`
-5. **sync-regulatory** — 3 legal RSS → `regulatory_norms` (regulatory body + agro finance filter)
+**Live API routes (ISR cached):**
+- `/api/prices-na` — Notícias Agrícolas commodity prices (revalidate 10min)
+- `/api/prices-na/regional` — Per-city prices: 322 praças for soy, 6 commodities
+- `/api/events-na` — AgroAgenda events (revalidate 1h)
+- `/api/news-na` — NA news with category filter
+- `/api/agroapi/clima` — Embrapa ClimAPI weather (revalidate 1h)
+- `/api/agroapi/agrofit` — AGROFIT product search
+- `/api/agroapi/bioinsumos` — Bioinsumos search
+- `/api/agroapi/termos` — AgroTermos glossary
+- `/api/company-enrichment` — Receita Federal data (BrasilAPI/CNPJ.ws/ReceitaWS, cached 30d)
+- `/api/company-research` — Web search (Google CSE / DuckDuckGo + optional OpenAI summary)
+- `/api/company-notes` — User-editable company notes
+- `/api/retailers/update` — Update editable retailer fields
 
 All cron routes log to `sync_logs` via `src/lib/sync-logger.ts`.
 
-### Key Directories
+## Key Files
 
-- `src/components/` — 10 module components + Header, Sidebar, AgriSafeLogo, ui/ primitives
-- `src/components/ui/` — Card, Badge, Button, KpiCard, DataTable, MockBadge
-- `src/data/mock.ts` — Centralized mock data with MockBadge watermark when shown
-- `src/data/source-registry.json` — 166 public data sources with URL health status
-- `src/lib/i18n.ts` — All UI translations (PT-BR and EN)
-- `src/lib/sync-logger.ts` — Sync logging utility for cron routes
-- `src/app/api/cron/` — 6 cron routes including sync-all orchestrator
-- `src/scripts/` — Import scripts for channels, sources, content seeding
-- `src/db/migrations/` — 7 SQL migration files (001-007)
-- `docs/` — Knowledge architecture, datalake specs, admin playbook
+| File/Dir | Purpose |
+|----------|---------|
+| `src/data/mock.ts` | Fallback mock data; shown with MockBadge watermark when live data unavailable |
+| `src/data/published-articles.ts` | Curated AgriSafe published content (not mock) |
+| `src/data/source-registry.json` | 166 catalogued public sources |
+| `src/lib/i18n.ts` | All PT-BR / EN translations |
+| `src/lib/agroapi.ts` | Embrapa AgroAPI OAuth2 client + typed helpers |
+| `src/lib/sync-logger.ts` | Cron logging utility |
+| `src/app/api/cron/` | 6 cron routes + sync-all orchestrator |
+| `src/app/api/prices-na/regional/` | Per-city commodity price scraper (322 praças) |
+| `src/app/api/company-enrichment/` | Receita Federal company lookup (3-source fallback) |
+| `src/app/api/company-research/` | Web search (DuckDuckGo + Google CSE + OpenAI) |
+| `src/db/migrations/` | SQL migrations 001–014 |
+| `src/scripts/geocode-retailers.js` | 3-tier geocoding (Google/CEP/Nominatim) |
+| `imports/cnpj-metadados.pdf` | Receita Federal CNPJ data layout reference |
 
-### Data in Supabase (Live)
+## Data Classification (Receita Federal vs AgriSafe)
 
-| Table | Rows | Source | Live |
-|-------|------|--------|------|
-| `commodity_prices` | 6 | BCB SGS | Yes |
-| `commodity_price_history` | 6+ | BCB SGS daily | Yes |
-| `market_indicators` | 6 | BCB SGS | Yes |
-| `agro_news` | 25+ | RSS feeds | Yes |
-| `competitors` | 5 | Seed | Seed |
-| `competitor_signals` | 6 | Seed | Seed |
-| `events` | 6 | Seed | Seed |
-| `campaigns` | 4 | Seed | Seed |
-| `content_ideas` | 6 | Seed | Seed |
-| `published_articles` | 6 | Seed | Seed |
-| `content_topics` | 5 | Seed | Seed |
-| `recuperacao_judicial` | 0 | RSS (strict filter) | Yes |
-| `retailers` | 9,328 | Oraculo CSV | Yes |
-| `retailer_locations` | 24,275 | Oraculo CSV | Yes |
-| `sync_logs` | 3+ | Cron logging | Yes |
-| `regulatory_norms` | 0 | RSS (strict filter) | Yes |
-| `news_knowledge` | 0 | Archive pipeline | Pending |
+| Source | Fields | Behavior |
+|--------|--------|----------|
+| **Receita Federal** (locked) | CNPJ, Razão Social, Capital Social, Porte, Situação, CNAE, Endereço, QSA, Simples/MEI | Read-only, lock icon |
+| **AgriSafe internal** (editable) | Grupo, Classificação, Faturamento, Indústrias, Loja Física, Tipo Acesso | Click-to-edit, pencil icon |
+| **User notes** | Obs. Faturamento, Contato Comercial, Observações | Saved to `company_notes` table |
 
-## New Data Source Orchestration Workflow
+## Adding a New Data Source (Workflow)
 
-When adding a new public data source to the platform, follow this workflow:
+1. **Analyze** — Format (API/RSS/CSV/HTML), update freq, auth requirements
+2. **Check conflicts** — Search `source-registry.json` for overlapping data
+3. **Register** — Add to `source-registry.json` with all metadata fields
+4. **Build ingestion** — Create `src/app/api/cron/sync-{source}/route.ts`, log via `logSync()`, add to `sync-all`
+5. **Sample check** — Verify record count, freshness, encoding
+6. **Persona validation** — Test through CEO / Head Inteligência / Marketing / Crédito lenses
 
-### Step 1: Analyze the Source
-- Identify URL, data format (API/RSS/CSV/HTML), update frequency, and data schema
-- Determine scraping method: REST API (preferred) > RSS feed > structured download > HTML scraping
-- Document rationale for chosen method in the source registry notes field
-- Check if source requires authentication, captcha, or rate limiting
+## Hard Constraints
 
-### Step 2: Check for Conflicts
-- Query existing sources in `src/data/source-registry.json` for overlapping data
-- If overlap exists, document both sources and flag for user decision on primary source
-- Example: BCB SGS and CEPEA both provide commodity prices — user decides which is primary
-
-### Step 3: Register the Source
-- Add to `src/data/source-registry.json` with all metadata fields
-- Run URL availability check
-- Categorize: fiscal, socioambiental, financeiro, agropecuaria, agronomico, logistica, geografias
-
-### Step 4: Build Ingestion
-- Create cron route in `src/app/api/cron/sync-{source}/route.ts`
-- Add sync logging via `logSync()` from `src/lib/sync-logger.ts`
-- Add to `sync-all` orchestrator
-- Create/update Supabase migration for target table
-
-### Step 5: Sample Check
-- Run the cron route manually and verify data quality
-- Check: record count, field completeness, data freshness, encoding
-- Document results in sync_logs
-
-### Step 6: Persona Validation
-- Test the data through the lens of each relevant persona (from playbook):
-  - CEO: Does this appear in Dashboard overview? Is it decision-relevant?
-  - Head Inteligência: Is the data fresh? Is quality acceptable?
-  - Marketing Analyst: Can this feed content creation?
-  - Consultor de Crédito: Does this affect credit risk assessment?
-- If data doesn't create value for any persona, reconsider adding it
+- **Public data only** — No client PII, financial records, or proprietary data
+- **Bilingual always** — Every UI string must exist in PT-BR + EN via `src/lib/i18n.ts`
+- **MockBadge required** — Any non-live section must display the MOCKED DATA watermark
+- **Single cron** — Vercel Hobby plan limit; `sync-all` consolidates all jobs
+- **Knowledge hierarchy** — Follow the 4-tier model in `docs/KNOWLEDGE_ARCHITECTURE.md`
+- **Google API free tier** — Always verify Google APIs stay within free tier (Maps, Custom Search 100/day)
 
 ## Environment Variables
 
-Required in `.env.local`:
-- `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- `SUPABASE_SERVICE_ROLE_KEY`
-- `CRON_SECRET`
+```
+NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY   # Required
+SUPABASE_SERVICE_ROLE_KEY / CRON_SECRET                     # Required
+NEXT_PUBLIC_GOOGLE_MAPS_API_KEY                             # Required (maps)
+AGROAPI_CONSUMER_KEY / AGROAPI_CONSUMER_SECRET              # Required (Embrapa)
+GOOGLE_CUSTOM_SEARCH_KEY / GOOGLE_CUSTOM_SEARCH_CX          # Optional (web research, 100 free/day)
+OPENAI_API_KEY                                              # Optional (archive, AI summaries)
+```
 
-Optional:
-- `OPENAI_API_KEY` — For archive-old-news and future AI integration
+## Design Tokens
 
-## Design Tokens (from admin portal)
+Primary `#5B7A2F` · Secondary `#7FA02B` · Warning `#E8722A`
+Page bg `#F7F4EF` · Text `#3D382F` · Font: Inter 300–800
 
-- Primary: `#5B7A2F` (olive green) / Secondary: `#7FA02B` / Dark: `#4A6328`
-- Warning: `#E8722A` (orange)
-- Page bg: `#F7F4EF` / Sidebar: `#F5F5F0` / Borders: `#EFEADF`
-- Text: `#3D382F` (warm brown)
-- Font: Inter (300-800) / Icons: Material Icons Outlined + Lucide React
+## Deeper References
 
-## Important Constraints
-
-- **Public data only** — Never store proprietary client data, financial records, or PII
-- **Bilingual always** — Every user-facing string must exist in PT-BR and EN via `src/lib/i18n.ts`
-- **MockBadge required** — Any section showing non-live data must display the MOCKED DATA watermark
-- **Single cron** — Vercel Hobby plan limits crons; `sync-all` consolidates all jobs
-- **Knowledge Architecture** — Follow the 4-tier hierarchy in `docs/KNOWLEDGE_ARCHITECTURE.md`
+| Topic | File |
+|-------|------|
+| Operations & data journeys | `PLAYBOOK.md` |
+| Roadmap & phase history | `ROADMAP.md` |
+| System requirements (FR/NFR) | `docs/REQUIREMENTS.md` |
+| Scraper specs & selectors | `docs/SCRAPER_SPECIFICATIONS.md` |
+| Knowledge architecture (4-tier) | `docs/KNOWLEDGE_ARCHITECTURE.md` |
+| Content Hub spec | `docs/CONTENT_HUB_SPEC.md` |
+| Datalake product strategy | `docs/AGSF_Datalake_PRODUCT.md` |
+| CNPJ data layout (RF) | `imports/cnpj-metadados.pdf` |

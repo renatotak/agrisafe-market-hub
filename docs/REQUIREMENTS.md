@@ -2,7 +2,7 @@
 
 > **Last updated:** 2026-04-02
 > **Version:** 1.0
-> **Related:** `SCRAPER_SPECIFICATIONS.md` (scraper details), `KNOWLEDGE_ARCHITECTURE.md` (data hierarchy), `implementation_plan.md` (roadmap)
+> **Related:** `SCRAPER_SPECIFICATIONS.md` (scraper details), `KNOWLEDGE_ARCHITECTURE.md` (data hierarchy), `../ROADMAP.md` (roadmap)
 
 ---
 

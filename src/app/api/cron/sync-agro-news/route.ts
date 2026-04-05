@@ -16,6 +16,7 @@ const parser = new Parser({
 function categorize(title: string, summary: string): string {
   const text = `${title} ${summary}`.toLowerCase()
   if (/soja|milho|café|açúcar|algodão|commodity|cotaç/.test(text)) return 'commodities'
+  if (/boi|vaca|bezerro|gado|pecuária|suíno|frango|aves|leite|carne|pastagem/.test(text)) return 'livestock'
   if (/crédito|financ|banco|selic|juro/.test(text)) return 'credit'
   if (/tecnolog|ia|inovaç|startup|digital|drone|satelit/.test(text)) return 'technology'
   if (/polític|govern|lei|regulament|ministér|mapa|conab/.test(text)) return 'policy'

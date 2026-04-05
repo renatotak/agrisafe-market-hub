@@ -1,15 +1,20 @@
-import React, { useState, useEffect, useMemo } from "react";
-import { APIProvider, Map as GMap, AdvancedMarker, InfoWindow } from "@vis.gl/react-google-maps";
-import { AlertTriangle, Calendar, Store, Layers, Eye, EyeOff, ExternalLink, CloudRain, Thermometer } from "lucide-react";
+"use client";
+
+import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { APIProvider, Map as GMap, AdvancedMarker, InfoWindow, useMap } from "@vis.gl/react-google-maps";
+import {
+  Calendar, Eye, EyeOff, ExternalLink,
+  CloudRain, Thermometer, MapPin, Search, X, RefreshCw,
+} from "lucide-react";
+import { supabase } from "@/lib/supabase";
 import type { Lang } from "@/lib/i18n";
 
-// ─── Brazilian city coordinates (expanded) ──────────────────────────────────
+// ─── City coordinates ──────────────────────────────────────────────────────
 
 const CITY_COORDS: Record<string, { lat: number; lng: number }> = {
   "Ribeirão Preto, SP": { lat: -21.170, lng: -47.810 },
   "São Paulo, SP": { lat: -23.550, lng: -46.633 },
   "Cuiabá, MT": { lat: -15.598, lng: -56.094 },
-  "Não-Me-Toque, RS": { lat: -28.460, lng: -52.793 },
   "Curitiba, PR": { lat: -25.428, lng: -49.273 },
   "Brasília, DF": { lat: -15.780, lng: -47.929 },
   "Goiânia, GO": { lat: -16.686, lng: -49.264 },
@@ -23,48 +28,23 @@ const CITY_COORDS: Record<string, { lat: number; lng: number }> = {
   "Luis Eduardo Magalhães, BA": { lat: -12.096, lng: -45.795 },
   "Passo Fundo, RS": { lat: -28.261, lng: -52.408 },
   "Campo Grande, MS": { lat: -20.449, lng: -54.620 },
-  "Patos de Minas, MG": { lat: -18.579, lng: -46.518 },
-  "Ponta Grossa, PR": { lat: -25.095, lng: -50.162 },
-  "Rio Paranaíba, MG": { lat: -19.187, lng: -46.244 },
-  "Viçosa, MG": { lat: -20.754, lng: -42.882 },
-  "Barreiras, BA": { lat: -12.144, lng: -44.997 },
   "Uberlândia, MG": { lat: -18.919, lng: -48.277 },
   "Rondonópolis, MT": { lat: -16.469, lng: -54.636 },
   "Rio Verde, GO": { lat: -17.785, lng: -50.919 },
   "Chapecó, SC": { lat: -27.101, lng: -52.615 },
   "Belo Horizonte, MG": { lat: -19.919, lng: -43.938 },
   "Porto Alegre, RS": { lat: -30.034, lng: -51.229 },
-  "Recife, PE": { lat: -8.054, lng: -34.871 },
   "Salvador, BA": { lat: -12.972, lng: -38.512 },
   "Belém, PA": { lat: -1.456, lng: -48.502 },
-  "Manaus, AM": { lat: -3.119, lng: -60.022 },
   "Palmas, TO": { lat: -10.184, lng: -48.334 },
-  "Teresina, PI": { lat: -5.089, lng: -42.802 },
-  "Porto Velho, RO": { lat: -8.760, lng: -63.901 },
   "Florianópolis, SC": { lat: -27.596, lng: -48.549 },
-  "Vitória, ES": { lat: -20.319, lng: -40.337 },
-  "Natal, RN": { lat: -5.795, lng: -35.209 },
-  "João Pessoa, PB": { lat: -7.120, lng: -34.861 },
-  "Maceió, AL": { lat: -9.665, lng: -35.735 },
-  "Aracaju, SE": { lat: -10.911, lng: -37.072 },
-  "São Luís, MA": { lat: -2.530, lng: -44.283 },
-  "Fortaleza, CE": { lat: -3.717, lng: -38.543 },
-  "Macapá, AP": { lat: 0.035, lng: -51.066 },
-  "Boa Vista, RR": { lat: 2.820, lng: -60.674 },
-  "Rio Branco, AC": { lat: -9.974, lng: -67.810 },
   "Piracicaba, SP": { lat: -22.725, lng: -47.649 },
   "Jataí, GO": { lat: -17.882, lng: -51.719 },
   "Lucas do Rio Verde, MT": { lat: -13.050, lng: -55.910 },
   "Primavera do Leste, MT": { lat: -15.560, lng: -54.297 },
-  "Catalão, GO": { lat: -18.170, lng: -47.944 },
-  "Lavras, MG": { lat: -21.245, lng: -45.000 },
-  "Uberaba, MG": { lat: -19.749, lng: -47.932 },
-  "Presidente Prudente, SP": { lat: -22.126, lng: -51.388 },
-  "Jaboticabal, SP": { lat: -21.255, lng: -48.322 },
-  "Araçatuba, SP": { lat: -21.209, lng: -50.433 },
+  "Barreiras, BA": { lat: -12.144, lng: -44.997 },
 };
 
-// UF capital fallback
 const UF_COORDS: Record<string, { lat: number; lng: number }> = {
   SP: { lat: -23.55, lng: -46.63 }, PR: { lat: -25.43, lng: -49.27 },
   MG: { lat: -19.92, lng: -43.94 }, GO: { lat: -16.69, lng: -49.26 },
@@ -81,13 +61,14 @@ const UF_COORDS: Record<string, { lat: number; lng: number }> = {
   AP: { lat: 0.04, lng: -51.07 }, AC: { lat: -9.97, lng: -67.81 },
 };
 
+const ALL_UFS = Object.keys(UF_COORDS).sort();
+
 function resolveCoords(city?: string | null, state?: string | null): { lat: number; lng: number } | null {
   if (city && state) {
     const key = `${city}, ${state}`;
     if (CITY_COORDS[key]) return CITY_COORDS[key];
   }
   if (city) {
-    // Try partial match
     const match = Object.keys(CITY_COORDS).find((k) => k.startsWith(city));
     if (match) return CITY_COORDS[match];
   }
@@ -98,9 +79,9 @@ function resolveCoords(city?: string | null, state?: string | null): { lat: numb
   return null;
 }
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+// ─── Types ──────────────────────────────────────────────────────────────────
 
-type MarkerType = "event" | "retailer" | "alert" | "weather";
+type MarkerType = "event" | "weather";
 
 type MapMarker = {
   id: string;
@@ -111,287 +92,434 @@ type MapMarker = {
   subtitle: string;
   url?: string;
   extra?: React.ReactNode;
+  uf?: string;
+  date?: string;
 };
 
-type LayerConfig = {
-  key: MarkerType;
-  label: string;
-  labelEn: string;
-  color: string;
-  icon: React.ReactNode;
+const LAYER_META: Record<MarkerType, { label: string; labelEn: string; color: string }> = {
+  event:    { label: "Eventos",  labelEn: "Events",   color: "#5B7A2F" },
+  weather:  { label: "Clima / Alertas", labelEn: "Weather / Alerts", color: "#1565C0" },
 };
 
-const LAYERS: LayerConfig[] = [
-  { key: "event", label: "Eventos", labelEn: "Events", color: "#5B7A2F", icon: <Calendar size={14} /> },
-  { key: "alert", label: "Alertas", labelEn: "Alerts", color: "#E53935", icon: <AlertTriangle size={14} /> },
-  { key: "retailer", label: "Revendas", labelEn: "Retailers", color: "#E8722A", icon: <Store size={14} /> },
-  { key: "weather", label: "Clima", labelEn: "Weather", color: "#1565C0", icon: <CloudRain size={14} /> },
-];
+// ─── Component ──────────────────────────────────────────────────────────────
 
-// ─── Component ───────────────────────────────────────────────────────────────
+export function DashboardMap({ lang }: { lang: Lang }) {
+  // Filter state
+  const [ufFilter, setUfFilter] = useState("");
+  const [citySearch, setCitySearch] = useState("");
+  const [showEvents, setShowEvents] = useState(true);
+  const [showWeather, setShowWeather] = useState(true);
 
-interface DashboardMapProps {
-  events?: any[];
-  liveEvents?: any[];
-  retailers?: any[];
-  alerts?: any[];
-  lang: Lang;
-}
-
-export function DashboardMap({ events = [], liveEvents = [], retailers = [], alerts = [], lang }: DashboardMapProps) {
+  // Data state
+  const [allEvents, setAllEvents] = useState<MapMarker[]>([]);
+  const [allWeather, setAllWeather] = useState<MapMarker[]>([]);
+  const [allCities, setAllCities] = useState<{ label: string; lat: number; lng: number }[]>([]);
   const [activeMarkerId, setActiveMarkerId] = useState<string | null>(null);
-  const [visibleLayers, setVisibleLayers] = useState<Set<MarkerType>>(new Set(["event", "alert", "retailer", "weather"]));
-  const [layerMenuOpen, setLayerMenuOpen] = useState(false);
-  const [weatherData, setWeatherData] = useState<any[]>([]);
+  const [bbox, setBbox] = useState<{ north: number; south: number; east: number; west: number } | null>(null);
+  const [bboxDirty, setBboxDirty] = useState(false); // true when user panned but hasn't clicked "search this area"
 
   const MAP_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
 
+  // Fetch data on mount
   useEffect(() => {
-    fetch("/api/agroapi/clima")
-      .then((r) => r.json())
-      .then((json) => { if (json.success && json.data) setWeatherData(json.data); })
-      .catch(() => {});
+    // Events
+    fetch("/api/events-na").then(r => r.json()).then(json => {
+      if (!json.success || !json.data) return;
+      const now = new Date();
+      const markers: MapMarker[] = [];
+      for (const ev of json.data) {
+        if (ev.formato === "Online" || (!ev.cidade && !ev.estado)) continue;
+        const coords = resolveCoords(ev.cidade, ev.estado);
+        if (!coords) continue;
+        const evDate = ev.dataInicio || "";
+        // Only upcoming events
+        if (evDate && new Date(evDate) < now) continue;
+        markers.push({
+          id: `ev-${ev.id}`,
+          type: "event",
+          lat: coords.lat + (Math.random() - 0.5) * 0.01,
+          lng: coords.lng + (Math.random() - 0.5) * 0.01,
+          title: ev.nome,
+          subtitle: [ev.cidade, ev.estado].filter(Boolean).join(", "),
+          url: ev.slug ? `https://agroagenda.agr.br/event/${ev.slug}` : undefined,
+          uf: ev.estado || "",
+          date: evDate,
+          extra: (
+            <div className="mt-1 space-y-0.5">
+              <p className="text-[11px] text-neutral-500">{evDate}</p>
+              {ev.tipo && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-brand-primary/10 text-brand-primary">{ev.tipo}</span>}
+            </div>
+          ),
+        });
+      }
+      // Sort by date, nearest first
+      markers.sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+      setAllEvents(markers);
+    }).catch(() => {});
+
+    // Weather — show all stations as alerts (precip > 0mm or notable temp)
+    fetch("/api/agroapi/clima").then(r => r.json()).then(json => {
+      if (!json.success || !json.data) return;
+      const markers: MapMarker[] = [];
+      for (const w of json.data) {
+        if (w.tempMax === null && w.precip === null) continue; // skip empty data
+        const precipLabel = w.precip !== null ? `${w.precip} mm` : "";
+        const tempLabel = w.tempMax !== null && w.tempMin !== null ? `${w.tempMin}°–${w.tempMax}°C` : "";
+        markers.push({
+          id: `wx-${w.id}`,
+          type: "weather",
+          lat: w.lat,
+          lng: w.lng,
+          title: `${w.name}, ${w.state}`,
+          subtitle: [tempLabel, precipLabel].filter(Boolean).join(" | "),
+          uf: w.state || "",
+          extra: (
+            <div className="mt-1 flex items-center gap-3 text-[11px]">
+              {w.tempMax !== null && (
+                <span className="flex items-center gap-0.5 text-orange-600"><Thermometer size={11} /> {w.tempMin}°–{w.tempMax}°C</span>
+              )}
+              {w.precip !== null && w.precip > 0 && (
+                <span className="flex items-center gap-0.5 text-blue-600"><CloudRain size={11} /> {w.precip} mm</span>
+              )}
+            </div>
+          ),
+        });
+      }
+      setAllWeather(markers);
+    }).catch(() => {});
+
+    // All unique cities from retailer_locations (for city search)
+    supabase
+      .from("retailer_locations")
+      .select("municipio, uf, latitude, longitude")
+      .not("municipio", "is", null)
+      .not("latitude", "is", null)
+      .then(({ data }) => {
+        if (!data) return;
+        const seen = new Map<string, { label: string; lat: number; lng: number }>();
+        for (const r of data) {
+          const key = `${r.municipio}, ${r.uf}`.toLowerCase();
+          if (!seen.has(key)) seen.set(key, { label: `${r.municipio}, ${r.uf}`, lat: r.latitude, lng: r.longitude });
+        }
+        setAllCities([...seen.values()].sort((a, b) => a.label.localeCompare(b.label)));
+      });
   }, []);
 
-  const toggleLayer = (key: MarkerType) => {
-    setVisibleLayers((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
+  // Apply filters
+  const filteredMarkers = useMemo(() => {
+    let markers: MapMarker[] = [];
+    if (showEvents) markers = markers.concat(allEvents);
+    if (showWeather) markers = markers.concat(allWeather);
+
+    if (ufFilter) markers = markers.filter(m => m.uf?.toUpperCase() === ufFilter);
+    if (citySearch.trim()) {
+      const q = citySearch.trim().toLowerCase();
+      markers = markers.filter(m =>
+        m.subtitle.toLowerCase().includes(q) ||
+        m.title.toLowerCase().includes(q) ||
+        (m.uf || "").toLowerCase().includes(q)
+      );
+    }
+
+    // Bbox filter (when user clicked "Buscar nesta área")
+    if (bbox) {
+      markers = markers.filter(m =>
+        m.lat >= bbox.south && m.lat <= bbox.north &&
+        m.lng >= bbox.west && m.lng <= bbox.east
+      );
+    }
+
+    return markers;
+  }, [showEvents, showWeather, ufFilter, citySearch, allEvents, allWeather, bbox]);
+
+  const activeMarker = filteredMarkers.find(m => m.id === activeMarkerId);
+
+  // Counts per type
+  const counts = {
+    event: filteredMarkers.filter(m => m.type === "event").length,
+    weather: filteredMarkers.filter(m => m.type === "weather").length,
   };
 
-  const markers = useMemo(() => {
-    const m: MapMarker[] = [];
-    const jitter = () => (Math.random() - 0.5) * 0.015;
-
-    // Live events from AgroAgenda
-    for (const ev of liveEvents) {
-      if (ev.formato === "Online" || (!ev.cidade && !ev.estado)) continue;
-      const coords = resolveCoords(ev.cidade, ev.estado);
-      if (!coords) continue;
-      m.push({
-        id: `lev-${ev.id}`,
-        type: "event",
-        lat: coords.lat + jitter(),
-        lng: coords.lng + jitter(),
-        title: ev.nome,
-        subtitle: [ev.cidade, ev.estado].filter(Boolean).join(", "),
-        url: ev.slug ? `https://agroagenda.agr.br/event/${ev.slug}` : undefined,
-        extra: (
-          <div className="mt-1 space-y-0.5">
-            <p className="text-[11px] text-neutral-500">{ev.dataInicio}</p>
-            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-brand-primary/10 text-brand-primary">{ev.tipo}</span>
-          </div>
-        ),
-      });
+  // Map center — zoom to selected city, filtered region, or default
+  const { mapCenter, mapZoom } = useMemo(() => {
+    // If a city is selected, zoom to it regardless of markers
+    if (citySearch) {
+      const fromDb = allCities.find(c => c.label.toLowerCase() === citySearch.toLowerCase());
+      if (fromDb) return { mapCenter: { lat: fromDb.lat, lng: fromDb.lng }, mapZoom: 10 };
+      const coords = CITY_COORDS[citySearch] || resolveCoords(citySearch.split(",")[0]?.trim(), citySearch.split(",")[1]?.trim());
+      if (coords) return { mapCenter: coords, mapZoom: 10 };
     }
-
-    // Mock events (legacy)
-    for (const evt of events) {
-      if (!evt.location || evt.location === "Online") continue;
-      const coords = CITY_COORDS[evt.location];
-      if (!coords) continue;
-      if (m.some((x) => x.id === `lev-${evt.id}`)) continue; // skip if live version exists
-      m.push({
-        id: `evt-${evt.id}`,
-        type: "event",
-        lat: coords.lat + jitter(),
-        lng: coords.lng + jitter(),
-        title: evt.name,
-        subtitle: evt.location,
-        extra: <p className="text-[11px] text-neutral-500 mt-1">{new Date(evt.date_start).toLocaleDateString(lang === "pt" ? "pt-BR" : "en-US")}</p>,
-      });
+    // If filtered markers exist, fit them
+    if (filteredMarkers.length > 0 && filteredMarkers.length <= 20 && (ufFilter || citySearch)) {
+      const lats = filteredMarkers.map(m => m.lat);
+      const lngs = filteredMarkers.map(m => m.lng);
+      const center = { lat: (Math.min(...lats) + Math.max(...lats)) / 2, lng: (Math.min(...lngs) + Math.max(...lngs)) / 2 };
+      const latSpan = Math.max(...lats) - Math.min(...lats);
+      const zoom = latSpan < 1 ? 9 : latSpan < 3 ? 7 : latSpan < 8 ? 5 : 4;
+      return { mapCenter: center, mapZoom: zoom };
     }
+    if (ufFilter && UF_COORDS[ufFilter]) return { mapCenter: UF_COORDS[ufFilter], mapZoom: 6 };
+    return { mapCenter: { lat: -15.78, lng: -47.93 }, mapZoom: 4 };
+  }, [ufFilter, citySearch, filteredMarkers, allCities]);
 
-    // Retailers
-    for (const ret of retailers) {
-      const coords = CITY_COORDS[`${ret.city}, ${ret.state}`] || CITY_COORDS[ret.city];
-      if (!coords) continue;
-      m.push({
-        id: `ret-${ret.id}`,
-        type: "retailer",
-        lat: coords.lat + jitter(),
-        lng: coords.lng + jitter(),
-        title: ret.name,
-        subtitle: `${ret.city}, ${ret.state}`,
-      });
+  // Build unique city list from all sources for autocomplete
+  const availableCities = useMemo(() => {
+    const cities = new Map<string, { label: string; type: string }>();
+    // Cities from events (priority — tagged as "evento")
+    for (const m of allEvents) {
+      if (m.subtitle) cities.set(m.subtitle.toLowerCase(), { label: m.subtitle, type: "evento" });
     }
-
-    // Alerts
-    for (const alt of alerts) {
-      let coords = { lat: -15.780, lng: -47.929 };
-      if (alt.commodity_id === "coffee") coords = CITY_COORDS["Ribeirão Preto, SP"];
-      if (alt.commodity_id === "soy") coords = CITY_COORDS["Sorriso, MT"];
-      m.push({
-        id: `alt-${alt.id}`,
-        type: "alert",
-        lat: coords.lat + jitter(),
-        lng: coords.lng + jitter(),
-        title: lang === "pt" ? "Alerta de Mercado" : "Market Alert",
-        subtitle: lang === "pt" ? alt.message_pt : alt.message_en,
-        extra: <p className="text-[11px] text-error font-medium mt-1">{lang === "pt" ? "Risco Alto" : "High Risk"}</p>,
-      });
+    // Cities from weather stations
+    for (const m of allWeather) {
+      if (m.title) cities.set(m.title.toLowerCase(), { label: m.title, type: "clima" });
     }
-
-    // Weather
-    for (const w of weatherData) {
-      if (w.tempMax === null && w.precip === null) continue;
-      const precipLabel = w.precip !== null ? `${w.precip} mm` : "";
-      const tempLabel = w.tempMax !== null && w.tempMin !== null ? `${w.tempMin}°–${w.tempMax}°C` : "";
-      m.push({
-        id: `wx-${w.id}`,
-        type: "weather",
-        lat: w.lat,
-        lng: w.lng,
-        title: `${w.name}, ${w.state}`,
-        subtitle: [tempLabel, precipLabel].filter(Boolean).join(" | "),
-        extra: (
-          <div className="mt-1 flex items-center gap-3 text-[11px]">
-            {w.tempMax !== null && (
-              <span className="flex items-center gap-0.5 text-orange-600"><Thermometer size={11} /> {w.tempMin}°–{w.tempMax}°C</span>
-            )}
-            {w.precip !== null && w.precip > 0 && (
-              <span className="flex items-center gap-0.5 text-blue-600"><CloudRain size={11} /> {w.precip} mm</span>
-            )}
-          </div>
-        ),
-      });
+    // All cities from retailer_locations in Supabase
+    for (const c of allCities) {
+      const k = c.label.toLowerCase();
+      if (!cities.has(k)) cities.set(k, { label: c.label, type: "" });
     }
+    return [...cities.values()].sort((a, b) => a.label.localeCompare(b.label));
+  }, [allEvents, allWeather, allCities]);
 
-    return m;
-  }, [events, liveEvents, retailers, alerts, weatherData, lang]);
+  // Autocomplete state
+  const [cityQuery, setCityQuery] = useState("");
+  const [cityDropdownOpen, setCityDropdownOpen] = useState(false);
+  const cityRef = React.useRef<HTMLDivElement>(null);
 
-  const visibleMarkers = markers.filter((m) => visibleLayers.has(m.type));
-  const activeMarker = visibleMarkers.find((m) => m.id === activeMarkerId);
+  const citySuggestions = useMemo(() => {
+    if (!cityQuery.trim()) return availableCities.slice(0, 15);
+    const q = cityQuery.trim().toLowerCase();
+    return availableCities.filter(c => c.label.toLowerCase().includes(q)).slice(0, 10);
+  }, [cityQuery, availableCities]);
 
-  // Layer counts
-  const counts: Record<MarkerType, number> = {
-    event: markers.filter((m) => m.type === "event").length,
-    alert: markers.filter((m) => m.type === "alert").length,
-    retailer: markers.filter((m) => m.type === "retailer").length,
-    weather: markers.filter((m) => m.type === "weather").length,
-  };
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!cityDropdownOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (cityRef.current && !cityRef.current.contains(e.target as Node)) setCityDropdownOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [cityDropdownOpen]);
+
+  const selectCity = (label: string) => { setCitySearch(label); setCityQuery(""); setCityDropdownOpen(false); };
+  const clearCity = () => { setCitySearch(""); setCityQuery(""); };
+  const clearFilters = () => { setUfFilter(""); clearCity(); };
+  const hasFilters = ufFilter || citySearch;
 
   return (
-    <div className="relative w-full h-[400px] bg-neutral-100 rounded-b-lg overflow-hidden">
-      {MAP_KEY ? (
-        <APIProvider apiKey={MAP_KEY}>
-          <GMap
-            defaultCenter={{ lat: -15.7801, lng: -47.9292 }}
-            defaultZoom={4}
-            mapId="dashboard-intel-map"
-            disableDefaultUI={true}
-            zoomControl={true}
-          >
-            {visibleMarkers.map((m) => (
-              <AdvancedMarker
-                key={m.id}
-                position={{ lat: m.lat, lng: m.lng }}
-                onClick={() => setActiveMarkerId(m.id)}
-              >
-                <div
-                  className="w-7 h-7 rounded-full flex items-center justify-center text-white border-2 border-white shadow-md cursor-pointer transition-transform hover:scale-110"
-                  style={{ backgroundColor: LAYERS.find((l) => l.key === m.type)?.color || "#5B7A2F" }}
-                >
-                  {m.type === "event" && <Calendar size={14} />}
-                  {m.type === "retailer" && <Store size={14} />}
-                  {m.type === "alert" && <AlertTriangle size={14} />}
-                  {m.type === "weather" && <CloudRain size={14} />}
-                </div>
-              </AdvancedMarker>
-            ))}
+    <div>
+      {/* ── Filter Panel (outside map) ── */}
+      <div className="px-4 py-3 border-b border-neutral-200 bg-white">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Layer toggles */}
+          <div className="flex items-center gap-1.5">
+            <LayerToggle active={showEvents} onClick={() => setShowEvents(!showEvents)}
+              color={LAYER_META.event.color} label={lang === "pt" ? "Eventos" : "Events"} count={counts.event} />
+            <LayerToggle active={showWeather} onClick={() => setShowWeather(!showWeather)}
+              color={LAYER_META.weather.color} label={lang === "pt" ? "Clima / Alertas" : "Weather / Alerts"} count={counts.weather} />
+          </div>
 
-            {activeMarker && (
-              <InfoWindow
-                position={{ lat: activeMarker.lat, lng: activeMarker.lng }}
-                onCloseClick={() => setActiveMarkerId(null)}
-                pixelOffset={[0, -10]}
-              >
-                <div className="p-1 max-w-[220px]">
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: LAYERS.find((l) => l.key === activeMarker.type)?.color }} />
-                    <span className="text-[10px] font-semibold text-neutral-500 uppercase">{activeMarker.type}</span>
-                  </div>
-                  <h4 className="font-semibold text-neutral-900 text-[13px] leading-tight mb-0.5">{activeMarker.title}</h4>
-                  <p className="text-[12px] text-neutral-600 leading-snug">{activeMarker.subtitle}</p>
-                  {activeMarker.extra}
-                  {activeMarker.url && (
-                    <a href={activeMarker.url} target="_blank" rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 mt-1.5 text-[11px] font-medium text-brand-primary hover:underline">
-                      {lang === "pt" ? "Ver detalhes" : "View details"} <ExternalLink size={10} />
-                    </a>
-                  )}
-                </div>
-              </InfoWindow>
-            )}
-          </GMap>
-        </APIProvider>
-      ) : (
-        <div className="flex items-center justify-center h-full p-8 text-neutral-500 text-sm">
-          Google Maps API key not configured.
-        </div>
-      )}
+          <div className="h-5 w-px bg-neutral-200 hidden sm:block" />
 
-      {/* Layer Control */}
-      <div className="absolute top-3 right-3 z-10">
-        <button
-          onClick={() => setLayerMenuOpen(!layerMenuOpen)}
-          className={`flex items-center gap-1.5 px-3 py-2 rounded-lg shadow-md text-[12px] font-semibold transition-colors ${layerMenuOpen ? "bg-brand-primary text-white" : "bg-white text-neutral-700 border border-neutral-200 hover:bg-neutral-50"}`}
-        >
-          <Layers size={15} />
-          {lang === "pt" ? "Camadas" : "Layers"}
-        </button>
+          {/* UF filter */}
+          <select value={ufFilter} onChange={e => setUfFilter(e.target.value)}
+            className="px-2 py-1.5 bg-neutral-50 border border-neutral-200 rounded text-[12px] focus:outline-none focus:ring-1 focus:ring-brand-primary/30">
+            <option value="">{lang === "pt" ? "Todos estados" : "All states"}</option>
+            {ALL_UFS.map(uf => <option key={uf} value={uf}>{uf}</option>)}
+          </select>
 
-        {layerMenuOpen && (
-          <div className="absolute right-0 top-full mt-1.5 w-52 bg-white rounded-lg border border-neutral-200 shadow-lg overflow-hidden">
-            <div className="px-3 py-2 border-b border-neutral-100 bg-neutral-50">
-              <span className="text-[11px] font-semibold text-neutral-500 uppercase">
-                {lang === "pt" ? "Camadas do Mapa" : "Map Layers"}
-              </span>
+          {/* City autocomplete search */}
+          {citySearch ? (
+            /* Selected city chip */
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-brand-surface border border-brand-light rounded-md text-[12px] font-medium text-brand-primary">
+              <MapPin size={11} />
+              {citySearch}
+              <button onClick={clearCity} className="ml-1 text-brand-primary/60 hover:text-brand-primary"><X size={12} /></button>
             </div>
-            {LAYERS.map((layer) => {
-              const isVisible = visibleLayers.has(layer.key);
-              return (
-                <button
-                  key={layer.key}
-                  onClick={() => toggleLayer(layer.key)}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors ${isVisible ? "bg-white" : "bg-neutral-50 opacity-60"} hover:bg-neutral-50`}
-                >
-                  <div
-                    className="w-5 h-5 rounded flex items-center justify-center text-white flex-shrink-0"
-                    style={{ backgroundColor: isVisible ? layer.color : "#D1D5DB" }}
-                  >
-                    {layer.icon}
+          ) : (
+            /* Search input with dropdown */
+            <div className="relative" ref={cityRef}>
+              <Search size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-neutral-400" />
+              <input type="text" value={cityQuery}
+                onChange={e => { setCityQuery(e.target.value); setCityDropdownOpen(true); }}
+                onFocus={() => setCityDropdownOpen(true)}
+                placeholder={lang === "pt" ? "Buscar cidade..." : "Search city..."}
+                className="pl-7 pr-3 py-1.5 w-44 bg-neutral-50 border border-neutral-200 rounded text-[12px] focus:outline-none focus:ring-1 focus:ring-brand-primary/30" />
+              {cityDropdownOpen && citySuggestions.length > 0 && (
+                <div className="absolute left-0 top-full mt-1 w-56 bg-white rounded-lg border border-neutral-200 shadow-lg z-50 max-h-52 overflow-y-auto">
+                  {citySuggestions.map((c, i) => (
+                    <button key={i} onClick={() => selectCity(c.label)}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-left text-[12px] hover:bg-neutral-50 transition-colors border-b border-neutral-50 last:border-0">
+                      <MapPin size={11} className="text-neutral-400 shrink-0" />
+                      <span className="text-neutral-800">{c.label}</span>
+                      {c.type && <span className="ml-auto text-[9px] text-neutral-400 uppercase">{c.type}</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {hasFilters && (
+            <button onClick={clearFilters} className="flex items-center gap-1 text-[11px] text-error font-medium hover:underline">
+              <X size={12} />{lang === "pt" ? "Limpar" : "Clear"}
+            </button>
+          )}
+
+          <div className="ml-auto text-[11px] text-neutral-400">
+            {filteredMarkers.length} {lang === "pt" ? "pontos" : "points"}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Map ── */}
+      <div className="relative w-full h-[380px] bg-neutral-100">
+        {MAP_KEY ? (
+          <APIProvider apiKey={MAP_KEY}>
+            <GMap
+              defaultCenter={mapCenter}
+              defaultZoom={mapZoom}
+              key={`${mapCenter.lat}-${mapCenter.lng}-${mapZoom}`}
+              mapId="dashboard-intel-map"
+              disableDefaultUI={false}
+              zoomControl
+              mapTypeControl
+              mapTypeId="terrain"
+              streetViewControl={false}
+              fullscreenControl={false}
+              rotateControl={false}
+              onCameraChanged={() => { if (!bboxDirty) setBboxDirty(true); }}
+            >
+              {filteredMarkers.map(m => (
+                <AdvancedMarker key={m.id} position={{ lat: m.lat, lng: m.lng }}
+                  onClick={() => setActiveMarkerId(m.id)}>
+                  <div className="w-7 h-7 rounded-full flex items-center justify-center text-white border-2 border-white shadow-md cursor-pointer transition-transform hover:scale-125"
+                    style={{ backgroundColor: LAYER_META[m.type]?.color || "#5B7A2F" }}>
+                    {m.type === "event" && <Calendar size={13} />}
+                    {m.type === "weather" && <CloudRain size={13} />}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[12px] font-semibold text-neutral-900">
-                      {lang === "pt" ? layer.label : layer.labelEn}
-                    </p>
-                    <p className="text-[10px] text-neutral-400">{counts[layer.key]} {lang === "pt" ? "pontos" : "points"}</p>
+                </AdvancedMarker>
+              ))}
+
+              {activeMarker && (
+                <InfoWindow position={{ lat: activeMarker.lat, lng: activeMarker.lng }}
+                  onCloseClick={() => setActiveMarkerId(null)} pixelOffset={[0, -10]}>
+                  <div className="p-1 max-w-[240px]">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: LAYER_META[activeMarker.type]?.color }} />
+                      <span className="text-[10px] font-semibold text-neutral-500 uppercase">
+                        {lang === "pt" ? LAYER_META[activeMarker.type]?.label : LAYER_META[activeMarker.type]?.labelEn}
+                      </span>
+                    </div>
+                    <h4 className="font-semibold text-neutral-900 text-[13px] leading-tight mb-0.5">{activeMarker.title}</h4>
+                    <p className="text-[12px] text-neutral-600">{activeMarker.subtitle}</p>
+                    {activeMarker.extra}
+                    {activeMarker.url && (
+                      <a href={activeMarker.url} target="_blank" rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 mt-1.5 text-[11px] font-medium text-brand-primary hover:underline">
+                        {lang === "pt" ? "Ver detalhes" : "Details"} <ExternalLink size={10} />
+                      </a>
+                    )}
                   </div>
-                  {isVisible ? (
-                    <Eye size={14} className="text-neutral-400 flex-shrink-0" />
-                  ) : (
-                    <EyeOff size={14} className="text-neutral-300 flex-shrink-0" />
-                  )}
-                </button>
-              );
-            })}
+                </InfoWindow>
+              )}
+              <BboxCaptureButton lang={lang} bboxDirty={bboxDirty} bboxActive={!!bbox}
+                onApply={(b) => { setBbox(b); setBboxDirty(false); }}
+                onClear={() => { setBbox(null); setBboxDirty(false); }} />
+            </GMap>
+          </APIProvider>
+        ) : (
+          <div className="flex items-center justify-center h-full text-neutral-500 text-sm">
+            Google Maps API key not configured.
           </div>
         )}
       </div>
 
-      {/* Legend bar */}
-      <div className="absolute bottom-3 left-3 z-10 flex items-center gap-3 bg-white/90 backdrop-blur-sm rounded-lg px-3 py-1.5 shadow-sm border border-neutral-200">
-        {LAYERS.map((l) => (
-          <div key={l.key} className={`flex items-center gap-1.5 text-[10px] font-semibold ${visibleLayers.has(l.key) ? "text-neutral-700" : "text-neutral-300 line-through"}`}>
-            <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: visibleLayers.has(l.key) ? l.color : "#D1D5DB" }} />
-            {lang === "pt" ? l.label : l.labelEn} ({counts[l.key]})
+      {/* ── Highlights strip below map ── */}
+      {allEvents.length > 0 && (
+        <div className="px-4 py-3 border-t border-neutral-200 bg-neutral-50">
+          <p className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mb-2">
+            {lang === "pt" ? "Próximos Eventos" : "Upcoming Events"}
+          </p>
+          <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-hide">
+            {allEvents.slice(0, 6).map(ev => (
+              <a key={ev.id} href={ev.url} target="_blank" rel="noopener noreferrer"
+                className="flex-shrink-0 bg-white rounded-md border border-neutral-200 px-3 py-2 hover:border-brand-primary transition-colors group w-52">
+                <p className="text-[11px] font-semibold text-neutral-900 leading-snug line-clamp-2 group-hover:text-brand-primary">{ev.title}</p>
+                <div className="flex items-center justify-between mt-1.5">
+                  <span className="text-[10px] text-neutral-500 flex items-center gap-1">
+                    <MapPin size={9} />{ev.subtitle}
+                  </span>
+                  <span className="text-[10px] text-neutral-400">{ev.date?.slice(0, 10)}</span>
+                </div>
+              </a>
+            ))}
           </div>
-        ))}
-      </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+// ─── Layer Toggle Button ────────────────────────────────────────────────────
+
+function LayerToggle({ active, onClick, color, label, count }: {
+  active: boolean; onClick: () => void; color: string; label: string; count: number;
+}) {
+  return (
+    <button onClick={onClick}
+      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-semibold transition-all border ${
+        active ? "border-neutral-300 bg-white shadow-sm" : "border-transparent bg-neutral-100 text-neutral-400"
+      }`}>
+      {active ? <Eye size={12} style={{ color }} /> : <EyeOff size={12} />}
+      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: active ? color : "#D1D5DB" }} />
+      <span className={active ? "text-neutral-800" : ""}>{label}</span>
+      <span className={`text-[9px] ${active ? "text-neutral-400" : "text-neutral-300"}`}>({count})</span>
+    </button>
+  );
+}
+
+// ─── Bbox "Search this area" button (must be inside APIProvider) ────────────
+
+function BboxCaptureButton({ lang, bboxDirty, bboxActive, onApply, onClear }: {
+  lang: Lang; bboxDirty: boolean; bboxActive: boolean;
+  onApply: (bbox: { north: number; south: number; east: number; west: number }) => void;
+  onClear: () => void;
+}) {
+  const map = useMap();
+
+  const handleApply = useCallback(() => {
+    if (!map) return;
+    const bounds = map.getBounds();
+    if (!bounds) return;
+    const ne = bounds.getNorthEast();
+    const sw = bounds.getSouthWest();
+    onApply({ north: ne.lat(), south: sw.lat(), east: ne.lng(), west: sw.lng() });
+  }, [map, onApply]);
+
+  return (
+    <>
+      {/* "Search this area" button — appears when user pans */}
+      {bboxDirty && (
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10">
+          <button onClick={handleApply}
+            className="flex items-center gap-2 px-4 py-2 bg-white rounded-full shadow-lg border border-neutral-200 text-[12px] font-semibold text-neutral-700 hover:bg-neutral-50 hover:border-brand-primary transition-all">
+            <RefreshCw size={13} className="text-brand-primary" />
+            {lang === "pt" ? "Buscar nesta área" : "Search this area"}
+          </button>
+        </div>
+      )}
+      {/* Active bbox indicator */}
+      {bboxActive && !bboxDirty && (
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10">
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-brand-surface rounded-full border border-brand-light text-[11px] font-medium text-brand-primary">
+            <MapPin size={11} />
+            {lang === "pt" ? "Filtrado por área visível" : "Filtered by visible area"}
+            <button onClick={onClear} className="ml-1 hover:text-error transition-colors"><X size={12} /></button>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

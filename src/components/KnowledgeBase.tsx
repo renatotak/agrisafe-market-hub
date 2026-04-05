@@ -6,8 +6,8 @@ import { supabase } from "@/lib/supabase";
 import { MockBadge } from "@/components/ui/MockBadge";
 import { Badge } from "@/components/ui/Badge";
 import {
-  Search, Database, Newspaper, BookOpen, Lightbulb,
-  BarChart3, Loader2, ExternalLink, Layers, BookMarked,
+  Search, Newspaper, BookOpen, Lightbulb,
+  BarChart3, Loader2, ExternalLink,
 } from "lucide-react";
 
 interface KnowledgeItem {
@@ -45,10 +45,6 @@ export function KnowledgeBase({ lang }: { lang: Lang }) {
   const [totalItems, setTotalItems] = useState(0);
   const [isMock, setIsMock] = useState(true);
   const [tierFilter, setTierFilter] = useState<number | null>(null);
-  const [activeTab, setActiveTab] = useState<"search" | "glossary">("search");
-  const [glossaryQuery, setGlossaryQuery] = useState("");
-  const [glossaryResults, setGlossaryResults] = useState<any[]>([]);
-  const [glossaryLoading, setGlossaryLoading] = useState(false);
 
   useEffect(() => {
     fetchStats();
@@ -118,20 +114,6 @@ export function KnowledgeBase({ lang }: { lang: Lang }) {
     setSearching(false);
   };
 
-  const handleGlossarySearch = async () => {
-    if (!glossaryQuery || glossaryQuery.length < 2) return;
-    setGlossaryLoading(true);
-    try {
-      const res = await fetch(`/api/agroapi/termos?q=${encodeURIComponent(glossaryQuery)}`);
-      const json = await res.json();
-      setGlossaryResults(json.dados || []);
-    } catch {
-      setGlossaryResults([]);
-    } finally {
-      setGlossaryLoading(false);
-    }
-  };
-
   const tierTotal = tierStats.reduce((s, t) => s + t.count, 0);
 
   return (
@@ -176,85 +158,6 @@ export function KnowledgeBase({ lang }: { lang: Lang }) {
         })}
       </div>
 
-      {/* Tabs: Knowledge Search | Glossário Agro */}
-      <div className="flex items-center gap-2 border-b border-neutral-200 mb-6">
-        <button onClick={() => setActiveTab("search")}
-          className={`flex items-center gap-2 px-4 py-3 text-[14px] font-semibold border-b-2 transition-colors ${activeTab === "search" ? "border-brand-primary text-brand-primary" : "border-transparent text-neutral-500 hover:text-neutral-700"}`}>
-          <Search size={16} />
-          {lang === "pt" ? "Busca no Conhecimento" : "Knowledge Search"}
-        </button>
-        <button onClick={() => setActiveTab("glossary")}
-          className={`flex items-center gap-2 px-4 py-3 text-[14px] font-semibold border-b-2 transition-colors ${activeTab === "glossary" ? "border-brand-primary text-brand-primary" : "border-transparent text-neutral-500 hover:text-neutral-700"}`}>
-          <BookMarked size={16} />
-          {lang === "pt" ? "Glossário Agro" : "Agro Glossary"}
-          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-green-50 text-green-700">Embrapa</span>
-        </button>
-      </div>
-
-      {activeTab === "glossary" ? (
-        <div className="space-y-4 mb-6">
-          {/* Glossary Search */}
-          <div className="bg-white rounded-lg border border-neutral-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4">
-            <div className="flex gap-3">
-              <div className="flex-1 relative">
-                <BookMarked size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
-                <input
-                  type="text"
-                  value={glossaryQuery}
-                  onChange={(e) => setGlossaryQuery(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleGlossarySearch()}
-                  placeholder={lang === "pt" ? "Buscar termo agro: soja, crédito rural, CPR, defensivo..." : "Search agro term: soybean, rural credit, CPR, pesticide..."}
-                  className="w-full pl-10 pr-4 py-2.5 bg-neutral-50 border border-neutral-200 rounded-md text-[14px] focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary"
-                />
-              </div>
-              <button onClick={handleGlossarySearch} disabled={glossaryLoading || glossaryQuery.length < 2}
-                className="px-5 py-2.5 bg-brand-primary text-white rounded-md hover:bg-brand-dark font-medium text-[14px] transition-colors disabled:opacity-50">
-                {glossaryLoading ? <Loader2 size={16} className="animate-spin" /> : (lang === "pt" ? "Buscar" : "Search")}
-              </button>
-            </div>
-            <p className="text-[10px] text-neutral-400 mt-2">
-              {lang === "pt"
-                ? "Vocabulário controlado da Embrapa (AgroTermos) — definições, sinônimos e contextos de uso para termos agropecuários."
-                : "Embrapa controlled vocabulary (AgroTermos) — definitions, synonyms and usage contexts for agricultural terms."}
-            </p>
-          </div>
-
-          {/* Glossary Results */}
-          {glossaryResults.length > 0 && (
-            <div className="space-y-2">
-              <p className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider">
-                {glossaryResults.length} {lang === "pt" ? "termos encontrados" : "terms found"}
-              </p>
-              {glossaryResults.map((term: any) => (
-                <div key={term.id} className="bg-white rounded-lg border border-neutral-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-green-50 text-green-700">
-                          {term.tesauroorigem || "AgroTermos"}
-                        </span>
-                        {term.dataregistro && (
-                          <span className="text-[10px] text-neutral-400">{term.dataregistro}</span>
-                        )}
-                      </div>
-                      <h4 className="font-semibold text-neutral-900 text-[14px] leading-snug">{term.label}</h4>
-                      {term.definicao && term.definicao !== term.label && (
-                        <p className="text-[13px] text-neutral-600 mt-1">{term.definicao}</p>
-                      )}
-                    </div>
-                    {term.uri && (
-                      <a href={term.uri} target="_blank" rel="noopener noreferrer" className="text-neutral-300 hover:text-brand-primary shrink-0">
-                        <ExternalLink size={14} />
-                      </a>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      ) : (
-        <>
       {/* Knowledge Search */}
       <div className="bg-white rounded-lg border border-neutral-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4 mb-6">
         <div className="flex gap-3">
@@ -276,8 +179,8 @@ export function KnowledgeBase({ lang }: { lang: Lang }) {
         </div>
         <p className="text-[10px] text-neutral-400 mt-2">
           {lang === "pt"
-            ? "Busca por palavra-chave em not\u00edcias, normas regulat\u00f3rias e artigos. Busca sem\u00e2ntica (IA) dispon\u00edvel na pr\u00f3xima fase."
-            : "Keyword search across news, regulatory norms, and articles. Semantic (AI) search available in next phase."}
+            ? "Busca semântica (IA) e por palavra-chave em notícias, normas regulatórias e artigos."
+            : "AI semantic and keyword search across news, regulatory norms, and articles."}
         </p>
       </div>
 
@@ -323,8 +226,6 @@ export function KnowledgeBase({ lang }: { lang: Lang }) {
           </div>
         </div>
       )}
-        </>
-      )}
 
       {/* Coverage Overview */}
       <div className="bg-white rounded-lg border border-neutral-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5">
@@ -357,8 +258,8 @@ export function KnowledgeBase({ lang }: { lang: Lang }) {
         <div className="mt-4 pt-4 border-t border-neutral-200 text-[11px] text-neutral-500">
           <p>
             {lang === "pt"
-              ? "A busca sem\u00e2ntica com IA (pgvector + embeddings) ser\u00e1 ativada na Phase 17 quando a chave OpenAI for configurada. Atualmente usa busca por palavras-chave."
-              : "AI semantic search (pgvector + embeddings) will be activated in Phase 17 when OpenAI key is configured. Currently uses keyword search."}
+              ? "Busca semântica via Google Gemini Embeddings + pgvector. Indexação automática pelo cron diário."
+              : "Semantic search powered by Google Gemini Embeddings + pgvector. Automatic indexing via daily cron."}
           </p>
         </div>
       </div>

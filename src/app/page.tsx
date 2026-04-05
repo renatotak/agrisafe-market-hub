@@ -16,11 +16,6 @@ import { RetailersDirectory } from "@/components/RetailersDirectory";
 import { Header } from "@/components/Header";
 import { Sidebar, getModuleTitle } from "@/components/Sidebar";
 import {
-  mockDataSources, mockCommodities, mockMarketAlerts,
-  mockPublishedArticles, mockContentTopics, mockRegulatoryNorms,
-  mockCompetitors, mockNews, mockEvents, mockRecuperacaoJudicial
-} from "@/data/mock";
-import {
   Database, BarChart3, TrendingUp, TrendingDown, PenTool,
   BookOpen, AlertTriangle, Zap, ChevronRight, Newspaper, Radar, Calendar,
   Circle, ExternalLink, Loader2, Settings, X, Check,
@@ -79,112 +74,141 @@ export default function Home() {
 }
 
 import { DashboardMap } from "@/components/DashboardMap";
-import { mockRetailers } from "@/data/mock";
 
 // ─── Executive Dashboard Overview ───
 
 function DashboardOverview({ lang, setActiveModule }: { lang: Lang; setActiveModule: (m: Module) => void }) {
-  // Source health
-  const healthyCt = mockDataSources.filter((s) => s.status === "healthy").length;
-  const totalSources = mockDataSources.length;
+  // Live KPI state
+  const [kpis, setKpis] = useState({
+    newsCount: 0, eventsCount: 0, rjCount: 0, retailersCount: 0,
+    sourcesHealthy: 0, sourcesTotal: 0, topMover: null as { name: string; change: number } | null,
+  });
 
-  // Market intelligence
-  const biggestMover = [...mockCommodities].sort((a, b) => Math.abs(b.change_24h) - Math.abs(a.change_24h))[0];
-  const highAlerts = mockMarketAlerts.filter((a) => a.severity === "high");
-  const totalSignals = mockCompetitors.reduce((s, c) => s + (c.competitor_signals?.length || 0), 0);
-  const upcomingEvents = mockEvents.filter((e) => new Date(e.date_start) > new Date()).length;
-
-  // Content
-  const publishedThisMonth = mockPublishedArticles.filter((a) => a.published_at >= "2026-03-01").length;
-  const topicsInPipeline = mockContentTopics.filter((t) => t.status !== "published").length;
-
-  // Regulatory & Legal
-  const highImpactNorms = mockRegulatoryNorms.filter((n) => n.impact_level === "high");
-  const latestNorm = mockRegulatoryNorms[0];
-
-  // Knowledge Base & New items
-  const rjAlerts = mockRecuperacaoJudicial.length;
-  const numRetailers = mockRetailers.length;
-
-  // Live events from AgroAgenda
-  const [liveEvents, setLiveEvents] = useState<any[]>([]);
+  // Fetch live KPIs from Supabase + APIs
   useEffect(() => {
-    fetch("/api/events-na")
-      .then((r) => r.json())
-      .then((json) => { if (json.success && json.data) setLiveEvents(json.data); })
-      .catch(() => {});
+    // News count
+    supabase.from("agro_news").select("*", { count: "exact", head: true })
+      .then(({ count }) => setKpis(prev => ({ ...prev, newsCount: count || 0 })));
+
+    // Events count (upcoming)
+    fetch("/api/events-na").then(r => r.json()).then(json => {
+      if (json.success && json.data) {
+        const upcoming = json.data.filter((e: any) => new Date(e.dataInicio) >= new Date()).length;
+        setKpis(prev => ({ ...prev, eventsCount: upcoming }));
+      }
+    }).catch(() => {});
+
+    // Recuperação judicial count
+    supabase.from("recuperacao_judicial").select("*", { count: "exact", head: true })
+      .then(({ count }) => setKpis(prev => ({ ...prev, rjCount: count || 0 })));
+
+    // Retailers count
+    supabase.from("retailers").select("*", { count: "exact", head: true })
+      .then(({ count }) => setKpis(prev => ({ ...prev, retailersCount: count || 0 })));
+
+    // Source health from sync_logs
+    supabase.from("sync_logs").select("source, status").order("started_at", { ascending: false }).limit(50)
+      .then(({ data }) => {
+        if (data) {
+          const latest = new Map<string, string>();
+          for (const log of data) { if (!latest.has(log.source)) latest.set(log.source, log.status); }
+          const total = latest.size;
+          const healthy = [...latest.values()].filter(s => s === "success").length;
+          setKpis(prev => ({ ...prev, sourcesHealthy: healthy, sourcesTotal: total }));
+        }
+      });
+
+    // Top mover from live prices
+    fetch("/api/prices-na").then(r => r.json()).then(json => {
+      if (json.success && json.data?.length > 0) {
+        let best = { name: "", change: 0 };
+        for (const c of json.data as any[]) {
+          for (const it of c.items || []) {
+            if (it.variation) {
+              const val = parseFloat(it.variation.replace(",", ".").replace("%", ""));
+              if (!isNaN(val) && Math.abs(val) > Math.abs(best.change)) {
+                best = { name: c.commodity, change: val };
+              }
+            }
+          }
+        }
+        if (best.name) setKpis(prev => ({ ...prev, topMover: best }));
+      }
+    }).catch(() => {});
   }, []);
 
   return (
     <div className="space-y-6">
 
-      {/* Compact KPI Strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
+      {/* Compact KPI Strip — all live data */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
         <button onClick={() => setActiveModule("market")} className="rounded-lg px-3 py-2.5 bg-white border border-neutral-200 text-left hover:border-brand-primary transition-colors group">
           <p className="text-[9px] font-semibold text-neutral-400 uppercase">{lang === "pt" ? "Mercado" : "Market"}</p>
-          <p className="text-[14px] font-bold text-neutral-900 leading-tight mt-0.5">{lang === "pt" ? biggestMover.name_pt : biggestMover.name_en}</p>
-          <p className={`text-[11px] font-bold ${biggestMover.change_24h >= 0 ? "text-success-dark" : "text-error"}`}>
-            {biggestMover.change_24h >= 0 ? <TrendingUp size={11} className="inline mr-0.5" /> : <TrendingDown size={11} className="inline mr-0.5" />}
-            {biggestMover.change_24h > 0 ? "+" : ""}{biggestMover.change_24h}%
-          </p>
-        </button>
-
-        <button onClick={() => setActiveModule("competitors")} className="rounded-lg px-3 py-2.5 bg-white border border-neutral-200 text-left hover:border-brand-primary transition-colors">
-          <p className="text-[9px] font-semibold text-neutral-400 uppercase">{lang === "pt" ? "Sinais" : "Signals"}</p>
-          <p className="text-[20px] font-bold text-neutral-900 leading-tight mt-0.5">{totalSignals}</p>
-          <p className="text-[10px] text-neutral-400">{mockCompetitors.length} {lang === "pt" ? "concorrentes" : "competitors"}</p>
+          {kpis.topMover ? (
+            <>
+              <p className="text-[14px] font-bold text-neutral-900 leading-tight mt-0.5">{kpis.topMover.name}</p>
+              <p className={`text-[11px] font-bold ${kpis.topMover.change >= 0 ? "text-success-dark" : "text-error"}`}>
+                {kpis.topMover.change >= 0 ? <TrendingUp size={11} className="inline mr-0.5" /> : <TrendingDown size={11} className="inline mr-0.5" />}
+                {kpis.topMover.change > 0 ? "+" : ""}{kpis.topMover.change.toFixed(1)}%
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-[14px] font-bold text-neutral-900 leading-tight mt-0.5">—</p>
+              <p className="text-[10px] text-neutral-400">Live</p>
+            </>
+          )}
         </button>
 
         <button onClick={() => setActiveModule("news")} className="rounded-lg px-3 py-2.5 bg-white border border-neutral-200 text-left hover:border-brand-primary transition-colors">
           <p className="text-[9px] font-semibold text-neutral-400 uppercase">{lang === "pt" ? "Notícias" : "News"}</p>
-          <p className="text-[20px] font-bold text-neutral-900 leading-tight mt-0.5">{mockNews.length}</p>
-          <p className="text-[10px] text-neutral-400">{lang === "pt" ? "ativas" : "active"}</p>
+          <p className="text-[20px] font-bold text-neutral-900 leading-tight mt-0.5">{kpis.newsCount}</p>
+          <p className="text-[10px] text-neutral-400">{lang === "pt" ? "indexadas" : "indexed"}</p>
         </button>
 
         <button onClick={() => setActiveModule("events")} className="rounded-lg px-3 py-2.5 bg-white border border-neutral-200 text-left hover:border-brand-primary transition-colors">
           <p className="text-[9px] font-semibold text-neutral-400 uppercase">{lang === "pt" ? "Eventos" : "Events"}</p>
-          <p className="text-[20px] font-bold text-neutral-900 leading-tight mt-0.5">{upcomingEvents}</p>
+          <p className="text-[20px] font-bold text-neutral-900 leading-tight mt-0.5">{kpis.eventsCount}</p>
           <p className="text-[10px] text-neutral-400">{lang === "pt" ? "próximos" : "upcoming"}</p>
-        </button>
-
-        <button onClick={() => setActiveModule("contentHub")} className="rounded-lg px-3 py-2.5 bg-brand-surface/20 border border-brand-light text-left hover:border-brand-primary transition-colors">
-          <p className="text-[9px] font-semibold text-neutral-400 uppercase">{lang === "pt" ? "Conteúdo" : "Content"}</p>
-          <p className="text-[20px] font-bold text-neutral-900 leading-tight mt-0.5">{publishedThisMonth}</p>
-          <p className="text-[10px] text-brand-primary font-medium">{topicsInPipeline} {lang === "pt" ? "pautas" : "topics"}</p>
         </button>
 
         <button onClick={() => setActiveModule("recuperacao")} className="rounded-lg px-3 py-2.5 bg-error-light/20 border border-error-light/50 text-left hover:border-error transition-colors">
           <p className="text-[9px] font-semibold text-error/70 uppercase">{lang === "pt" ? "Rec. Judicial" : "Judicial Rec."}</p>
-          <p className="text-[20px] font-bold text-error-dark leading-tight mt-0.5">{rjAlerts}</p>
+          <p className="text-[20px] font-bold text-error-dark leading-tight mt-0.5">{kpis.rjCount}</p>
           <p className="text-[10px] text-error/60">{lang === "pt" ? "processos" : "cases"}</p>
         </button>
 
         <button onClick={() => setActiveModule("retailers")} className="rounded-lg px-3 py-2.5 bg-white border border-neutral-200 text-left hover:border-brand-primary transition-colors">
           <p className="text-[9px] font-semibold text-neutral-400 uppercase">{lang === "pt" ? "Revendas" : "Retailers"}</p>
-          <p className="text-[20px] font-bold text-neutral-900 leading-tight mt-0.5">23k+</p>
-          <p className="text-[10px] text-neutral-400">{numRetailers.toLocaleString()} {lang === "pt" ? "canais" : "channels"}</p>
+          <p className="text-[20px] font-bold text-neutral-900 leading-tight mt-0.5">
+            {kpis.retailersCount > 1000 ? `${(kpis.retailersCount / 1000).toFixed(0)}k+` : kpis.retailersCount}
+          </p>
+          <p className="text-[10px] text-neutral-400">{lang === "pt" ? "canais" : "channels"}</p>
         </button>
 
         <button onClick={() => setActiveModule("dataSources")} className="rounded-lg px-3 py-2.5 bg-neutral-900 text-left hover:bg-black transition-colors">
           <p className="text-[9px] font-semibold text-neutral-500 uppercase">{lang === "pt" ? "Dados" : "Data"}</p>
-          <p className="text-[20px] font-bold text-white leading-tight mt-0.5">{healthyCt}/{totalSources}</p>
-          <div className="flex items-center gap-0.5 mt-0.5">
-            {mockDataSources.slice(0, 6).map((s) => (
-              <div key={s.id} className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: s.status === "healthy" ? "#4CAF50" : s.status === "warning" ? "#FF9800" : "#F44336" }} />
-            ))}
-          </div>
+          <p className="text-[20px] font-bold text-white leading-tight mt-0.5">{kpis.sourcesHealthy}/{kpis.sourcesTotal}</p>
+          <p className="text-[10px] text-neutral-500">{lang === "pt" ? "fontes ativas" : "active sources"}</p>
+        </button>
+
+        <button onClick={() => setActiveModule("contentHub")} className="rounded-lg px-3 py-2.5 bg-brand-surface/20 border border-brand-light text-left hover:border-brand-primary transition-colors">
+          <p className="text-[9px] font-semibold text-neutral-400 uppercase">{lang === "pt" ? "Conteúdo" : "Content"}</p>
+          <p className="text-[14px] font-bold text-neutral-900 leading-tight mt-0.5">AgriSafe</p>
+          <p className="text-[10px] text-brand-primary font-medium">{lang === "pt" ? "Central" : "Hub"}</p>
         </button>
       </div>
 
-      {/* Intelligence Map */}
+      {/* Intelligence Map — fully live data */}
       <div className="bg-white rounded-lg border border-neutral-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
         <div className="p-4 border-b border-neutral-200 flex items-center justify-between bg-neutral-50">
           <div className="flex items-center gap-2">
             <h3 className="text-[15px] font-bold text-neutral-900">{lang === "pt" ? "Mapa de Inteligência Integrada" : "Integrated Intelligence Map"}</h3>
+            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-brand-primary/10 text-brand-primary uppercase tracking-wider">Live</span>
           </div>
-          <p className="text-[12px] text-neutral-500 hidden sm:block">{lang === "pt" ? "Eventos, Revendas & Alertas" : "Events, Retailers & Alerts"}</p>
+          <p className="text-[12px] text-neutral-500 hidden sm:block">{lang === "pt" ? "Eventos, Revendas, Mercado & Clima" : "Events, Retailers, Market & Weather"}</p>
         </div>
-        <DashboardMap events={mockEvents} liveEvents={liveEvents} retailers={mockRetailers.slice(0, 4)} alerts={highAlerts} lang={lang} />
+        <DashboardMap lang={lang} />
       </div>
 
       {/* Notícias Agrícolas — Cotações + News side by side */}

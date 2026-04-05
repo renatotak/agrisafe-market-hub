@@ -34,14 +34,6 @@ interface SidebarSection {
 
 const sections: SidebarSection[] = [
   {
-    titlePt: "Ingest\u00e3o de Dados",
-    titleEn: "Data Ingestion",
-    icon: "cloud_sync",
-    items: [
-      { id: "dataSources", icon: Database, labelKey: "dataSources" },
-    ],
-  },
-  {
     titlePt: "Intelig\u00eancia de Mercado",
     titleEn: "Market Intelligence",
     icon: "insights",
@@ -76,6 +68,7 @@ const sections: SidebarSection[] = [
     titleEn: "Knowledge",
     icon: "psychology",
     items: [
+      { id: "dataSources", icon: Database, labelKey: "dataSources" },
       { id: "knowledgeBase", icon: Brain, labelKey: "knowledgeBase" },
     ],
   },

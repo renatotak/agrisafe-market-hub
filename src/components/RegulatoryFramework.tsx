@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Lang, t } from "@/lib/i18n";
+import { supabase } from "@/lib/supabase";
 import { mockRegulatoryNorms } from "@/data/mock";
 import { Badge } from "@/components/ui/Badge";
 import { MockBadge } from "@/components/ui/MockBadge";
@@ -55,7 +56,23 @@ export function RegulatoryFramework({ lang }: { lang: Lang }) {
   const tr = t(lang);
   const [bodyFilter, setBodyFilter] = useState("");
   const [impactFilter, setImpactFilter] = useState("");
-  const norms = mockRegulatoryNorms;
+  const [norms, setNorms] = useState<any[]>([]);
+  const [isMock, setIsMock] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    supabase.from("regulatory_norms").select("*").order("published_at", { ascending: false }).limit(50)
+      .then(({ data }) => {
+        if (data && data.length > 0) {
+          setNorms(data);
+          setIsMock(false);
+        } else {
+          setNorms(mockRegulatoryNorms);
+          setIsMock(true);
+        }
+        setLoading(false);
+      });
+  }, []);
 
   const filtered = norms.filter((n) => {
     if (bodyFilter && n.body !== bodyFilter) return false;
@@ -73,7 +90,7 @@ export function RegulatoryFramework({ lang }: { lang: Lang }) {
             <h2 className="text-[20px] font-bold text-neutral-900">{tr.regulatory.title}</h2>
             <p className="text-[12px] text-neutral-500 mt-0.5">{tr.regulatory.subtitle}</p>
           </div>
-          <MockBadge />
+          {isMock && <MockBadge />}
         </div>
       </div>
 
@@ -164,7 +181,7 @@ export function RegulatoryFramework({ lang }: { lang: Lang }) {
 
               <div className="flex items-center justify-between">
                 <div className="flex flex-wrap gap-1.5">
-                  {norm.affected_areas.map((area) => (
+                  {(norm.affected_areas || []).map((area: string) => (
                     <span key={area} className="text-[10px] bg-neutral-100 text-neutral-700 px-2 py-0.5 rounded-full font-medium">
                       {AREA_LABELS[area]?.[lang === "pt" ? "pt" : "en"] || area}
                     </span>
