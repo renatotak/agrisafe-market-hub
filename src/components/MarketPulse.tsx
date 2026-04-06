@@ -4,29 +4,17 @@ import { useEffect, useState, useMemo } from "react";
 import { Lang, t } from "@/lib/i18n";
 import { supabase } from "@/lib/supabase";
 import {
-  TrendingUp, TrendingDown, Minus, RefreshCw, Loader2, Zap,
-  ExternalLink, MapPin, Globe, Truck, Layers, BarChart3,
-  Calendar, Sprout,
+  TrendingUp, TrendingDown, RefreshCw, Loader2, Zap,
+  ExternalLink, MapPin, Globe, Truck, Layers, BarChart3, Sprout,
 } from "lucide-react";
 import { CommodityMap } from "@/components/CommodityMap";
 import { NACotacoesWidget } from "@/components/NACotacoesWidget";
 import {
-  AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   CartesianGrid, Cell,
 } from "recharts";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
-interface CommodityPrice {
-  id: string;
-  name_pt: string;
-  name_en: string;
-  price: number;
-  unit: string;
-  change_24h: number;
-  source: string;
-  last_update: string;
-}
 
 interface MarketIndicator {
   id: string;
@@ -53,13 +41,25 @@ interface RegionalPrice {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const CULTURES = [
-  { slug: "soja",       label: "Soja",      en: "Soybean", color: "#5B7A2F", region: "BR (CEPEA)", tvSymbol: "CBOT:ZS1!", intlMarket: "CBOT — Chicago" },
-  { slug: "milho",      label: "Milho",     en: "Corn",    color: "#E8722A", region: "BR (CEPEA)", tvSymbol: "CBOT:ZC1!", intlMarket: "CBOT — Chicago" },
-  { slug: "cafe",       label: "Café",      en: "Coffee",  color: "#6F4E37", region: "BR (CEPEA)", tvSymbol: "ICEUS:KC1!", intlMarket: "ICE US — New York" },
-  { slug: "boi-gordo",  label: "Boi Gordo", en: "Cattle",  color: "#8B4513", region: "BR (Scot)",  tvSymbol: "BMFBOVESPA:BGI1!", intlMarket: "B3 — São Paulo" },
-  { slug: "trigo",      label: "Trigo",     en: "Wheat",   color: "#DAA520", region: "BR",         tvSymbol: "CBOT:ZW1!", intlMarket: "CBOT — Chicago" },
-  { slug: "algodao",    label: "Algodão",   en: "Cotton",  color: "#7FA02B", region: "BR (IMEA)",  tvSymbol: "ICEUS:CT1!", intlMarket: "ICE US — New York" },
+interface CultureMeta {
+  slug: string;
+  label: string;
+  en: string;
+  color: string;
+  region: string;
+  tvSymbol: string;
+  intlMarket: string;
+  intlUnit: string;       // CME/ICE original unit
+  brUnit: string;         // BR physical unit
+}
+
+const CULTURES: CultureMeta[] = [
+  { slug: "soja",       label: "Soja",      en: "Soybean", color: "#5B7A2F", region: "BR (CEPEA)", tvSymbol: "CBOT_MINI:ZS1!", intlMarket: "CBOT — Chicago",       intlUnit: "US¢/bushel", brUnit: "R$/sc 60kg" },
+  { slug: "milho",      label: "Milho",     en: "Corn",    color: "#E8722A", region: "BR (CEPEA)", tvSymbol: "CBOT_MINI:ZC1!", intlMarket: "CBOT — Chicago",       intlUnit: "US¢/bushel", brUnit: "R$/sc 60kg" },
+  { slug: "cafe",       label: "Café",      en: "Coffee",  color: "#6F4E37", region: "BR (CEPEA)", tvSymbol: "ICEUS:KC1!",     intlMarket: "ICE US — New York",    intlUnit: "US¢/lb",     brUnit: "R$/sc 60kg" },
+  { slug: "boi-gordo",  label: "Boi Gordo", en: "Cattle",  color: "#8B4513", region: "BR (B3)",    tvSymbol: "BMFBOVESPA:BGI1!", intlMarket: "B3 — São Paulo",    intlUnit: "R$/@",       brUnit: "R$/@"       },
+  { slug: "trigo",      label: "Trigo",     en: "Wheat",   color: "#DAA520", region: "BR (RS/PR)", tvSymbol: "CBOT_MINI:ZW1!", intlMarket: "CBOT — Chicago",       intlUnit: "US¢/bushel", brUnit: "R$/sc 60kg" },
+  { slug: "algodao",    label: "Algodão",   en: "Cotton",  color: "#7FA02B", region: "BR (IMEA)",  tvSymbol: "ICEUS:CT1!",     intlMarket: "ICE US — New York",    intlUnit: "US¢/lb",     brUnit: "R$/@"       },
 ];
 
 const REGIONS = [
@@ -102,37 +102,100 @@ function formatRelativeTime(iso: string, lang: Lang): string {
   return date.toLocaleDateString(lang === "pt" ? "pt-BR" : "en-US", { day: "numeric", month: "short" });
 }
 
+// ─── Live culture summary computed from /api/prices-na/regional ───────────────
+
+interface LiveCultureSummary {
+  slug: string;
+  meta: CultureMeta;
+  count: number;          // # of valid praças
+  avgPrice: number;       // BR spot average
+  minPrice: number;
+  maxPrice: number;
+  median: number;
+  avgVariation: number;   // mean variation across praças
+  unit: string;
+  closingDate: string;    // from NA, e.g. "06/04/2026"
+  topGainers: number;     // praças up
+  topLosers: number;      // praças down
+  rawPraças: RegionalPrice[]; // only entries with valid coordinates (no futures)
+}
+
+async function fetchCultureSummary(slug: string): Promise<LiveCultureSummary | null> {
+  const meta = CULTURES.find((c) => c.slug === slug);
+  if (!meta) return null;
+  try {
+    const res = await fetch(`/api/prices-na/regional?commodity=${slug}`);
+    const json = await res.json();
+    if (!json.success || !Array.isArray(json.data)) return null;
+    // Filter strictly: only physical praças (must have lat/lng + valid city + valid price)
+    const praças: RegionalPrice[] = (json.data as RegionalPrice[]).filter(
+      (p) =>
+        p.price !== null && p.price > 0 &&
+        p.lat !== null && p.lng !== null &&
+        p.city && p.city.length > 0 &&
+        p.uf && p.uf.length === 2
+    );
+    if (praças.length === 0) return null;
+    const prices = praças.map((p) => p.price as number).sort((a, b) => a - b);
+    const sum = prices.reduce((a, b) => a + b, 0);
+    const avg = sum / prices.length;
+    const median = prices[Math.floor(prices.length / 2)];
+    const variations = praças.map((p) => p.variation || 0);
+    const avgVar = variations.reduce((a, b) => a + b, 0) / variations.length;
+    return {
+      slug,
+      meta,
+      count: praças.length,
+      avgPrice: avg,
+      minPrice: prices[0],
+      maxPrice: prices[prices.length - 1],
+      median,
+      avgVariation: avgVar,
+      unit: json.unit || meta.brUnit,
+      closingDate: json.closing_date || "",
+      topGainers: praças.filter((p) => p.direction === "up").length,
+      topLosers: praças.filter((p) => p.direction === "down").length,
+      rawPraças: praças,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function useLiveCultureSummaries() {
+  const [summaries, setSummaries] = useState<Record<string, LiveCultureSummary>>({});
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    setLoading(true);
+    Promise.all(CULTURES.map((c) => fetchCultureSummary(c.slug))).then((results) => {
+      const map: Record<string, LiveCultureSummary> = {};
+      results.forEach((r) => { if (r) map[r.slug] = r; });
+      setSummaries(map);
+      setLoading(false);
+    });
+  }, []);
+  return { summaries, loading };
+}
+
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 export function MarketPulse({ lang }: { lang: Lang }) {
   const tr = t(lang);
-  const [commodities, setCommodities] = useState<CommodityPrice[]>([]);
   const [indicators, setIndicators] = useState<MarketIndicator[]>([]);
-  const [loading, setLoading] = useState(true);
   const [activeAnalysis, setActiveAnalysis] = useState<"culture" | "region">("culture");
   const [activeCulture, setActiveCulture] = useState<string>("soja");
   const [activeRegion, setActiveRegion] = useState<string>("MT");
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  const fetchData = async () => {
-    setLoading(true);
-    const [{ data: comms }, { data: inds }] = await Promise.all([
-      supabase.from("commodity_prices").select("*").order("id"),
-      supabase.from("market_indicators").select("*").order("id"),
-    ]);
-    setCommodities(comms || []);
-    setIndicators(inds || []);
-    setLoading(false);
-  };
+  // Live spot data for all 6 cultures (BR physical praças only)
+  const { summaries, loading: summariesLoading } = useLiveCultureSummaries();
 
-  useEffect(() => { fetchData(); }, []);
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 size={32} className="animate-spin text-brand-primary" />
-      </div>
-    );
-  }
+  // Macro indicators from Supabase (USD/BRL, Selic, etc.)
+  useEffect(() => {
+    supabase.from("market_indicators").select("*").order("id").then(({ data }) => {
+      setIndicators(data || []);
+    });
+  }, [refreshKey]);
 
   return (
     <div>
@@ -143,7 +206,7 @@ export function MarketPulse({ lang }: { lang: Lang }) {
           <p className="text-[12px] text-neutral-500 mt-0.5">{tr.marketPulse.subtitle}</p>
         </div>
         <button
-          onClick={fetchData}
+          onClick={() => setRefreshKey((k) => k + 1)}
           className="flex items-center gap-2 px-4 py-2 bg-brand-primary text-white rounded-md hover:bg-brand-dark font-medium text-[13px] transition-colors"
         >
           <RefreshCw size={14} />
@@ -151,8 +214,8 @@ export function MarketPulse({ lang }: { lang: Lang }) {
         </button>
       </div>
 
-      {/* HIGHLIGHTS BOX — top of page, always visible */}
-      <MarketHighlights commodities={commodities} indicators={indicators} lang={lang} />
+      {/* HIGHLIGHTS BOX — live data */}
+      <MarketHighlights summaries={summaries} loading={summariesLoading} indicators={indicators} lang={lang} />
 
       {/* Analysis selector */}
       <div className="bg-white rounded-lg border border-neutral-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-1 mb-4 flex items-center gap-1">
@@ -181,7 +244,7 @@ export function MarketPulse({ lang }: { lang: Lang }) {
         <CultureAnalysis
           activeCulture={activeCulture}
           onCultureChange={setActiveCulture}
-          commodities={commodities}
+          summary={summaries[activeCulture]}
           lang={lang}
         />
       ) : (
@@ -205,25 +268,26 @@ export function MarketPulse({ lang }: { lang: Lang }) {
 // ═════════════════════════════════════════════════════════════════════════════
 
 function MarketHighlights({
-  commodities,
+  summaries,
+  loading,
   indicators,
   lang,
 }: {
-  commodities: CommodityPrice[];
+  summaries: Record<string, LiveCultureSummary>;
+  loading: boolean;
   indicators: MarketIndicator[];
   lang: Lang;
 }) {
-  const sorted = [...commodities].sort((a, b) => Math.abs(b.change_24h) - Math.abs(a.change_24h));
-  const topGainer = [...commodities].sort((a, b) => b.change_24h - a.change_24h)[0];
-  const topLoser = [...commodities].sort((a, b) => a.change_24h - b.change_24h)[0];
-  const mostVolatile = sorted[0];
-  const ruptures = commodities.filter((c) => Math.abs(c.change_24h) > 3).length;
-
-  if (commodities.length === 0) return null;
+  const arr = Object.values(summaries);
+  const topGainer = [...arr].sort((a, b) => b.avgVariation - a.avgVariation)[0];
+  const topLoser = [...arr].sort((a, b) => a.avgVariation - b.avgVariation)[0];
+  const mostVolatile = [...arr].sort((a, b) => Math.abs(b.avgVariation) - Math.abs(a.avgVariation))[0];
+  const ruptures = arr.filter((c) => Math.abs(c.avgVariation) > 2).length;
+  const latestDate = arr.find((s) => s.closingDate)?.closingDate || "";
 
   return (
     <div className="bg-gradient-to-br from-neutral-900 via-neutral-900 to-[#1a2818] rounded-xl border border-neutral-800 p-5 mb-5 shadow-lg">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <div className="flex items-center gap-2">
           <Zap size={14} className="text-amber-400" />
           <h3 className="text-[12px] font-bold text-neutral-300 uppercase tracking-[0.1em]">
@@ -232,63 +296,49 @@ function MarketHighlights({
           <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 uppercase tracking-wider">Live</span>
         </div>
         <span className="text-[10px] text-neutral-500">
-          {lang === "pt" ? "Atualizado" : "Updated"}: {commodities[0]?.last_update ? new Date(commodities[0].last_update).toLocaleDateString(lang === "pt" ? "pt-BR" : "en-US") : "—"}
+          {lang === "pt" ? "Fechamento" : "Closing"}: {latestDate || (loading ? "..." : "—")}
         </span>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        {topGainer && (
-          <HighlightCard
-            label={lang === "pt" ? "Maior Alta" : "Top Gainer"}
-            icon={<TrendingUp size={14} />}
-            color="emerald"
-            commodity={topGainer}
-            lang={lang}
-          />
-        )}
-        {topLoser && (
-          <HighlightCard
-            label={lang === "pt" ? "Maior Queda" : "Top Loser"}
-            icon={<TrendingDown size={14} />}
-            color="rose"
-            commodity={topLoser}
-            lang={lang}
-          />
-        )}
-        {mostVolatile && (
-          <HighlightCard
-            label={lang === "pt" ? "Mais Volátil" : "Most Volatile"}
-            icon={<Zap size={14} />}
-            color="amber"
-            commodity={mostVolatile}
-            lang={lang}
-          />
-        )}
-        <div className="bg-neutral-800/50 border border-neutral-700 rounded-lg p-3">
-          <div className="flex items-center gap-1.5 mb-1.5">
-            <Layers size={12} className="text-blue-400" />
-            <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">
-              {lang === "pt" ? "Indicadores" : "Indicators"}
-            </p>
-          </div>
-          <div className="space-y-1">
-            {indicators.slice(0, 2).map((ind) => (
-              <div key={ind.id} className="flex items-center justify-between text-[11px]">
-                <span className="text-neutral-400">{lang === "pt" ? ind.name_pt : ind.name_en}</span>
-                <span className="font-bold text-white font-mono">{ind.value}</span>
-              </div>
-            ))}
-          </div>
-          {ruptures > 0 && (
-            <div className="mt-2 pt-2 border-t border-neutral-700/50 flex items-center gap-1">
-              <Zap size={10} className="text-amber-400" />
-              <span className="text-[10px] text-amber-300 font-semibold">
-                {ruptures} {lang === "pt" ? "alertas ativos" : "active alerts"}
-              </span>
-            </div>
-          )}
+      {loading ? (
+        <div className="flex items-center justify-center py-8">
+          <Loader2 size={20} className="animate-spin text-neutral-500" />
         </div>
-      </div>
+      ) : arr.length === 0 ? (
+        <p className="text-center text-neutral-500 text-[12px] py-6">
+          {lang === "pt" ? "Sem dados ao vivo no momento" : "No live data available"}
+        </p>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {topGainer && <HighlightCard label={lang === "pt" ? "Maior Alta" : "Top Gainer"} icon={<TrendingUp size={14} />} color="emerald" summary={topGainer} lang={lang} />}
+          {topLoser && <HighlightCard label={lang === "pt" ? "Maior Queda" : "Top Loser"} icon={<TrendingDown size={14} />} color="rose" summary={topLoser} lang={lang} />}
+          {mostVolatile && <HighlightCard label={lang === "pt" ? "Mais Volátil" : "Most Volatile"} icon={<Zap size={14} />} color="amber" summary={mostVolatile} lang={lang} />}
+          <div className="bg-neutral-800/50 border border-neutral-700 rounded-lg p-3">
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <Layers size={12} className="text-blue-400" />
+              <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">
+                {lang === "pt" ? "Indicadores Macro" : "Macro Indicators"}
+              </p>
+            </div>
+            <div className="space-y-1">
+              {indicators.slice(0, 2).map((ind) => (
+                <div key={ind.id} className="flex items-center justify-between text-[11px]">
+                  <span className="text-neutral-400">{lang === "pt" ? ind.name_pt : ind.name_en}</span>
+                  <span className="font-bold text-white font-mono">{ind.value}</span>
+                </div>
+              ))}
+            </div>
+            {ruptures > 0 && (
+              <div className="mt-2 pt-2 border-t border-neutral-700/50 flex items-center gap-1">
+                <Zap size={10} className="text-amber-400" />
+                <span className="text-[10px] text-amber-300 font-semibold">
+                  {ruptures} {lang === "pt" ? "movimentos atípicos" : "unusual moves"}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -297,13 +347,13 @@ function HighlightCard({
   label,
   icon,
   color,
-  commodity,
+  summary,
   lang,
 }: {
   label: string;
   icon: React.ReactNode;
   color: "emerald" | "rose" | "amber";
-  commodity: CommodityPrice;
+  summary: LiveCultureSummary;
   lang: Lang;
 }) {
   const colorClasses: Record<string, string> = {
@@ -316,7 +366,7 @@ function HighlightCard({
     rose:    "text-rose-300",
     amber:   "text-amber-300",
   };
-  const isUp = commodity.change_24h > 0;
+  const isUp = summary.avgVariation > 0;
 
   return (
     <div className={`bg-gradient-to-br ${colorClasses[color]} to-neutral-800/50 border rounded-lg p-3`}>
@@ -325,28 +375,28 @@ function HighlightCard({
         <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">{label}</p>
       </div>
       <p className="text-[13px] font-semibold text-white truncate">
-        {lang === "pt" ? commodity.name_pt : commodity.name_en}
+        {lang === "pt" ? summary.meta.label : summary.meta.en}
       </p>
       <div className="flex items-baseline gap-1.5 mt-0.5">
         <span className="text-[20px] font-bold text-white font-mono tracking-tight">
-          {formatPrice(commodity.price, lang)}
+          R$ {formatPrice(summary.avgPrice, lang)}
         </span>
-        <span className="text-[10px] text-neutral-400">{commodity.unit}</span>
+        <span className="text-[10px] text-neutral-400">{summary.meta.brUnit}</span>
       </div>
       <div className="flex items-center justify-between mt-1">
-        <span className={`text-[12px] font-bold ${isUp ? "text-emerald-400" : commodity.change_24h < 0 ? "text-rose-400" : "text-neutral-500"}`}>
-          {isUp ? "▲" : commodity.change_24h < 0 ? "▼" : "—"} {isUp ? "+" : ""}{commodity.change_24h.toFixed(2)}%
+        <span className={`text-[12px] font-bold ${isUp ? "text-emerald-400" : summary.avgVariation < 0 ? "text-rose-400" : "text-neutral-500"}`}>
+          {isUp ? "▲" : summary.avgVariation < 0 ? "▼" : "—"} {isUp ? "+" : ""}{summary.avgVariation.toFixed(2)}%
         </span>
         <span className="text-[9px] text-neutral-500 font-medium">
-          {commodity.source}
+          NA / CEPEA
         </span>
       </div>
       <div className="mt-1.5 pt-1.5 border-t border-neutral-700/50 flex items-center justify-between text-[9px] text-neutral-500">
         <span className="flex items-center gap-0.5">
           <MapPin size={8} />
-          {lang === "pt" ? "BR Nacional" : "BR National"}
+          {summary.count} {lang === "pt" ? "praças BR" : "BR locations"}
         </span>
-        <span>{formatRelativeTime(commodity.last_update, lang)}</span>
+        <span>{summary.closingDate || formatRelativeTime(new Date().toISOString(), lang)}</span>
       </div>
     </div>
   );
@@ -359,58 +409,16 @@ function HighlightCard({
 function CultureAnalysis({
   activeCulture,
   onCultureChange,
-  commodities,
+  summary,
   lang,
 }: {
   activeCulture: string;
   onCultureChange: (slug: string) => void;
-  commodities: CommodityPrice[];
+  summary: LiveCultureSummary | undefined;
   lang: Lang;
 }) {
   const culture = CULTURES.find((c) => c.slug === activeCulture)!;
-  const [regionalData, setRegionalData] = useState<RegionalPrice[]>([]);
-  const [unit, setUnit] = useState<string>("");
-  const [closingDate, setClosingDate] = useState<string>("");
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    setLoading(true);
-    fetch(`/api/prices-na/regional?commodity=${activeCulture}`)
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.success && d.data) {
-          setRegionalData(d.data.filter((p: RegionalPrice) => p.price !== null));
-          setUnit(d.unit || "");
-          setClosingDate(d.closing_date || "");
-        } else {
-          setRegionalData([]);
-        }
-      })
-      .catch(() => setRegionalData([]))
-      .finally(() => setLoading(false));
-  }, [activeCulture]);
-
-  // Logistics spread analysis
-  const logistics = useMemo(() => {
-    const valid = regionalData.filter((p) => p.price !== null);
-    if (valid.length < 2) return null;
-    const sorted = [...valid].sort((a, b) => (a.price || 0) - (b.price || 0));
-    const cheapest = sorted.slice(0, 5);
-    const expensive = sorted.slice(-5).reverse();
-    const min = sorted[0].price || 0;
-    const max = sorted[sorted.length - 1].price || 0;
-    const spread = max - min;
-    const spreadPct = min > 0 ? (spread / min) * 100 : 0;
-    return { cheapest, expensive, min, max, spread, spreadPct };
-  }, [regionalData]);
-
-  // Find the matching commodity record (BCB)
-  const cultureMap: Record<string, string> = {
-    soja: "soy", milho: "corn", cafe: "coffee",
-    "boi-gordo": "cattle", trigo: "wheat", algodao: "cotton",
-  };
-  const bcbId = cultureMap[activeCulture];
-  const bcbPrice = commodities.find((c) => c.id === bcbId);
+  const isUp = summary && summary.avgVariation > 0;
 
   return (
     <div className="space-y-4">
@@ -432,51 +440,67 @@ function CultureAnalysis({
       </div>
 
       {/* Headline price card */}
-      {bcbPrice && (
+      {summary ? (
         <div className="bg-white rounded-lg border border-neutral-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5">
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>
               <div className="flex items-center gap-2 mb-1">
                 <span className="w-3 h-3 rounded-full" style={{ backgroundColor: culture.color }} />
                 <h3 className="text-[16px] font-bold text-neutral-900">
-                  {lang === "pt" ? bcbPrice.name_pt : bcbPrice.name_en}
+                  {lang === "pt" ? culture.label : culture.en}
                 </h3>
                 <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 uppercase">Live</span>
-              </div>
-              <div className="flex items-baseline gap-2">
-                <span className="text-[36px] font-bold text-neutral-900 tracking-tight font-mono">
-                  R$ {formatPrice(bcbPrice.price, lang)}
+                <span className="text-[10px] text-neutral-500">
+                  {lang === "pt" ? "Média de" : "Average of"} {summary.count} {lang === "pt" ? "praças BR" : "BR locations"}
                 </span>
-                <span className="text-[14px] text-neutral-500">{bcbPrice.unit}</span>
-                <span className={`text-[16px] font-bold ml-2 ${
-                  bcbPrice.change_24h > 0 ? "text-emerald-600" :
-                  bcbPrice.change_24h < 0 ? "text-rose-600" : "text-neutral-500"
-                }`}>
-                  {bcbPrice.change_24h > 0 ? "▲ +" : bcbPrice.change_24h < 0 ? "▼ " : "— "}
-                  {bcbPrice.change_24h.toFixed(2)}%
+              </div>
+              <div className="flex items-baseline gap-2 flex-wrap">
+                <span className="text-[36px] font-bold text-neutral-900 tracking-tight font-mono">
+                  R$ {formatPrice(summary.avgPrice, lang)}
+                </span>
+                <span className="text-[14px] text-neutral-500">{summary.meta.brUnit}</span>
+                <span className={`text-[16px] font-bold ml-2 ${isUp ? "text-emerald-600" : summary.avgVariation < 0 ? "text-rose-600" : "text-neutral-500"}`}>
+                  {isUp ? "▲ +" : summary.avgVariation < 0 ? "▼ " : "— "}
+                  {summary.avgVariation.toFixed(2)}%
+                </span>
+              </div>
+              <div className="flex items-center gap-3 mt-1.5 text-[11px]">
+                <span className="text-neutral-500">
+                  {lang === "pt" ? "Min" : "Min"}: <span className="font-bold text-emerald-700">R$ {formatPrice(summary.minPrice, lang)}</span>
+                </span>
+                <span className="text-neutral-500">
+                  {lang === "pt" ? "Mediana" : "Median"}: <span className="font-bold text-neutral-700">R$ {formatPrice(summary.median, lang)}</span>
+                </span>
+                <span className="text-neutral-500">
+                  {lang === "pt" ? "Max" : "Max"}: <span className="font-bold text-rose-700">R$ {formatPrice(summary.maxPrice, lang)}</span>
                 </span>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-[11px] min-w-[200px]">
+            <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-[11px] min-w-[220px]">
               <div>
-                <p className="text-neutral-400 uppercase font-semibold text-[9px]">{lang === "pt" ? "Fonte" : "Source"}</p>
-                <p className="font-bold mt-0.5" style={{ color: SOURCE_COLORS[bcbPrice.source] || "#666" }}>{bcbPrice.source}</p>
+                <p className="text-neutral-400 uppercase font-semibold text-[9px]">{lang === "pt" ? "Fonte BR" : "BR Source"}</p>
+                <p className="font-bold mt-0.5" style={{ color: SOURCE_COLORS["Notícias Agrícolas"] }}>Notícias Agrícolas</p>
               </div>
               <div>
                 <p className="text-neutral-400 uppercase font-semibold text-[9px]">{lang === "pt" ? "Região" : "Region"}</p>
                 <p className="font-bold text-neutral-700 mt-0.5">{culture.region}</p>
               </div>
               <div>
-                <p className="text-neutral-400 uppercase font-semibold text-[9px]">{lang === "pt" ? "Atualização" : "Updated"}</p>
-                <p className="font-bold text-neutral-700 mt-0.5">{formatRelativeTime(bcbPrice.last_update, lang)}</p>
+                <p className="text-neutral-400 uppercase font-semibold text-[9px]">{lang === "pt" ? "Fechamento" : "Closing"}</p>
+                <p className="font-bold text-neutral-700 mt-0.5">{summary.closingDate || "—"}</p>
               </div>
               <div>
                 <p className="text-neutral-400 uppercase font-semibold text-[9px]">{lang === "pt" ? "Mercado Intl." : "Intl. Market"}</p>
                 <p className="font-bold text-neutral-700 mt-0.5">{culture.intlMarket}</p>
+                <p className="text-[9px] text-neutral-500">{culture.intlUnit}</p>
               </div>
             </div>
           </div>
+        </div>
+      ) : (
+        <div className="bg-white rounded-lg border border-neutral-200 p-8 flex items-center justify-center">
+          <Loader2 size={20} className="animate-spin text-neutral-400" />
         </div>
       )}
 
@@ -489,14 +513,14 @@ function CultureAnalysis({
             <h4 className="text-[12px] font-bold text-neutral-700 uppercase tracking-wider">
               {lang === "pt" ? "Preços por Região (BR)" : "Prices by Region (BR)"}
             </h4>
-            {closingDate && <span className="text-[10px] text-neutral-400 ml-auto">{closingDate}</span>}
+            {summary?.closingDate && <span className="text-[10px] text-neutral-400 ml-auto">{summary.closingDate}</span>}
           </div>
           <div className="h-[400px]">
             <CommodityMap lang={lang} />
           </div>
         </div>
 
-        {/* International TradingView chart */}
+        {/* International TradingView chart — uses free embed-widget */}
         <div className="bg-white rounded-lg border border-neutral-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
           <div className="px-4 py-3 border-b border-neutral-200 bg-neutral-50 flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -504,6 +528,7 @@ function CultureAnalysis({
               <h4 className="text-[12px] font-bold text-neutral-700 uppercase tracking-wider">
                 {lang === "pt" ? "Comparação Internacional" : "International Comparison"}
               </h4>
+              <span className="text-[10px] text-neutral-500">{culture.intlUnit}</span>
             </div>
             <a
               href={`https://www.tradingview.com/symbols/${culture.tvSymbol.replace(":", "-")}/`}
@@ -515,104 +540,178 @@ function CultureAnalysis({
             </a>
           </div>
           <div className="h-[400px]">
-            <iframe
-              key={culture.tvSymbol}
-              src={`https://s.tradingview.com/widgetembed/?symbol=${encodeURIComponent(culture.tvSymbol)}&interval=D&hidesidetoolbar=1&symboledit=0&saveimage=0&toolbarbg=f1f3f6&studies=&theme=light&style=2&timezone=America%2FSao_Paulo&locale=${lang === "pt" ? "br" : "en"}&utm_source=agsf-mkthub&utm_medium=widget`}
-              className="w-full h-full border-0"
-              allowTransparency
-              sandbox="allow-scripts allow-same-origin allow-popups"
-              loading="lazy"
-            />
+            <TradingViewSymbolOverview symbol={culture.tvSymbol} lang={lang} />
           </div>
         </div>
       </div>
 
-      {/* Logistics & Infrastructure spread analysis */}
-      {loading ? (
-        <div className="bg-white rounded-lg border border-neutral-200 p-8 flex items-center justify-center">
-          <Loader2 size={20} className="animate-spin text-neutral-400" />
-        </div>
-      ) : logistics ? (
-        <div className="bg-white rounded-lg border border-neutral-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
-          <div className="px-4 py-3 border-b border-neutral-200 bg-neutral-50 flex items-center gap-2">
-            <Truck size={14} className="text-brand-primary" />
-            <h4 className="text-[12px] font-bold text-neutral-700 uppercase tracking-wider">
-              {lang === "pt" ? "Logística & Infraestrutura" : "Logistics & Infrastructure"}
-            </h4>
-            <span className="text-[10px] text-neutral-400 ml-auto">
-              {regionalData.length} {lang === "pt" ? "praças" : "locations"} · {unit}
-            </span>
-          </div>
-
-          <div className="p-4 grid grid-cols-1 lg:grid-cols-3 gap-4">
-            {/* Spread KPI */}
-            <div className="bg-gradient-to-br from-amber-50 to-white border border-amber-200 rounded-lg p-4">
-              <p className="text-[10px] font-bold text-amber-700 uppercase mb-1">
-                {lang === "pt" ? "Spread Logístico" : "Logistics Spread"}
-              </p>
-              <p className="text-[28px] font-bold text-neutral-900 font-mono tracking-tight">
-                R$ {formatPrice(logistics.spread, lang)}
-              </p>
-              <p className="text-[11px] text-amber-700 font-semibold mt-1">
-                {logistics.spreadPct.toFixed(1)}% {lang === "pt" ? "diferença máx-mín" : "max-min gap"}
-              </p>
-              <p className="text-[10px] text-neutral-500 mt-2">
-                {lang === "pt"
-                  ? "Diferença entre praça mais cara e mais barata reflete custos de frete e infraestrutura."
-                  : "Gap between most/least expensive locations reflects freight and infrastructure costs."}
-              </p>
-            </div>
-
-            {/* Top 5 cheapest */}
-            <div>
-              <p className="text-[10px] font-bold text-emerald-700 uppercase mb-2 flex items-center gap-1">
-                <TrendingDown size={10} />
-                {lang === "pt" ? "5 Praças Mais Baratas" : "Top 5 Cheapest"}
-              </p>
-              <div className="space-y-1.5">
-                {logistics.cheapest.map((p, i) => (
-                  <div key={i} className="flex items-center gap-2 text-[11px]">
-                    <span className="w-4 text-neutral-400 font-mono">{i + 1}.</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-neutral-800 truncate">{p.city}/{p.uf}</p>
-                      {p.cooperative && <p className="text-[9px] text-neutral-400 truncate">{p.cooperative}</p>}
-                    </div>
-                    <span className="font-bold text-emerald-700 font-mono shrink-0">
-                      R$ {p.price?.toFixed(2)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Top 5 most expensive */}
-            <div>
-              <p className="text-[10px] font-bold text-rose-700 uppercase mb-2 flex items-center gap-1">
-                <TrendingUp size={10} />
-                {lang === "pt" ? "5 Praças Mais Caras" : "Top 5 Most Expensive"}
-              </p>
-              <div className="space-y-1.5">
-                {logistics.expensive.map((p, i) => (
-                  <div key={i} className="flex items-center gap-2 text-[11px]">
-                    <span className="w-4 text-neutral-400 font-mono">{i + 1}.</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-neutral-800 truncate">{p.city}/{p.uf}</p>
-                      {p.cooperative && <p className="text-[9px] text-neutral-400 truncate">{p.cooperative}</p>}
-                    </div>
-                    <span className="font-bold text-rose-700 font-mono shrink-0">
-                      R$ {p.price?.toFixed(2)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
+      {/* Logistics & Infrastructure — horizontal range chart */}
+      {summary && summary.count >= 2 ? (
+        <LogisticsSpreadChart summary={summary} lang={lang} />
       ) : (
         <div className="bg-white rounded-lg border border-neutral-200 p-8 text-center text-[12px] text-neutral-500">
           {lang === "pt" ? "Dados regionais insuficientes para análise logística." : "Insufficient regional data for logistics analysis."}
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── TradingView free symbol-overview widget ─────────────────────────────────
+
+function TradingViewSymbolOverview({ symbol, lang }: { symbol: string; lang: Lang }) {
+  const config = {
+    symbols: [["", symbol]],
+    chartOnly: false,
+    width: "100%",
+    height: "100%",
+    locale: lang === "pt" ? "br" : "en",
+    colorTheme: "light",
+    autosize: true,
+    showVolume: false,
+    showMA: false,
+    hideDateRanges: false,
+    hideMarketStatus: false,
+    hideSymbolLogo: true,
+    scalePosition: "right",
+    scaleMode: "Normal",
+    fontFamily: "-apple-system, BlinkMacSystemFont, sans-serif",
+    fontSize: "10",
+    noTimeScale: false,
+    valuesTracking: "1",
+    changeMode: "price-and-percent",
+    chartType: "area",
+    lineWidth: 2,
+    lineType: 0,
+    dateRanges: ["1d|1", "1m|30", "3m|60", "12m|1D", "60m|1W", "all|1M"],
+  };
+  const url = `https://s.tradingview.com/embed-widget/symbol-overview/?locale=${lang === "pt" ? "br" : "en"}#${encodeURIComponent(JSON.stringify(config))}`;
+  return (
+    <iframe
+      key={symbol}
+      src={url}
+      className="w-full h-full border-0"
+      allowTransparency
+      sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+      loading="lazy"
+      scrolling="no"
+    />
+  );
+}
+
+// ─── Logistics Spread — horizontal range chart ───────────────────────────────
+
+function LogisticsSpreadChart({ summary, lang }: { summary: LiveCultureSummary; lang: Lang }) {
+  // Take all geocoded praças, sort by price
+  const sorted = [...summary.rawPraças].sort((a, b) => (a.price || 0) - (b.price || 0));
+  const min = summary.minPrice;
+  const max = summary.maxPrice;
+  const range = max - min || 1;
+  const spread = max - min;
+  const spreadPct = min > 0 ? (spread / min) * 100 : 0;
+  const cheapest = sorted[0];
+  const expensive = sorted[sorted.length - 1];
+  const median = summary.median;
+  const avg = summary.avgPrice;
+
+  // Compute position % for each praça in 0-100 scale
+  const points = sorted.map((p) => ({
+    ...p,
+    pct: range > 0 ? (((p.price as number) - min) / range) * 100 : 50,
+  }));
+
+  return (
+    <div className="bg-white rounded-lg border border-neutral-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
+      <div className="px-4 py-3 border-b border-neutral-200 bg-neutral-50 flex items-center gap-2 flex-wrap">
+        <Truck size={14} className="text-brand-primary" />
+        <h4 className="text-[12px] font-bold text-neutral-700 uppercase tracking-wider">
+          {lang === "pt" ? "Logística & Infraestrutura" : "Logistics & Infrastructure"}
+        </h4>
+        <span className="text-[10px] text-neutral-400 ml-auto">
+          {summary.count} {lang === "pt" ? "praças" : "locations"} · {summary.unit}
+        </span>
+      </div>
+
+      <div className="p-5 space-y-5">
+        {/* Spread summary */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="bg-gradient-to-br from-emerald-50 to-white border border-emerald-200 rounded-lg p-3">
+            <p className="text-[10px] font-bold text-emerald-700 uppercase mb-1">
+              {lang === "pt" ? "Mais Barata" : "Cheapest"}
+            </p>
+            <p className="text-[20px] font-bold text-emerald-800 font-mono">R$ {formatPrice(min, lang)}</p>
+            <p className="text-[11px] font-semibold text-neutral-800 truncate">{cheapest.city}/{cheapest.uf}</p>
+            {cheapest.cooperative && <p className="text-[9px] text-neutral-500 truncate">{cheapest.cooperative}</p>}
+          </div>
+          <div className="bg-gradient-to-br from-amber-50 to-white border border-amber-200 rounded-lg p-3">
+            <p className="text-[10px] font-bold text-amber-700 uppercase mb-1">
+              {lang === "pt" ? "Spread (Dispersão)" : "Spread"}
+            </p>
+            <p className="text-[20px] font-bold text-amber-800 font-mono">R$ {formatPrice(spread, lang)}</p>
+            <p className="text-[11px] font-semibold text-amber-700">{spreadPct.toFixed(1)}% {lang === "pt" ? "máx-mín" : "max-min"}</p>
+            <p className="text-[9px] text-neutral-500">
+              {lang === "pt" ? "Reflexo de custo de frete & infraestrutura" : "Reflects freight & infrastructure cost"}
+            </p>
+          </div>
+          <div className="bg-gradient-to-br from-rose-50 to-white border border-rose-200 rounded-lg p-3">
+            <p className="text-[10px] font-bold text-rose-700 uppercase mb-1">
+              {lang === "pt" ? "Mais Cara" : "Most Expensive"}
+            </p>
+            <p className="text-[20px] font-bold text-rose-800 font-mono">R$ {formatPrice(max, lang)}</p>
+            <p className="text-[11px] font-semibold text-neutral-800 truncate">{expensive.city}/{expensive.uf}</p>
+            {expensive.cooperative && <p className="text-[9px] text-neutral-500 truncate">{expensive.cooperative}</p>}
+          </div>
+        </div>
+
+        {/* Range visualization — horizontal "candle" with all praças as dots */}
+        <div>
+          <p className="text-[10px] font-bold text-neutral-500 uppercase mb-3 tracking-wider">
+            {lang === "pt" ? "Distribuição de Preços" : "Price Distribution"}
+          </p>
+          <div className="relative h-20">
+            {/* Background gradient bar */}
+            <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-3 rounded-full"
+              style={{ background: "linear-gradient(to right, #047857 0%, #f59e0b 50%, #be123c 100%)" }} />
+            {/* Mean marker */}
+            <div className="absolute top-1/2 -translate-y-1/2 w-0.5 h-7 bg-neutral-800"
+              style={{ left: `${range > 0 ? ((avg - min) / range) * 100 : 50}%` }}>
+              <div className="absolute -top-5 left-1/2 -translate-x-1/2 text-[9px] font-bold text-neutral-700 whitespace-nowrap bg-white px-1 rounded">
+                {lang === "pt" ? "Méd" : "Avg"} R$ {avg.toFixed(2)}
+              </div>
+            </div>
+            {/* Median marker */}
+            <div className="absolute top-1/2 -translate-y-1/2 w-px h-5 bg-neutral-500"
+              style={{ left: `${range > 0 ? ((median - min) / range) * 100 : 50}%` }}>
+              <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[9px] font-medium text-neutral-500 whitespace-nowrap">
+                {lang === "pt" ? "Med" : "Med"}
+              </div>
+            </div>
+            {/* Praça dots */}
+            {points.map((p, i) => (
+              <div
+                key={i}
+                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-2 h-2 rounded-full bg-white border border-neutral-700 hover:scale-150 hover:z-10 transition-transform cursor-pointer group"
+                style={{ left: `${p.pct}%` }}
+                title={`${p.city}/${p.uf}: R$ ${p.price?.toFixed(2)}`}
+              >
+                <div className="absolute -top-7 left-1/2 -translate-x-1/2 hidden group-hover:block z-20 bg-neutral-900 text-white text-[9px] font-bold px-1.5 py-0.5 rounded whitespace-nowrap">
+                  {p.city}: R$ {p.price?.toFixed(2)}
+                </div>
+              </div>
+            ))}
+          </div>
+          {/* Axis labels */}
+          <div className="flex items-center justify-between mt-2 text-[10px] font-mono text-neutral-500">
+            <span className="text-emerald-700 font-bold">R$ {min.toFixed(2)}</span>
+            <span className="text-rose-700 font-bold">R$ {max.toFixed(2)}</span>
+          </div>
+          <p className="text-[9px] text-neutral-400 italic mt-2 text-center">
+            {lang === "pt"
+              ? `Cada ponto representa uma praça brasileira (${summary.count} no total). A dispersão revela onde a logística e infraestrutura impactam o preço final.`
+              : `Each dot is a Brazilian location (${summary.count} total). Spread reveals where logistics and infrastructure impact final price.`}
+          </p>
+        </div>
+      </div>
     </div>
   );
 }
