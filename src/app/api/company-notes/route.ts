@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { ensureLegalEntityUid } from "@/lib/entities";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -38,8 +39,11 @@ export async function POST(req: NextRequest) {
   }
 
   const root = cnpjBasico.padStart(8, "0");
+  const entityUid = await ensureLegalEntityUid(supabaseAdmin, root);
+
   const rows = Object.entries(updates).map(([field_key, value]) => ({
     cnpj_basico: root,
+    entity_uid: entityUid,
     field_key,
     value: String(value),
     updated_at: new Date().toISOString(),

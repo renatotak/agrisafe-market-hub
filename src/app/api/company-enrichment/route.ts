@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { ensureLegalEntityUid } from "@/lib/entities";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -204,9 +205,18 @@ export async function GET(req: NextRequest) {
     );
   }
 
+  // Resolve / create the legal_entities row so the enrichment row carries
+  // entity_uid (Phase 17 — 5-entity model). Non-fatal if it returns null;
+  // the legacy cnpj_basico key still works.
+  const entityUid = await ensureLegalEntityUid(supabaseAdmin, root, {
+    legalName: result.razao_social,
+    displayName: result.razao_social,
+  });
+
   // Upsert cache
   const row = {
     cnpj_basico: root,
+    entity_uid: entityUid,
     razao_social: result.razao_social,
     natureza_juridica: result.natureza_juridica,
     capital_social: result.capital_social,

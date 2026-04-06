@@ -3,6 +3,8 @@
 
 export interface Retailer {
   id: number;
+  /** Canonical legal-entity id (Phase 17C). Present on every row after migration 024. */
+  entity_uid: string | null;
   cnpj_raiz: string;
   consolidacao: string | null;
   razao_social: string;

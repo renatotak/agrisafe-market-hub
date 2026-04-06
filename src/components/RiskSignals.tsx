@@ -9,6 +9,8 @@ import {
 } from "lucide-react";
 
 interface RiskSignalRow {
+  /** Canonical legal-entity id from v_retailers_in_rj (Phase 17C). */
+  entity_uid: string | null;
   cnpj_raiz: string;
   razao_social: string | null;
   nome_fantasia: string | null;

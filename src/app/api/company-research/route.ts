@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { ensureLegalEntityUid } from "@/lib/entities";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -128,8 +129,14 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  const entityUid = await ensureLegalEntityUid(supabaseAdmin, root, {
+    legalName: razaoSocial,
+    displayName: nomeFantasia || razaoSocial,
+  });
+
   const row = {
     cnpj_basico: root,
+    entity_uid: entityUid,
     razao_social: razaoSocial,
     search_query: searchQuery,
     findings,
