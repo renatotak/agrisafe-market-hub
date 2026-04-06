@@ -12,13 +12,14 @@ export const revalidate = 600; // cache 10 min
  */
 
 // Maps commodity slug to the NA regional price page path
+// Verified 2026-04-06: NA changed many URLs, some commodities now under different paths
 const COMMODITY_PAGES: Record<string, { path: string; unit: string; name: string }> = {
-  soja:       { path: "/cotacoes/soja/soja-mercado-fisico-sindicatos-e-cooperativas", unit: "R$/Sc 60kg", name: "Soja" },
-  milho:      { path: "/cotacoes/milho/milho-mercado-fisico", unit: "R$/Sc 60kg", name: "Milho" },
-  cafe:       { path: "/cotacoes/cafe/cafe-mercado-fisico", unit: "R$/Sc 60kg", name: "Café" },
-  "boi-gordo":{ path: "/cotacoes/boi-gordo/boi-gordo-mercado-fisico", unit: "R$/@", name: "Boi Gordo" },
-  algodao:    { path: "/cotacoes/algodao/algodao-mercado-fisico", unit: "R$/@", name: "Algodão" },
-  trigo:      { path: "/cotacoes/trigo/trigo-mercado-fisico", unit: "R$/Sc 60kg", name: "Trigo" },
+  soja:       { path: "/cotacoes/soja/soja-mercado-fisico-sindicatos-e-cooperativas",     unit: "R$/Sc 60kg", name: "Soja" },
+  milho:      { path: "/cotacoes/milho/milho-mercado-fisico-sindicatos-e-cooperativas",   unit: "R$/Sc 60kg", name: "Milho" },
+  cafe:       { path: "/cotacoes/cafe/cafe-arabica-mercado-fisico-tipo-6-7",              unit: "R$/Sc 60kg", name: "Café Arábica" },
+  "boi-gordo":{ path: "/cotacoes/boi-gordo/boi-gordo-scot-consultoria",                   unit: "R$/@",       name: "Boi Gordo" },
+  algodao:    { path: "/cotacoes/algodao/algodao-imea",                                   unit: "R$/@",       name: "Algodão IMEA" },
+  trigo:      { path: "/cotacoes/trigo/trigo-mercado-fisico",                             unit: "R$/Sc 60kg", name: "Trigo" },
 };
 
 // Brazilian city coordinates for the most common praças
@@ -80,6 +81,22 @@ const PRACA_COORDS: Record<string, { lat: number; lng: number }> = {
   "Araçatuba": { lat: -21.209, lng: -50.433 },
   "Goiânia": { lat: -16.686, lng: -49.264 },
   "Brasília": { lat: -15.780, lng: -47.929 },
+  // ─── Boi Gordo regions (Scot Consultoria) ───
+  "Barretos": { lat: -20.557, lng: -48.567 },
+  "Triângulo": { lat: -19.749, lng: -47.932 }, // Uberaba / Triângulo Mineiro
+  "B.Horizonte": { lat: -19.917, lng: -43.934 },
+  "Belo Horizonte": { lat: -19.917, lng: -43.934 },
+  "Três Lagoas": { lat: -20.751, lng: -51.679 },
+  "C. Grande": { lat: -20.449, lng: -54.620 }, // Campo Grande
+  "Reg. Sul": { lat: -17.785, lng: -50.919 },  // Rio Verde GO
+  "Oeste": { lat: -28.639, lng: -53.606 },     // Cruz Alta RS (default oeste)
+  "Pelotas": { lat: -31.769, lng: -52.342 },
+  "Sul": { lat: -14.866, lng: -40.844 },       // Vitória da Conquista (default sul BA)
+  "Norte": { lat: -16.731, lng: -43.864 },     // Montes Claros MG (default norte)
+  "Vitória da Conquista": { lat: -14.866, lng: -40.844 },
+  "Montes Claros": { lat: -16.731, lng: -43.864 },
+  "Bauru": { lat: -22.318, lng: -49.066 },
+  "Marília": { lat: -22.214, lng: -49.946 },
 };
 
 // UF capital fallback
@@ -116,6 +133,16 @@ function parsePraca(raw: string): { city: string; uf: string; cooperative: strin
   const city = slashParts[0].trim();
   const uf = (slashParts[1] || "").trim().toUpperCase();
   return { city, uf, cooperative };
+}
+
+/** Parse Scot Consultoria format used by boi-gordo: "UF Cidade" or "UF Cidade (kg)" */
+function parsePracaScot(raw: string): { city: string; uf: string; cooperative: string } {
+  const cleaned = raw.replace(/\s*\(kg\)\s*/i, "").trim();
+  const ufMatch = cleaned.match(/^([A-Z]{2})\s+(.+)$/);
+  if (ufMatch) {
+    return { city: ufMatch[2].trim(), uf: ufMatch[1], cooperative: "Scot" };
+  }
+  return { city: cleaned, uf: "", cooperative: "Scot" };
 }
 
 function geocodePraca(city: string, uf: string): { lat: number; lng: number } | null {
@@ -187,7 +214,9 @@ export async function GET(req: NextRequest) {
 
       if (!praca) return;
 
-      const { city, uf, cooperative } = parsePraca(praca);
+      const { city, uf, cooperative } = commodity === "boi-gordo"
+        ? parsePracaScot(praca)
+        : parsePraca(praca);
       const price = parsePrice(priceLabel);
       const { value: variation, direction } = parseVariation(varLabel);
       const coords = geocodePraca(city, uf);

@@ -51,11 +51,17 @@ function MapContent({ slug, lang }: { slug: string; lang: string }) {
   const [unit, setUnit] = useState("");
   const [closingDate, setClosingDate] = useState("");
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
 
   useEffect(() => {
     setLoading(true);
     setActiveId(null);
+    setError(null);
+    // Reset data immediately to avoid showing stale prices from previous commodity
+    setData([]);
+    setUnit("");
+    setClosingDate("");
     fetch(`/api/prices-na/regional?commodity=${slug}`)
       .then(r => r.json())
       .then(d => {
@@ -63,11 +69,13 @@ function MapContent({ slug, lang }: { slug: string; lang: string }) {
           setData(d.data.filter((p: RegionalPrice) => p.lat !== null && p.price !== null));
           setUnit(d.unit || "");
           setClosingDate(d.closing_date || "");
+        } else {
+          setError(d.error || (lang === "pt" ? "Sem dados disponíveis" : "No data available"));
         }
       })
-      .catch(() => {})
+      .catch((e) => setError(e.message || "Fetch failed"))
       .finally(() => setLoading(false));
-  }, [slug]);
+  }, [slug, lang]);
 
   const active = data.find((_, i) => `${slug}-${i}` === activeId);
   const activeIdx = active ? data.indexOf(active) : -1;
@@ -84,6 +92,10 @@ function MapContent({ slug, lang }: { slug: string; lang: string }) {
       <div className="px-3 py-2 bg-white border-b border-neutral-200 flex items-center gap-4 text-[11px] flex-wrap">
         {loading ? (
           <Loader2 size={14} className="animate-spin text-neutral-400" />
+        ) : error ? (
+          <span className="text-error font-medium">⚠ {error}</span>
+        ) : data.length === 0 ? (
+          <span className="text-neutral-500">{lang === "pt" ? "Sem dados geocodificados disponíveis" : "No geocoded data available"}</span>
         ) : (
           <>
             <span className="text-neutral-500">{data.length} {lang === "pt" ? "praças" : "locations"}</span>
