@@ -1,7 +1,7 @@
 # AgriSafe Market Hub — Roadmap
 
 > **Last updated:** 2026-04-06
-> **Status:** Phase 17 in progress. 4-vertical architecture, 13+ modules, 22 Supabase tables, 17 SQL migrations.
+> **Status:** Phase 17 complete (5-entity foundation shipped). 4-vertical architecture, 13+ modules, 31 Supabase tables, 26 SQL migrations. Phase 18+ open.
 > **For the latest user-defined task list, see** `docs/TODO_2026-04-06.md`.
 
 ---
@@ -13,9 +13,12 @@
 | Architecture | 4 verticals, 13 modules |
 | Data sources | 166 catalogued (~120 active) |
 | Live cron pipeline | 7 jobs via `sync-all` |
-| Supabase tables | 22 tables, 17 SQL migrations, FKs + views in place |
-| Retailers | 9,328 channels / 24,275 locations (geocoded) |
-| Recuperação Judicial | 118 records (Receita Federal seed + RSS feeds) |
+| Supabase tables | 31 tables, 26 SQL migrations, 5-entity model live |
+| Legal entities (canonical) | 9,433 (9,328 retailers + 80 RJ-only + 18 industries + 7 competitors) |
+| Entity roles | 9,353 (retailer / industry / competitor) |
+| Entity mentions (graph edges) | 120 (118 RJ + 2 agro_news, algorithm-matched) |
+| Retailers | 9,328 channels / 24,275 locations (geocoded), all linked to entity_uid |
+| Recuperação Judicial | 118 records, all linked to entity_uid |
 | Risk signals | 38 channels in distress, R$ 582.6M exposed (cross-ref view) |
 | Live data | BCB SGS, NA prices/news (regional + futures), AgroAgenda, ClimAPI, Embrapa AgroAPI, Yahoo Finance intl futures |
 | Auth | Supabase Auth + SSR middleware |
@@ -69,41 +72,40 @@ The platform exists to support analyses around **5 core nodes**. Every feature, 
 | 16t | NA scraper fixes (4 broken URLs, BR number format parser, Scot Consultoria boi-gordo quirks, kg→@ conversion) | ✅ |
 | 16u | Yahoo Finance intl futures proxy `/api/intl-futures` (replaced broken TradingView embed) | ✅ |
 | 16v | CommodityMap controlled mode (sync with parent culture) | ✅ |
+| 17A–17F | Five Core Nodes Foundation — see Phase 17 block below | ✅ |
 
 ---
 
-## Phase 17 — Five Core Nodes Foundation 🎯 NEXT
+## Phase 17 — Five Core Nodes Foundation ✅ COMPLETE (2026-04-06)
 
-This is the **foundational schema phase** that everything else hangs off. Before building Phase 18+ features, the database must be reorganized around the 5 core nodes locked in `docs/ENTITY_MODEL.md`.
+The foundational schema phase that everything else hangs off. Database is now reorganized around the 5 core nodes from `docs/ENTITY_MODEL.md`. Shipped in **6 commits across 6 sub-phases**, all pushed to `origin/main`.
 
-- [x] **`docs/ENTITY_MODEL.md`** — canonical reference written
-- [ ] **Migration 018**: Create the 5 core node tables
-  - `legal_entities(entity_uid PK, tax_id UNIQUE, tax_id_type, cnpj_basico GENERATED, legal_name, display_name)`
-  - `farms(farm_uid PK, car_code, incra_code, centroid_lat, centroid_lng, area_ha, uf, municipio)`
-  - `assets(asset_uid PK, asset_type, amount, currency, start_date, maturity_date, farm_uid FK, commodity_id, status, confidentiality)`
-  - `commercial_activities(activity_uid PK, activity_type, retailer_entity_uid FK, buyer_entity_uid FK, farm_uid FK, product_id, quantity, unit, value, currency, date, confidentiality)`
-  - `agrisafe_service_contracts(service_uid PK, service_type, client_group_uid FK, start_date, end_date, status, confidentiality)`
-- [ ] **Migration 019**: Junction & support tables
-  - `entity_roles(entity_uid, role_type)` — multi-role per entity
-  - `groups(group_uid PK, group_type, name, billing_email, primary_payer_entity_uid)` + `group_members(group_uid, entity_uid)`
-  - `farm_ownership(farm_uid, entity_uid, ownership_type, share_pct)`
-  - `asset_parties(asset_uid, entity_uid, party_role)`
-  - `agrisafe_service_targets(service_uid, target_type, target_id)` — polymorphic
-  - `entity_mentions(entity_uid, source_table, source_id, mention_type, sentiment)`
-- [ ] **Migration 020**: Backfill `legal_entities` from existing tables
-  - `retailers.cnpj_raiz` → `legal_entities` (insert if missing) + `entity_roles` row with `role_type='retailer'`
-  - `industries` → `legal_entities` + `role_type='industry'` (resolve slug to CNPJ where possible)
-  - `competitors` → `legal_entities` + `role_type='competitor'`
-  - `recuperacao_judicial.entity_cnpj` → `legal_entities` (insert if missing)
-- [ ] **Migration 021**: Re-key existing satellite tables to point at `legal_entities`
-  - Add `entity_uid` FK column to `company_enrichment`, `company_notes`, `company_research`, `retailer_intelligence`, `retailer_locations`, `retailer_industries`, `recuperacao_judicial`
-  - Backfill via JOIN on the existing `cnpj_basico` / `cnpj_raiz` text columns
-  - Drop the legacy text-key columns once all readers have been updated (Phase 18+)
-- [ ] **Migration 022**: Add `confidentiality` enum column to every table that may store proprietary data
-  - Default `public`; AgriSafe-internal tables default `agrisafe_confidential`
-- [ ] **Migration 023**: Update `v_retailers_in_rj`, `v_retailer_profile`, and other views to use the new `legal_entities` and `entity_roles` tables instead of direct text joins
-- [ ] Update `RetailersDirectory.tsx`, `RegulatoryFramework.tsx`, `RecuperacaoJudicial.tsx`, `CompetitorRadar.tsx`, `RiskSignals.tsx` to read from the canonical entity tables
-- [ ] Update `KnowledgeMindMap.tsx` "Future" view to reflect the implemented schema (already includes the future-state nodes; just verify after migration)
+| Sub-phase | Commit | Migration(s) | What |
+|-----------|--------|--------------|------|
+| **17A** | `733f674` | 018, 019 | 12 new tables: 5 core nodes (`legal_entities`, `farms`, `assets`, `commercial_activities`, `agrisafe_service_contracts`) + 7 junction/support tables (`entity_roles`, `groups`, `group_members`, `farm_ownership`, `asset_parties`, `agrisafe_service_targets`, `entity_mentions`). RLS + confidentiality on every table, 15 FK constraints. |
+| **17B** | `b75f7d8` | 020–023 | Backfill **9,433 legal_entities** (9,328 retailers + 80 RJ-only + 18 industries + 7 competitors) and **9,353 entity_roles** assignments. Re-key 5 satellite tables to `entity_uid` (100% link rate). Add `confidentiality` enum to 25 more tables (16 public / 6 agrisafe_published / 3 agrisafe_confidential). Rebuild `v_retailer_profile`, `v_retailers_in_rj`, plus new canonical `v_entity_profile` (one-row entity lookup). All views use `security_invoker=on`. |
+| **17C** | `f374b17` | 024 | Add `retailers.entity_uid` FK + backfill (9,328/9,328). New helper `src/lib/entities.ts#ensureLegalEntityUid` (idempotent, race-safe). Wire it into write APIs (`/api/company-enrichment`, `/api/company-notes`, `/api/company-research`) so every new row carries `entity_uid`. |
+| **17D** | `08dc7c4` | 025 | Backfill `entity_mentions` from RJ (118 mentions, subject/negative). New algorithm-first matcher `src/lib/entity-matcher.ts` with Portuguese-agro stopword blocklist + multi-word/length-10 rule. Wire matcher into `sync-agro-news` and `sync-recuperacao-judicial` crons. **Initial backfill: 2 true-positive news mentions, zero false positives** (CAPAL COOPERATIVA, SPAÇO AGRÍCOLA). |
+| **17E** | `21b39f7` | — | `/api/retailer-intelligence` accepts `entity_uid` (preferred) or `cnpj_raiz` (fallback). News lookup REPLACED: was an ILIKE substring scan over `agro_news` (lossy, accent-blind, slow at scale), now a deterministic JOIN through `entity_mentions`. UI panel propagates entity_uid. |
+| **17F** | `22bd422` | 026 | Add `recuperacao_judicial.entity_uid` FK + backfill (118/118). Mirrors mig 024. Existing `select("*")` in the UI auto-carries entity_uid for any future drill-down — no UI changes needed. |
+
+**End-state numbers:**
+- 31 tables (was 22), 26 migrations (was 17)
+- 9,433 legal_entities, 9,353 entity_roles, 120 entity_mentions
+- All 9,328 retailers + all 118 RJ rows linked to a canonical entity
+- `get_advisors`: 0 ERRORs, only the same pre-existing WARNs as before Phase 17
+
+**Architectural payoffs unlocked for Phase 18+:**
+- Anything that mentions a CNPJ now resolves to a single `entity_uid` — drill-downs across modules trivialize.
+- Cross-cutting graph queries: *"show me all news mentioning the entities currently in RJ"* is one JOIN.
+- Confidentiality tier in place at row level on 31 tables — RAG/chat in Phase 28 can filter by user role.
+- Reusable algorithm-first entity matcher (`src/lib/entity-matcher.ts`) ready for events / regulations / industries crons when those get wired.
+
+**Cleanup deferred (low priority, do alongside Phase 24):**
+- Drop legacy `cnpj_raiz` / `cnpj_basico` text columns once nothing reads them
+- Wire entity-matcher into `sync-events-na`, `sync-regulatory`, `archive-old-news`
+- Refresh `KnowledgeMindMap.tsx` "current state" view — the future-state nodes shown there are now real, not aspirational
+- Migrate the remaining cnpj_raiz reads in `RetailersDirectory.tsx`, `RegulatoryFramework.tsx`, `RecuperacaoJudicial.tsx`, `CompetitorRadar.tsx` to entity_uid
 
 ---
 
@@ -322,32 +324,59 @@ CONFIGURAÇÕES
 
 ---
 
-## Database Tables (Live)
+## Database Tables (Live, post-Phase 17)
 
-| Table | Rows | Source | Anchored to |
+### Core 5-entity model (Phase 17A — migrations 018-019)
+
+| Table | Rows | Purpose |
+|-------|------|---------|
+| `legal_entities` | 9,433 | The universal "actor" — single CNPJ/CPF row with multi-role attachment via `entity_roles` |
+| `farms` | 0 | Physical land units (`car_code`, `incra_code`, centroid, area). Empty until INCRA/CAR ingestion |
+| `assets` | 0 | Financial instruments (CPR / loan / commercial note / insurance / barter). Empty until ingestion |
+| `commercial_activities` | 0 | Commercial transactions (ag input sale / barter / grain trade / livestock sale). Empty until ingestion |
+| `agrisafe_service_contracts` | 0 | AgriSafe service contracts. Empty until CRM ingestion (Phase 24) |
+| `entity_roles` | 9,353 | Many-to-many: which entity holds which role(s). 9,328 retailer + 18 industry + 7 competitor |
+| `groups` | 0 | Named collections of entities (clients, cooperatives, portfolios). Empty until CRM ingestion |
+| `group_members` | 0 | Group membership junction |
+| `farm_ownership` | 0 | Multi-shareholder farms — `(farm_uid, entity_uid, share_pct)` |
+| `asset_parties` | 0 | Multi-stakeholder assets — `(asset_uid, entity_uid, party_role)` |
+| `agrisafe_service_targets` | 0 | Polymorphic service targeting `(target_type, target_id)` |
+| `entity_mentions` | 120 | Cross-cutting graph edges. **118 from RJ + 2 from agro_news** (algorithm-matched, Phase 17D) |
+
+### Public-data layer (anchored to entity_uid post-Phase 17)
+
+| Table | Rows | Source | entity_uid? |
 |-------|------|--------|-------------|
 | `commodity_prices` | 6 | BCB SGS | — (commodity dimension) |
 | `commodity_price_history` | growing | BCB SGS | `commodity_prices.id` (FK) |
 | `market_indicators` | 6 | BCB SGS | — |
-| `agro_news` | 124 | RSS feeds | needs `entity_mentions` |
-| `events` | 26 | NA / AgroAgenda | needs `organizer_cnpj` |
-| `regulatory_norms` | 1 | RSS legal feeds | needs `affected_companies` |
-| `recuperacao_judicial` | 118 | RSS + Receita Federal seed | `entity_cnpj` (semi-anchored) |
-| `retailers` | 9,328 | Excel + Receita Federal | `cnpj_raiz` ✓ |
-| `retailer_locations` | 24,275 | Excel + 3-tier geocoder | `cnpj_raiz` (FK) ✓ |
-| `company_enrichment` | 2 | BrasilAPI / CNPJ.ws / ReceitaWS | `cnpj_basico` (FK) ✓ |
-| `company_notes` | 2 | User input | `cnpj_basico` (FK) ✓ |
-| `company_research` | 3 | DuckDuckGo / Google CSE | `cnpj_basico` (FK) ✓ |
-| `industries` | 18 | Manual + AGROFIT | `id` PK (needs `cnpj_basico`) |
-| `retailer_industries` | 392 | Manual junction | both FKs ✓ |
+| `agro_news` | 124 | RSS feeds | linked via `entity_mentions` (2 rows) |
+| `events` | 26 | NA / AgroAgenda | needs `entity_mentions` hook (deferred) |
+| `regulatory_norms` | 1 | RSS legal feeds | needs `entity_mentions` hook (deferred) |
+| `recuperacao_judicial` | 118 | RSS + Receita Federal seed | `entity_uid` ✓ (Phase 17F, mig 026) |
+| `retailers` | 9,328 | Excel + Receita Federal | `entity_uid` ✓ (Phase 17C, mig 024) |
+| `retailer_locations` | 24,275 | Excel + 3-tier geocoder | `cnpj_raiz` only (deferred to cleanup) |
+| `company_enrichment` | 2 | BrasilAPI / CNPJ.ws / ReceitaWS | `entity_uid` ✓ (Phase 17B, mig 021) + new rows via API helper (17C) |
+| `company_notes` | 2 | User input | `entity_uid` ✓ (Phase 17B + 17C) |
+| `company_research` | 3 | DuckDuckGo / Google CSE | `entity_uid` ✓ (Phase 17B + 17C) |
+| `industries` | 18 | Manual + AGROFIT | promoted to `legal_entities` with `role_type='industry'` |
+| `retailer_industries` | 392 | Manual junction | both `retailer_entity_uid` + `industry_entity_uid` ✓ (Phase 17B, mig 021) |
 | `industry_products` | 0 | AGROFIT (planned) | `industry_id` (FK) ✓ |
-| `retailer_intelligence` | 2 | Gemini analysis (legacy) | `cnpj_raiz` (FK) ✓ |
-| `competitors` / `competitor_signals` | 7 / 13 | Seed + news scan | needs anchoring to `companies` |
+| `retailer_intelligence` | 2 | Gemini analysis (legacy) | `entity_uid` ✓ (Phase 17B) |
+| `competitors` / `competitor_signals` | 7 / 13 | Seed + news scan | promoted to `legal_entities` with `role_type='competitor'` |
 | `news_knowledge` | 0 | Archive pipeline | needs `entity_mentions` |
 | `knowledge_items` | 49 | Cross-vertical index (pgvector) | needs `entity_mentions` |
 | `published_articles` | 6 | AgriSafe content | — |
 | `content_topics` | 5 | Editorial pipeline | `published_article_id` (FK) ✓ |
 | `sync_logs` | 13 | All crons | — |
+
+### Views (rebuilt in Phase 17B/17E with `security_invoker=on`)
+
+| View | Keyed on | Purpose |
+|------|----------|---------|
+| `v_retailer_profile` | `entity_uid` | Retailer + Receita Federal enrichment + AgriSafe intelligence in one row |
+| `v_retailers_in_rj` | `entity_uid` | Retailers intersected with RJ filings (powers `RiskSignals.tsx`) |
+| `v_entity_profile` | `entity_uid` | NEW canonical "everything I know about entity X" — roles array + retailer facts + RF enrichment + intelligence + RJ state |
 
 ---
 
