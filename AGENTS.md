@@ -34,23 +34,36 @@ When you're tempted to add an LLM call, first ask: "Could a Python script or a r
 
 ### 2. The 5-entity data model — everything links back to these nodes
 
-Every record stored in this database must be linkable, via foreign key or stable identifier, to one or more of these five entities:
+Every record stored in this database must be linkable, via foreign key or stable identifier, to one or more of these five nodes. **For the full schema, junctions, migration plan, and rationale, see `docs/ENTITY_MODEL.md`** (the canonical reference).
 
-| Entity | Stable identifier | Examples |
-|--------|------------------|---------|
-| **Company** | `cnpj_basico` (8 digits) | Industry, ag-input retailer, cooperative, frigorífico, trader |
-| **Rural producer** | `cpf_or_cnpj` (11 or 14 digits) | Individual or PJ producer of grains, cattle, etc. |
-| **Farm** | `farm_uid` (CAR / INCRA / geo-centroid hash) | Physical land unit with cadastral or geographic identity |
-| **Financial operation** | `op_uid` (UUID) | CPR, loan, insurance, barter, vendor financing |
-| **Ag-input transaction** | `tx_uid` (UUID) | Sale of defensives/fertilizers/seeds at retailer level |
+| # | Node | Stable identifier | Notes |
+|---|---|---|---|
+| 1 | **Legal Entity** | `entity_uid` PK + `tax_id` (CPF or CNPJ) | The universal "actor". A single CNPJ can simultaneously be industry + retailer + producer + AgriSafe client — roles attach via `entity_roles` junction. |
+| 2 | **Farm** | `farm_uid` (CAR/INCRA/centroid) | Multi-shareholder ownership via `farm_ownership` junction (`entity_uid` + `share_pct`). |
+| 3 | **Asset** | `asset_uid` + `asset_type` | CPR, loan, commercial note, insurance, barter. Multi-stakeholder via `asset_parties` junction (borrower, lender, guarantor, beneficiary). |
+| 4 | **Commercial Activity** | `activity_uid` + `activity_type` | Ag-input sale, barter, grain trade, livestock sale. |
+| 5 | **AgriSafe Service** | `service_uid` + `service_type` | Credit intelligence, monitoring, collection, market_hub_access. Client side is **always a Group** (even of size 1, so a "Família Silva" client bundles multiple CPFs/CNPJs). Service target is polymorphic via `agrisafe_service_targets(target_type, target_id)`. |
+
+**Junction & support tables:**
+- `entity_roles(entity_uid, role_type)` — multi-role per entity
+- `groups(group_uid, group_type, name)` + `group_members` — named collections (clients, cooperatives, portfolios)
+- `farm_ownership` — multi-shareholder farms (CPF + CNPJ mix)
+- `asset_parties` — multi-stakeholder assets
+- `agrisafe_service_targets(service_uid, target_type, target_id)` — polymorphic targeting (farm | entity | group | asset)
+- `entity_mentions(entity_uid, source_table, source_id)` — news/reg cross-references
+
+**Multi-stakeholder rule:**
+> Multi-row junctions (`farm_ownership`, `asset_parties`) **beat** polymorphic groups,
+> **except** when the collective itself has identity worth naming
+> (clients, cooperatives, internal portfolios) — those use `groups`.
 
 **FK rules:**
-- Tables describing a company → FK to `companies(cnpj_basico)`
-- Tables describing a rural producer → FK to `rural_producers(cpf_or_cnpj)`
+- Tables describing an entity → FK to `legal_entities(entity_uid)`
 - Tables describing a farm → FK to `farms(farm_uid)`
-- Cross-cutting facts (news, regulations, court records) → soft join via `mentions(entity_type, entity_id)`
+- Tables describing a financial instrument → FK to `assets(asset_uid)`
+- Cross-cutting facts (news, regulations, events) → write rows to `entity_mentions` instead of a direct FK
 
-**Building a feature without thinking about which entity it ties to is a bug.** If you can't justify how a new column or table relates back to one of the five nodes, it doesn't belong in this database.
+**Building a feature without thinking about which node it ties to is a bug.** If you can't justify how a new column or table relates back to one of the five nodes, it doesn't belong in this database.
 
 ### 3. Other hard constraints
 
@@ -130,6 +143,7 @@ npm run build        # Verify TypeScript before PR
 
 | Need | Document |
 |------|----------|
+| **Entity model (5 nodes + junctions) — canonical schema** | **`docs/ENTITY_MODEL.md`** |
 | Latest user-defined task list (2026-04-06) | `docs/TODO_2026-04-06.md` |
 | Data journeys & operational how-tos | `PLAYBOOK.md` |
 | Roadmap, completed phases, pending tasks | `ROADMAP.md` |

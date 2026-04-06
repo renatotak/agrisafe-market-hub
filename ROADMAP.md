@@ -23,15 +23,19 @@
 
 ---
 
-## Architectural North Star (added 2026-04-06)
+## Architectural North Star (locked 2026-04-06)
 
-The platform exists to support analyses around **5 core entities**. Every feature, every table, every scraper must contribute data that resolves to one or more of these:
+The platform exists to support analyses around **5 core nodes**. Every feature, every table, every scraper must contribute data that resolves to one or more of them. **Canonical reference: `docs/ENTITY_MODEL.md`.**
 
-1. **Company** — `cnpj_basico` (industry, retailer, cooperative, frigorífico, trader)
-2. **Rural producer** — `cpf_or_cnpj`
-3. **Farm** — `farm_uid` (CAR / INCRA / geo-centroid)
-4. **Financial operation** — `op_uid` (CPR, loan, insurance, barter)
-5. **Ag-input transaction** — `tx_uid`
+| # | Node | Identity | Multi-stakeholder model |
+|---|---|---|---|
+| 1 | **Legal Entity** | `entity_uid` + `tax_id` (CPF or CNPJ) | `entity_roles` junction (one CNPJ can be retailer + producer + client at once) |
+| 2 | **Farm** | `farm_uid` (CAR/INCRA/centroid) | `farm_ownership` junction (multi-shareholder, mixing CPFs and CNPJs) |
+| 3 | **Asset** | `asset_uid` (CPR/loan/note/insurance) | `asset_parties` junction (borrower / lender / guarantor / beneficiary) |
+| 4 | **Commercial Activity** | `activity_uid` (sale/barter/trade) | retailer + buyer + farm + product (single-FK each) |
+| 5 | **AgriSafe Service** | `service_uid` | `client_group_uid` (always a Group, even of size 1) + polymorphic `service_targets` (farm | entity | group | asset) |
+
+**Cross-cutting:** `groups`, `group_members`, `entity_mentions` (junction for news / regulations / events).
 
 **Implementation rule:** algorithms first, LLMs last. LLMs are reserved for prose generation, conversational interfaces, and last-resort fuzzy matching. See CLAUDE.md and AGENTS.md for full details.
 
@@ -68,22 +72,38 @@ The platform exists to support analyses around **5 core entities**. Every featur
 
 ---
 
-## Phase 17 — Five Core Entities Foundation 🎯 NEXT
+## Phase 17 — Five Core Nodes Foundation 🎯 NEXT
 
-This is the **foundational schema phase** that everything else hangs off. Before building Phase 18+ features, the database must be reorganized around the 5 core entities.
+This is the **foundational schema phase** that everything else hangs off. Before building Phase 18+ features, the database must be reorganized around the 5 core nodes locked in `docs/ENTITY_MODEL.md`.
 
-- [ ] **Migration 018**: Create canonical entity tables
-  - `companies(cnpj_basico PK, razao_social, ...)` — replaces ad-hoc retailer/industry/RJ joins
-  - `rural_producers(cpf_or_cnpj PK, name, type, ...)`
-  - `farms(farm_uid PK, car_code, incra_code, lat, lng, area_ha, ...)`
-  - `financial_operations(op_uid PK, type, amount, currency, start_date, end_date, ...)`
-  - `agro_input_transactions(tx_uid PK, retailer_cnpj, producer_id, farm_uid, product_id, ...)`
-- [ ] **Migration 019**: Backfill `companies` from existing `retailers`, `industries`, `recuperacao_judicial`, `competitors` tables
-- [ ] **Migration 020**: Junction table `entity_mentions(entity_type, entity_id, source_table, source_id)` so news, regulations, and events can link to multiple entities
-- [ ] **Migration 021**: Add `confidentiality` enum column to all tables that may store proprietary data (`public`, `agrisafe_published`, `agrisafe_confidential`)
-- [ ] **Migration 022**: Update `v_retailers_in_rj` and other views to use the new `companies` table
-- [ ] Update RetailersDirectory, RegulatoryFramework, RecuperacaoJudicial, CompetitorRadar to read from the canonical entity tables
-- [ ] Document the new schema in `docs/ENTITY_MODEL.md`
+- [x] **`docs/ENTITY_MODEL.md`** — canonical reference written
+- [ ] **Migration 018**: Create the 5 core node tables
+  - `legal_entities(entity_uid PK, tax_id UNIQUE, tax_id_type, cnpj_basico GENERATED, legal_name, display_name)`
+  - `farms(farm_uid PK, car_code, incra_code, centroid_lat, centroid_lng, area_ha, uf, municipio)`
+  - `assets(asset_uid PK, asset_type, amount, currency, start_date, maturity_date, farm_uid FK, commodity_id, status, confidentiality)`
+  - `commercial_activities(activity_uid PK, activity_type, retailer_entity_uid FK, buyer_entity_uid FK, farm_uid FK, product_id, quantity, unit, value, currency, date, confidentiality)`
+  - `agrisafe_service_contracts(service_uid PK, service_type, client_group_uid FK, start_date, end_date, status, confidentiality)`
+- [ ] **Migration 019**: Junction & support tables
+  - `entity_roles(entity_uid, role_type)` — multi-role per entity
+  - `groups(group_uid PK, group_type, name, billing_email, primary_payer_entity_uid)` + `group_members(group_uid, entity_uid)`
+  - `farm_ownership(farm_uid, entity_uid, ownership_type, share_pct)`
+  - `asset_parties(asset_uid, entity_uid, party_role)`
+  - `agrisafe_service_targets(service_uid, target_type, target_id)` — polymorphic
+  - `entity_mentions(entity_uid, source_table, source_id, mention_type, sentiment)`
+- [ ] **Migration 020**: Backfill `legal_entities` from existing tables
+  - `retailers.cnpj_raiz` → `legal_entities` (insert if missing) + `entity_roles` row with `role_type='retailer'`
+  - `industries` → `legal_entities` + `role_type='industry'` (resolve slug to CNPJ where possible)
+  - `competitors` → `legal_entities` + `role_type='competitor'`
+  - `recuperacao_judicial.entity_cnpj` → `legal_entities` (insert if missing)
+- [ ] **Migration 021**: Re-key existing satellite tables to point at `legal_entities`
+  - Add `entity_uid` FK column to `company_enrichment`, `company_notes`, `company_research`, `retailer_intelligence`, `retailer_locations`, `retailer_industries`, `recuperacao_judicial`
+  - Backfill via JOIN on the existing `cnpj_basico` / `cnpj_raiz` text columns
+  - Drop the legacy text-key columns once all readers have been updated (Phase 18+)
+- [ ] **Migration 022**: Add `confidentiality` enum column to every table that may store proprietary data
+  - Default `public`; AgriSafe-internal tables default `agrisafe_confidential`
+- [ ] **Migration 023**: Update `v_retailers_in_rj`, `v_retailer_profile`, and other views to use the new `legal_entities` and `entity_roles` tables instead of direct text joins
+- [ ] Update `RetailersDirectory.tsx`, `RegulatoryFramework.tsx`, `RecuperacaoJudicial.tsx`, `CompetitorRadar.tsx`, `RiskSignals.tsx` to read from the canonical entity tables
+- [ ] Update `KnowledgeMindMap.tsx` "Future" view to reflect the implemented schema (already includes the future-state nodes; just verify after migration)
 
 ---
 

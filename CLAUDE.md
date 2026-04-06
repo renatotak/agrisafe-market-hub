@@ -38,31 +38,54 @@ When you're tempted to add an LLM call, first ask: "Could a Python script or a r
 
 ### 2. The 5-entity data model — everything links back to these nodes
 
-Every record stored in this database must be linkable, via foreign key or stable identifier, to one or more of these five entities. **Building a feature without thinking about which of these it ties to is a bug.**
+Every record stored in this database must be linkable, via foreign key or stable identifier, to one or more of these five nodes. **Building a feature without thinking about which of these it ties to is a bug.**
 
-| Entity | Stable identifier | Why it matters |
-|--------|------------------|---------------|
-| **Company** (`cnpj_basico`) | 8-digit CNPJ root from Receita Federal. Covers industry, ag-input retailer, cooperative, frigorífico, trader, distribuidor, etc. | The unit of B2B commerce. Every retailer, every industry, every RJ case, every news mention must resolve to a `cnpj_basico`. |
-| **Rural producer** (`cpf_or_cnpj`) | 11-digit CPF (PF) or 14-digit CNPJ (PJ). | The unit of credit risk. Loans, CPRs, barters all originate here. |
-| **Farm** (`farm_uid`) | Composite key: CAR (Cadastro Ambiental Rural), INCRA SNCR code, or geo-centroid (lat,lng) hash. | The unit of physical production. Yields, climate, satellite, and CAR overlays attach here. |
-| **Financial operation** (`op_uid`) | UUID. References one farm, one rural producer, one or more companies, one commodity, one date range. | The unit of value transfer. CPR, loan, insurance, barter, vendor financing. |
-| **Ag-input transaction** (`tx_uid`) | UUID. References one rural producer, one retailer (company), one or more products (industry), one farm. | The unit of commercial activity at the rural input retailer level. |
+For the full schema, junctions, migration plan, and rationale, see **`docs/ENTITY_MODEL.md`** (the canonical reference).
+
+| # | Node | Stable identifier | What it represents |
+|---|---|---|---|
+| 1 | **Legal Entity** | `entity_uid` PK + `tax_id` (CPF or CNPJ) + `tax_id_type` | The universal "actor". Replaces the old separate "Company" and "Rural Producer" notion. A single CNPJ can simultaneously be an industry, a retailer, a producer, AND an AgriSafe client. Roles attach via the `entity_roles` junction. |
+| 2 | **Farm** | `farm_uid` (CAR / INCRA / centroid hash) | A physical land unit. Multi-shareholder ownership is handled via the `farm_ownership` junction (multiple `entity_uid` per farm with `share_pct`). |
+| 3 | **Asset** | `asset_uid` + `asset_type` (cpr / loan / commercial_note / insurance / barter) | A financial instrument. Multi-party stakeholders (co-borrowers, lenders, guarantors) handled via the `asset_parties` junction. |
+| 4 | **Commercial Activity** | `activity_uid` + `activity_type` (ag_input_sale / barter / grain_trade / livestock_sale) | A commercial transaction. Always links retailer → buyer → farm → product. |
+| 5 | **AgriSafe Service** | `service_uid` + `service_type` (credit_intelligence / monitoring / collection / market_hub_access) | A service contract. The client side is always a `Group` (even of size 1), so a "Família Silva" client can bundle multiple CPFs and CNPJs under one named contract. The service target is polymorphic via `agrisafe_service_targets(target_type, target_id)` so a single contract can simultaneously monitor a farm, an asset, an entity, and a group. |
+
+**Cross-cutting layer (junctions and groups):**
+
+- `entity_roles(entity_uid, role_type)` — multi-role per entity
+- `groups(group_uid, group_type, name, ...)` + `group_members` — named collections (clients, cooperatives, portfolios)
+- `farm_ownership(farm_uid, entity_uid, ownership_type, share_pct)` — multi-shareholder farms
+- `asset_parties(asset_uid, entity_uid, party_role)` — multi-stakeholder assets
+- `agrisafe_service_targets(service_uid, target_type, target_id)` — polymorphic service targeting
+- `entity_mentions(entity_uid, source_table, source_id, mention_type)` — for news/regs/events that mention one or more entities
 
 **FK rules:**
-- New tables that describe a company → FK to `companies(cnpj_basico)`. Add a precise CNAE classifier where applicable.
-- New tables that describe a rural producer → FK to `rural_producers(cpf_or_cnpj)`.
-- New tables that describe a farm → FK to `farms(farm_uid)`.
-- Cross-cutting tables (news mentions, court records, regulatory norms) → soft join via `mentions(entity_type, entity_id)` rather than direct FK, since the same article can mention multiple entities.
 
-**Existing tables that already follow this:**
-- `retailers.cnpj_raiz` is the company anchor for the channel directory
-- `recuperacao_judicial.entity_cnpj` resolves to companies via `v_retailers_in_rj`
-- `company_enrichment.cnpj_basico` is the Receita Federal cache
+- New tables that describe an entity → FK to `legal_entities(entity_uid)`
+- Tables that describe a farm → FK to `farms(farm_uid)`
+- Tables that describe a financial instrument → FK to `assets(asset_uid)`
+- Tables that describe a commercial transaction → FK to `commercial_activities(activity_uid)`
+- Tables that describe an AgriSafe service → FK to `agrisafe_service_contracts(service_uid)`
+- Cross-cutting facts (news, regulations, court records) → write rows to `entity_mentions` instead of a direct FK, since one article can mention many entities
 
-**Tables that still need anchoring (see ROADMAP):**
-- `agro_news` should have a `mentions` junction
-- `events` should have a `companies_organizing` junction
-- `regulatory_norms` should have an `affected_companies` lookup based on CNAE
+**Multi-stakeholder rule of thumb:**
+
+> Multi-row junctions (`farm_ownership`, `asset_parties`) **beat** polymorphic groups,
+> **except** when the collective itself has identity worth naming
+> (clients, cooperatives, internal portfolios) — those use `groups`.
+
+**Existing tables that already follow this (with `cnpj_basico` text keys, to be migrated to `entity_uid` in Phase 17):**
+- `retailers.cnpj_raiz`
+- `recuperacao_judicial.entity_cnpj`
+- `company_enrichment.cnpj_basico`
+- `company_notes.cnpj_basico`, `company_research.cnpj_basico`
+- `retailer_intelligence.cnpj_raiz`
+- `retailer_industries.cnpj_raiz`
+
+**Tables that still need anchoring (see ROADMAP Phase 17):**
+- `agro_news`, `events`, `regulatory_norms` → write `entity_mentions` rows during ingestion
+- `competitors` → backfill into `legal_entities` with `role_type='competitor'`
+- `industries` → backfill into `legal_entities` with `role_type='industry'`
 
 ### 3. Public data only
 
@@ -208,6 +231,7 @@ Page bg `#F7F4EF` · Text `#3D382F` · Font: Inter 300–800
 
 | Topic | File |
 |-------|------|
+| **Entity model (5 nodes + junctions)** — canonical schema reference | **`docs/ENTITY_MODEL.md`** |
 | Operations & data journeys | `PLAYBOOK.md` |
 | Roadmap & phase history | `ROADMAP.md` |
 | Latest task list (2026-04-06) | `docs/TODO_2026-04-06.md` |
