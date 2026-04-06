@@ -7,8 +7,9 @@ import { MockBadge } from "@/components/ui/MockBadge";
 import { Badge } from "@/components/ui/Badge";
 import {
   Search, Newspaper, BookOpen, Lightbulb,
-  BarChart3, Loader2, ExternalLink,
+  BarChart3, Loader2, ExternalLink, Network,
 } from "lucide-react";
+import { KnowledgeMindMap } from "@/components/KnowledgeMindMap";
 
 interface KnowledgeItem {
   id: string;
@@ -45,6 +46,7 @@ export function KnowledgeBase({ lang }: { lang: Lang }) {
   const [totalItems, setTotalItems] = useState(0);
   const [isMock, setIsMock] = useState(true);
   const [tierFilter, setTierFilter] = useState<number | null>(null);
+  const [activeTab, setActiveTab] = useState<"search" | "mindmap">("search");
 
   useEffect(() => {
     fetchStats();
@@ -132,7 +134,27 @@ export function KnowledgeBase({ lang }: { lang: Lang }) {
           </div>
           {isMock && <MockBadge />}
         </div>
+
+        {/* Tab Switcher */}
+        <div className="flex items-center bg-white border border-neutral-200 rounded-lg p-0.5">
+          <button
+            onClick={() => setActiveTab("search")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-[12px] font-semibold transition-colors ${activeTab === "search" ? "bg-brand-primary/10 text-brand-primary" : "text-neutral-500 hover:text-neutral-700"}`}
+          >
+            <Search size={14} /> {lang === "pt" ? "Busca Semântica" : "Semantic Search"}
+          </button>
+          <button
+            onClick={() => setActiveTab("mindmap")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-[12px] font-semibold transition-colors ${activeTab === "mindmap" ? "bg-brand-primary/10 text-brand-primary" : "text-neutral-500 hover:text-neutral-700"}`}
+          >
+            <Network size={14} /> {lang === "pt" ? "Mapa de Conexões" : "Connection Map"}
+          </button>
+        </div>
       </div>
+
+      {activeTab === "mindmap" ? (
+        <KnowledgeMindMap lang={lang} />
+      ) : (<>
 
       {/* Tier Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -263,6 +285,7 @@ export function KnowledgeBase({ lang }: { lang: Lang }) {
           </p>
         </div>
       </div>
+      </>)}
     </div>
   );
 }
