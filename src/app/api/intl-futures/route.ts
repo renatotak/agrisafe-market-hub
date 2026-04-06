@@ -94,10 +94,21 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "No valid data points" }, { status: 502 });
     }
 
-    const lastPrice = result.meta?.regularMarketPrice ?? points[points.length - 1].close;
-    const prevClose = result.meta?.chartPreviousClose ?? points[Math.max(0, points.length - 2)].close;
+    // Daily change = last point vs second-to-last point in the time series.
+    // Note: Yahoo's `chartPreviousClose` field is the close BEFORE the first
+    // data point in the requested range — that's the period return (e.g.
+    // 3-month return for range=3mo), not the daily change. Don't use it.
+    const lastPoint = points[points.length - 1];
+    const prevPoint = points.length >= 2 ? points[points.length - 2] : lastPoint;
+    const lastPrice = result.meta?.regularMarketPrice ?? lastPoint.close;
+    const prevClose = prevPoint.close;
     const change = lastPrice - prevClose;
     const changePct = prevClose !== 0 ? (change / prevClose) * 100 : 0;
+
+    // Period return (for context)
+    const firstPoint = points[0];
+    const periodChange = lastPrice - firstPoint.close;
+    const periodChangePct = firstPoint.close !== 0 ? (periodChange / firstPoint.close) * 100 : 0;
 
     return NextResponse.json({
       success: true,
@@ -112,6 +123,9 @@ export async function GET(req: NextRequest) {
       prevClose,
       change,
       changePct,
+      periodChange,
+      periodChangePct,
+      range,
       regularMarketTime: result.meta?.regularMarketTime,
       fiftyTwoWeekHigh: result.meta?.fiftyTwoWeekHigh,
       fiftyTwoWeekLow: result.meta?.fiftyTwoWeekLow,

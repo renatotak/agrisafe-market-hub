@@ -560,8 +560,11 @@ interface IntlFuturesData {
   currency: string;
   lastPrice: number;
   prevClose: number;
-  change: number;
+  change: number;       // daily
   changePct: number;
+  periodChange: number; // change over selected range
+  periodChangePct: number;
+  range: string;
   regularMarketTime: number;
   fiftyTwoWeekHigh: number;
   fiftyTwoWeekLow: number;
@@ -623,13 +626,18 @@ function IntlFuturesChart({ slug, lang }: { slug: string; lang: Lang }) {
           </div>
         </div>
         <div className="text-right">
-          <p className={`text-[14px] font-bold ${isUp ? "text-emerald-600" : data.change < 0 ? "text-rose-600" : "text-neutral-500"}`}>
-            {isUp ? "▲ +" : data.change < 0 ? "▼ " : "— "}
-            {data.change.toFixed(2)}
-          </p>
-          <p className={`text-[11px] font-bold ${isUp ? "text-emerald-600" : data.change < 0 ? "text-rose-600" : "text-neutral-500"}`}>
-            ({data.changePct >= 0 ? "+" : ""}{data.changePct.toFixed(2)}%)
-          </p>
+          <div className="flex items-center justify-end gap-1">
+            <span className="text-[9px] font-bold text-neutral-400 uppercase">{lang === "pt" ? "Diário" : "Daily"}</span>
+            <span className={`text-[13px] font-bold ${isUp ? "text-emerald-600" : data.change < 0 ? "text-rose-600" : "text-neutral-500"}`}>
+              {isUp ? "▲" : data.change < 0 ? "▼" : "—"} {data.changePct >= 0 ? "+" : ""}{data.changePct.toFixed(2)}%
+            </span>
+          </div>
+          <div className="flex items-center justify-end gap-1 mt-0.5">
+            <span className="text-[9px] font-bold text-neutral-400 uppercase">{data.range}</span>
+            <span className={`text-[11px] font-semibold ${data.periodChange > 0 ? "text-emerald-600" : data.periodChange < 0 ? "text-rose-600" : "text-neutral-500"}`}>
+              {data.periodChangePct >= 0 ? "+" : ""}{data.periodChangePct.toFixed(2)}%
+            </span>
+          </div>
         </div>
       </div>
 
