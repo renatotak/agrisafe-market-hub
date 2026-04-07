@@ -1,0 +1,1114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Reading Room — Article Research Library</title>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Source+Sans+3:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --ink: #1a1a1f;
+            --parchment: #f5f0e8;
+            --amber: #d4a043;
+            --sage: #7a9e7e;
+            --rust: #c45c3c;
+            --cream: #faf8f4;
+            --shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.15);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Source Sans 3', sans-serif;
+            background-color: var(--cream);
+            color: var(--ink);
+            line-height: 1.6;
+        }
+
+        header {
+            background-color: var(--ink);
+            color: var(--cream);
+            padding: 1.5rem 2rem;
+            box-shadow: var(--shadow-lg);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .header-brand {
+            display: flex;
+            align-items: baseline;
+            gap: 1rem;
+            flex: 1;
+            min-width: 250px;
+        }
+
+        .header-brand h1 {
+            font-family: 'Playfair Display', serif;
+            font-size: 1.8rem;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+        }
+
+        .header-brand .subtitle {
+            font-size: 0.85rem;
+            color: var(--amber);
+            font-style: italic;
+            opacity: 0.9;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        button {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 4px;
+            font-family: 'Source Sans 3', sans-serif;
+            font-size: 0.95rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background-color: var(--amber);
+            color: var(--ink);
+            font-weight: 500;
+        }
+
+        button:hover {
+            background-color: #e0b050;
+            transform: translateY(-1px);
+            box-shadow: var(--shadow);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button.icon-btn {
+            padding: 0.5rem;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: transparent;
+            color: var(--cream);
+            border: 1px solid var(--amber);
+        }
+
+        button.icon-btn:hover {
+            background-color: var(--amber);
+            color: var(--ink);
+        }
+
+        .stats-bar {
+            background-color: var(--parchment);
+            padding: 1rem 2rem;
+            display: flex;
+            gap: 3rem;
+            border-bottom: 1px solid #e8dcc8;
+            overflow-x: auto;
+        }
+
+        .stat {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--amber);
+        }
+
+        .stat-label {
+            font-size: 0.8rem;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .filters-section {
+            padding: 1.5rem 2rem;
+            background-color: var(--parchment);
+            display: flex;
+            gap: 1.5rem;
+            align-items: center;
+            flex-wrap: wrap;
+            border-bottom: 1px solid #e8dcc8;
+        }
+
+        .search-box {
+            flex: 1;
+            min-width: 250px;
+            position: relative;
+        }
+
+        .search-box input {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: 1px solid #d4c4b0;
+            border-radius: 4px;
+            font-family: 'Source Sans 3', sans-serif;
+            font-size: 0.95rem;
+            background-color: white;
+            color: var(--ink);
+        }
+
+        .search-box input:focus {
+            outline: none;
+            border-color: var(--amber);
+            box-shadow: 0 0 0 2px rgba(212, 160, 67, 0.1);
+        }
+
+        .search-box input::placeholder {
+            color: #999;
+        }
+
+        .filter-chips {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .chip {
+            padding: 0.5rem 1rem;
+            background-color: white;
+            border: 1px solid #d4c4b0;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .chip:hover {
+            border-color: var(--amber);
+            background-color: #fef9f1;
+        }
+
+        .chip.active {
+            background-color: var(--amber);
+            color: white;
+            border-color: var(--amber);
+        }
+
+        select {
+            padding: 0.5rem 1rem;
+            border: 1px solid #d4c4b0;
+            border-radius: 4px;
+            font-family: 'Source Sans 3', sans-serif;
+            font-size: 0.95rem;
+            background-color: white;
+            color: var(--ink);
+            cursor: pointer;
+        }
+
+        select:focus {
+            outline: none;
+            border-color: var(--amber);
+            box-shadow: 0 0 0 2px rgba(212, 160, 67, 0.1);
+        }
+
+        .main-content {
+            padding: 2rem;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 4rem 2rem;
+        }
+
+        .empty-icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+            opacity: 0.6;
+        }
+
+        .empty-state h2 {
+            font-family: 'Playfair Display', serif;
+            font-size: 1.8rem;
+            margin-bottom: 0.5rem;
+            color: #666;
+        }
+
+        .empty-state p {
+            color: #999;
+            margin-bottom: 2rem;
+        }
+
+        .articles-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        @media (min-width: 768px) {
+            .articles-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+
+        @media (max-width: 600px) {
+            .articles-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .article-card {
+            background-color: white;
+            border: 1px solid #e8dcc8;
+            border-radius: 6px;
+            padding: 1.5rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            animation: fadeInUp 0.5s ease forwards;
+            opacity: 0;
+        }
+
+        .article-card:nth-child(1) { animation-delay: 0s; }
+        .article-card:nth-child(2) { animation-delay: 0.05s; }
+        .article-card:nth-child(3) { animation-delay: 0.1s; }
+        .article-card:nth-child(n+4) { animation-delay: 0.15s; }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .article-card:hover {
+            box-shadow: var(--shadow-lg);
+            transform: translateY(-2px);
+            border-color: var(--amber);
+        }
+
+        .article-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            gap: 0.5rem;
+        }
+
+        .article-title {
+            font-family: 'Playfair Display', serif;
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--ink);
+            line-height: 1.3;
+            flex: 1;
+        }
+
+        .article-meta {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .status-badge {
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .status-unread {
+            background-color: #fef3c7;
+            color: #92400e;
+        }
+
+        .status-read {
+            background-color: #dbeafe;
+            color: #0c4a6e;
+        }
+
+        .status-used {
+            background-color: #d1fae5;
+            color: #065f46;
+        }
+
+        .cat-marketing { background-color: #e8d5f5; color: #6b21a8; }
+        .cat-tech { background-color: #d5e8f5; color: #1e40af; }
+        .cat-business { background-color: #d5f5e0; color: #166534; }
+        .cat-industry { background-color: #f5e8d5; color: #92400e; }
+        .cat-research { background-color: #f5d5d5; color: #991b1b; }
+        .cat-other { background-color: #e5e5e5; color: #374151; }
+
+        .article-excerpt {
+            color: #666;
+            font-size: 0.95rem;
+            line-height: 1.5;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .article-url {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            color: #999;
+            text-decoration: none;
+            word-break: break-all;
+            display: block;
+            padding: 0.5rem;
+            background-color: #f9f7f2;
+            border-radius: 3px;
+            border-left: 2px solid var(--amber);
+        }
+
+        .article-url:hover {
+            color: var(--amber);
+        }
+
+        .article-tags {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .tag {
+            font-size: 0.8rem;
+            background-color: #f0ebe0;
+            color: #666;
+            padding: 0.25rem 0.6rem;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .tag:hover {
+            background-color: var(--amber);
+            color: white;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 200;
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn 0.2s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background-color: white;
+            border-radius: 8px;
+            max-width: 600px;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: var(--shadow-lg);
+            animation: slideUp 0.3s ease;
+            width: 90%;
+        }
+
+        @keyframes slideUp {
+            from {
+                transform: translateY(20px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .modal-header {
+            padding: 1.5rem;
+            border-bottom: 1px solid #e8dcc8;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .modal-header h2 {
+            font-family: 'Playfair Display', serif;
+            font-size: 1.5rem;
+            color: var(--ink);
+        }
+
+        .close-btn {
+            background-color: transparent;
+            color: var(--ink);
+            border: none;
+            font-size: 1.5rem;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+
+        .close-btn:hover {
+            background-color: #f0ebe0;
+        }
+
+        .modal-body {
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .form-group label {
+            font-weight: 600;
+            font-size: 0.95rem;
+            color: var(--ink);
+        }
+
+        .form-group input,
+        .form-group textarea,
+        .form-group select {
+            padding: 0.75rem;
+            border: 1px solid #d4c4b0;
+            border-radius: 4px;
+            font-family: 'Source Sans 3', sans-serif;
+            font-size: 0.95rem;
+            color: var(--ink);
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 80px;
+            font-family: 'Source Sans 3', sans-serif;
+        }
+
+        .form-group input:focus,
+        .form-group textarea:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: var(--amber);
+            box-shadow: 0 0 0 2px rgba(212, 160, 67, 0.1);
+        }
+
+        .detail-meta {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            padding: 1rem;
+            background-color: var(--parchment);
+            border-radius: 4px;
+        }
+
+        .detail-meta-item {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .detail-meta-item label {
+            font-size: 0.8rem;
+            color: #999;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .detail-meta-item value {
+            font-size: 0.95rem;
+            color: var(--ink);
+            font-weight: 500;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+
+        .modal-actions button {
+            flex: 1;
+            min-width: 120px;
+        }
+
+        .btn-secondary {
+            background-color: #e8dcc8;
+            color: var(--ink);
+        }
+
+        .btn-secondary:hover {
+            background-color: #dcc8b8;
+        }
+
+        .btn-danger {
+            background-color: var(--rust);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background-color: #b34b2d;
+        }
+
+        .btn-success {
+            background-color: var(--sage);
+            color: white;
+        }
+
+        .btn-success:hover {
+            background-color: #6a8e6e;
+        }
+
+        .ai-response {
+            background-color: var(--parchment);
+            padding: 1.5rem;
+            border-radius: 4px;
+            border-left: 3px solid var(--amber);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            word-break: break-word;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .copy-button {
+            align-self: flex-end;
+            padding: 0.4rem 0.8rem;
+            font-size: 0.85rem;
+        }
+
+        .spinner {
+            width: 24px;
+            height: 24px;
+            border: 2px solid rgba(212, 160, 67, 0.3);
+            border-top-color: var(--amber);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .loading-state {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            justify-content: center;
+            padding: 2rem;
+        }
+
+        .loading-state .spinner {
+            margin: 0;
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            background-color: var(--ink);
+            color: white;
+            padding: 1rem 1.5rem;
+            border-radius: 4px;
+            box-shadow: var(--shadow-lg);
+            animation: slideIn 0.3s ease;
+            z-index: 300;
+            max-width: 300px;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        .toast.success {
+            background-color: var(--sage);
+        }
+
+        .toast.error {
+            background-color: var(--rust);
+        }
+
+        .hidden-input {
+            display: none;
+        }
+
+        .ai-button-group {
+            display: flex;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+
+        .ai-button-group button {
+            flex: 1;
+            min-width: 140px;
+            padding: 0.6rem 1rem;
+            font-size: 0.9rem;
+        }
+
+        .ai-warning {
+            background-color: #fef3c7;
+            border: 1px solid #fcd34d;
+            padding: 1rem;
+            border-radius: 4px;
+            color: #92400e;
+            font-size: 0.95rem;
+            margin-bottom: 1rem;
+        }
+
+        .settings-section {
+            background-color: var(--parchment);
+            padding: 1.5rem;
+            border-radius: 4px;
+            margin-bottom: 1.5rem;
+        }
+
+        .settings-section h3 {
+            font-family: 'Playfair Display', serif;
+            font-size: 1.2rem;
+            margin-bottom: 1rem;
+            color: var(--ink);
+        }
+
+        .api-status {
+            padding: 0.75rem;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            margin-top: 0.5rem;
+            display: none;
+        }
+
+        .api-status.active {
+            background-color: #d1fae5;
+            color: #065f46;
+            display: block;
+        }
+
+        .api-status.error {
+            background-color: #fee2e2;
+            color: #991b1b;
+            display: block;
+        }
+
+        .sort-dropdown {
+            padding: 0.5rem 1rem;
+            border: 1px solid #d4c4b0;
+            border-radius: 4px;
+            font-family: 'Source Sans 3', sans-serif;
+            font-size: 0.95rem;
+            background-color: white;
+            color: var(--ink);
+            cursor: pointer;
+        }
+
+        .brief-preview {
+            background-color: var(--parchment);
+            padding: 1.5rem;
+            border-radius: 4px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            word-break: break-word;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header>
+        <div class="header-brand">
+            <h1>📚 The Reading Room</h1>
+            <div class="subtitle">Article Research Library</div>
+        </div>
+        <div class="header-actions">
+            <button class="icon-btn" id="settingsBtn" title="Settings">⚙️</button>
+            <button id="bulkBriefBtn" title="Generate briefs for selected articles">📋 Bulk Brief</button>
+            <button id="addArticleBtn">+ Add Article</button>
+        </div>
+    </header>
+
+    <!-- Stats Bar -->
+    <div class="stats-bar">
+        <div class="stat">
+            <div class="stat-value" id="totalCount">0</div>
+            <div class="stat-label">Total</div>
+        </div>
+        <div class="stat">
+            <div class="stat-value" id="unreadCount">0</div>
+            <div class="stat-label">Unread</div>
+        </div>
+        <div class="stat">
+            <div class="stat-value" id="readCount">0</div>
+            <div class="stat-label">Read</div>
+        </div>
+        <div class="stat">
+            <div class="stat-value" id="usedCount">0</div>
+            <div class="stat-label">Used</div>
+        </div>
+    </div>
+
+    <!-- Filters Section -->
+    <div class="filters-section">
+        <div class="search-box">
+            <input type="text" id="searchInput" placeholder="Search articles... (Ctrl+K)">
+        </div>
+        <div class="filter-chips">
+            <span class="chip active" data-filter="all">All</span>
+            <span class="chip" data-filter="unread">Unread</span>
+            <span class="chip" data-filter="read">Read</span>
+            <span class="chip" data-filter="used">Used</span>
+        </div>
+        <select id="categoryFilter">
+            <option value="">All Categories</option>
+            <option value="marketing">Marketing</option>
+            <option value="tech">Tech</option>
+            <option value="business">Business</option>
+            <option value="industry">Industry</option>
+            <option value="research">Research</option>
+            <option value="other">Other</option>
+        </select>
+        <select id="sortSelect">
+            <option value="newest">Newest First</option>
+            <option value="oldest">Oldest First</option>
+            <option value="title">Title A-Z</option>
+        </select>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+        <div id="emptyState" class="empty-state" style="display: none;">
+            <div class="empty-icon">📖</div>
+            <h2>No Articles Yet</h2>
+            <p>Start building your reading room by adding your first article.</p>
+            <button id="emptyStateAddBtn">Add Your First Article</button>
+        </div>
+        <div id="articlesGrid" class="articles-grid"></div>
+    </div>
+
+    <!-- Article Form Modal -->
+    <div id="articleModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modalTitle">Add Article</h2>
+                <button class="close-btn" id="closeArticleModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="articleForm">
+                    <div class="form-group">
+                        <label for="articleUrl">Article URL *</label>
+                        <input type="url" id="articleUrl" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="articleTitle">Title *</label>
+                        <input type="text" id="articleTitle" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="articleCategory">Category</label>
+                        <select id="articleCategory">
+                            <option value="other">Other</option>
+                            <option value="marketing">Marketing</option>
+                            <option value="tech">Tech</option>
+                            <option value="business">Business</option>
+                            <option value="industry">Industry</option>
+                            <option value="research">Research</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="articleExcerpt">Excerpt</label>
+                        <textarea id="articleExcerpt" placeholder="Key quote or summary..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="articleNotes">Notes</label>
+                        <textarea id="articleNotes" placeholder="Your thoughts and analysis..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="articleTakeaways">Key Takeaways</label>
+                        <textarea id="articleTakeaways" placeholder="Main insights (one per line)..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="articleTags">Tags (comma-separated)</label>
+                        <input type="text" id="articleTags" placeholder="e.g., AI, strategy, growth">
+                    </div>
+                    <div class="modal-actions">
+                        <button type="submit" class="btn-success">Save Article</button>
+                        <button type="button" class="btn-secondary" id="cancelArticleBtn">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Article Detail Modal -->
+    <div id="detailModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="detailTitle"></h2>
+                <button class="close-btn" id="closeDetailModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="detail-meta">
+                    <div class="detail-meta-item">
+                        <label>Status</label>
+                        <value id="detailStatus"></value>
+                    </div>
+                    <div class="detail-meta-item">
+                        <label>Category</label>
+                        <value id="detailCategory"></value>
+                    </div>
+                    <div class="detail-meta-item">
+                        <label>Added</label>
+                        <value id="detailSavedAt"></value>
+                    </div>
+                    <div class="detail-meta-item">
+                        <label>Updated</label>
+                        <value id="detailUpdatedAt"></value>
+                    </div>
+                </div>
+
+                <div id="aiWarning" class="ai-warning" style="display: none;">
+                    ℹ️ Set your API key in settings to unlock AI features
+                </div>
+
+                <div id="detailUrl" style="margin-top: 1rem;"></div>
+
+                <div id="detailExcerpt" style="margin-top: 1rem;">
+                    <label style="font-weight: 600; display: block; margin-bottom: 0.5rem;">Excerpt</label>
+                    <p id="excerptText" style="color: #666; font-size: 0.95rem; line-height: 1.5;"></p>
+                </div>
+
+                <div id="detailNotes" style="margin-top: 1rem; display: none;">
+                    <label style="font-weight: 600; display: block; margin-bottom: 0.5rem;">Notes</label>
+                    <p id="notesText" style="color: #666; font-size: 0.95rem; line-height: 1.5;"></p>
+                </div>
+
+                <div id="detailTakeaways" style="margin-top: 1rem; display: none;">
+                    <label style="font-weight: 600; display: block; margin-bottom: 0.5rem;">Takeaways</label>
+                    <ul id="takeawaysList" style="color: #666; font-size: 0.95rem; margin-left: 1.5rem;"></ul>
+                </div>
+
+                <div id="detailTags" style="margin-top: 1rem; display: none;">
+                    <label style="font-weight: 600; display: block; margin-bottom: 0.5rem;">Tags</label>
+                    <div id="detailTagsList" class="article-tags"></div>
+                </div>
+
+                <div id="aiResponseContainer" style="margin-top: 1.5rem; display: none;">
+                    <div class="ai-response" id="aiResponse"></div>
+                    <button class="copy-button" id="copyAiResponse">📋 Copy to Clipboard</button>
+                </div>
+
+                <div class="ai-button-group" id="aiButtonGroup" style="margin-top: 1.5rem; display: none;">
+                    <button id="summarizeBtn">✨ Summarize</button>
+                    <button id="briefBtn">📝 Brief</button>
+                    <button id="outlineBtn">📑 Outline</button>
+                </div>
+
+                <div class="modal-actions" style="margin-top: 1.5rem;">
+                    <button id="toggleStatusBtn" class="btn-success">Cycle Status</button>
+                    <button id="pushToMkthubBtn" class="btn-secondary" title="Send this article to the AgriSafe Market Hub /api/reading-room/ingest endpoint">🌾 Push to Market Hub</button>
+                    <button id="editBtn" class="btn-secondary">Edit</button>
+                    <button id="deleteBtn" class="btn-danger">Delete</button>
+                    <button class="btn-secondary" id="closeDetailBtn">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Settings</h2>
+                <button class="close-btn" id="closeSettingsModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="settings-section">
+                    <h3>🤖 AI Provider</h3>
+                    <p style="margin-bottom: 1rem; color: #666; font-size: 0.95rem;">
+                        Choose your AI provider and enter an API key to enable summaries, briefs, and other AI features.
+                    </p>
+                    <div class="form-group">
+                        <label for="aiProviderSelect">Provider</label>
+                        <select id="aiProviderSelect">
+                            <option value="anthropic">Claude (Anthropic)</option>
+                            <option value="openai">OpenAI (ChatGPT)</option>
+                            <option value="gemini">Google Gemini</option>
+                            <option value="custom">Custom / OpenAI-compatible</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="aiModelInput">Model</label>
+                        <input type="text" id="aiModelInput" placeholder="claude-sonnet-4-20250514">
+                    </div>
+                    <div class="form-group" id="customEndpointGroup" style="display:none;">
+                        <label for="aiEndpointInput">Endpoint URL</label>
+                        <input type="text" id="aiEndpointInput" placeholder="https://your-api.com/v1/chat/completions">
+                    </div>
+                    <div class="form-group">
+                        <label for="apiKeyInput">API Key</label>
+                        <input type="password" id="apiKeyInput" placeholder="sk-ant-...">
+                    </div>
+                    <p id="aiKeyHint" style="margin: 0.25rem 0 0.75rem; font-size: 0.82rem; color: #888;">
+                        <a id="aiKeyHintLink" href="https://console.anthropic.com/" target="_blank" style="color: var(--amber); text-decoration: none;">Get your API key at console.anthropic.com →</a>
+                    </p>
+                    <p id="aiSubscriptionNote" style="margin: 0 0 0.75rem; font-size: 0.8rem; color: #aaa; display:none;">
+                        ⓘ Claude.ai and Claude Code subscriptions are separate from API access. Your API key comes from console.anthropic.com.
+                    </p>
+                    <button id="saveApiKeyBtn" class="btn-success" style="width: 100%; margin-top: 0.25rem;">Save &amp; Test Connection</button>
+                    <div id="apiStatus" class="api-status"></div>
+                </div>
+
+                <!-- AGRISAFE MARKET HUB INTEGRATION (Phase 22) -->
+                <div class="settings-section">
+                    <h3>🌾 AgriSafe Market Hub</h3>
+                    <p style="margin-bottom: 1rem; color: #666; font-size: 0.95rem;">
+                        Push saved articles to the AgriSafe Market Hub via
+                        <code style="background:var(--parchment);padding:1px 5px;border-radius:3px;font-size:0.85rem;">/api/reading-room/ingest</code>.
+                        Articles flow into the Market Hub's <code style="background:var(--parchment);padding:1px 5px;border-radius:3px;font-size:0.85rem;">agro_news</code> table and run through the algorithmic entity-matcher pipeline (Phase 17D).
+                    </p>
+                    <div class="form-group">
+                        <label for="mkthubUrlInput">Market Hub Base URL</label>
+                        <input type="text" id="mkthubUrlInput" placeholder="http://localhost:3000 or https://your-app.vercel.app">
+                    </div>
+                    <div class="form-group">
+                        <label for="mkthubSecretInput">Shared Secret</label>
+                        <input type="password" id="mkthubSecretInput" placeholder="value of READING_ROOM_SECRET in the Market Hub env">
+                    </div>
+                    <p style="margin: 0.25rem 0 0.75rem; font-size: 0.82rem; color: #888;">
+                        The secret must match <code style="background:var(--parchment);padding:1px 5px;border-radius:3px;font-size:0.85rem;">READING_ROOM_SECRET</code>
+                        in the Market Hub's <code style="background:var(--parchment);padding:1px 5px;border-radius:3px;font-size:0.85rem;">.env.local</code> (dev) or Vercel project env (prod).
+                    </p>
+                    <button id="saveMkthubBtn" class="btn-success" style="width: 100%; margin-top: 0.25rem;">Save &amp; Test Connection</button>
+                    <div id="mkthubStatus" class="api-status"></div>
+                </div>
+
+                <!-- SAVE LOCATION -->
+                <div class="settings-section">
+                    <h3>📁 Save Location</h3>
+                    <p style="margin-bottom: 0.75rem; color: #666; font-size: 0.95rem;">
+                        Choose a folder on your computer where your library is automatically saved as
+                        <code style="background:var(--parchment);padding:1px 5px;border-radius:3px;font-size:0.85rem;">reading-room-library.json</code>
+                        every time you add or edit an article.
+                        Suggested: <em>OneDrive - AgriSafe / Documents</em>
+                    </p>
+                    <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap; margin-bottom:0.75rem;">
+                        <button id="chooseFolderBtn" style="flex:1; min-width:140px;">📂 Choose Folder</button>
+                        <button id="clearFolderBtn" style="display:none; background:var(--rust); color:white; padding:0.5rem 1rem;">✕ Clear</button>
+                    </div>
+                    <div style="font-size:0.88rem; color:#555; padding:0.5rem 0.75rem; background:var(--parchment); border-radius:4px;">
+                        <strong>Current location:</strong>
+                        <span id="saveFolderName" style="margin-left:0.5rem;">Not set — click Choose Folder</span>
+                    </div>
+                    <p style="margin-top:0.6rem; color:#888; font-size:0.82rem;">
+                        The app also saves articles, links, and documents here in JSON format for backup and mobile access.
+                    </p>
+                </div>
+
+                <div class="settings-section">
+                    <h3>💾 Data Management</h3>
+                    <p style="margin-bottom: 1rem; color: #666; font-size: 0.95rem;">
+                        Manually export your library as JSON or restore from a previous backup.
+                    </p>
+                    <button id="settingsExportBtn" style="width: 100%; margin-bottom: 0.5rem;">⬇ Export Library</button>
+                    <button id="settingsImportBtn" style="width: 100%; margin-bottom: 0.5rem;">⬆ Import / Restore</button>
+                </div>
+
+                <div class="settings-section">
+                    <h3>About</h3>
+                    <p style="color: #666; font-size: 0.95rem;">
+                        <strong>The Reading Room</strong> v2.0 — Marketing Authority<br>
+                        Your personal research library for article curation and AI-powered writing support.
+                    </p>
+                </div>
+
+                <div class="modal-actions">
+                    <button class="btn-secondary" id="closeSettingsBtn" style="flex: 1;">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI Response Modal -->
+    <div id="aiModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="aiModalTitle">AI Response</h2>
+                <button class="close-btn" id="closeAiModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="aiModalContent">
+                    <div class="loading-state">
+                        <div class="spinner"></div>
+                        <span>Processing...</span>
+                    </div>
+                </div>
+                <div class="modal-actions" style="margin-top: 1.5rem;">
+                    <button id="copyAiBtn" class="btn-success">📋 Copy</button>
+                    <button class="btn-secondary" id="closeAiBtn">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden input for file import -->
+    <input type="file" id="fileInput" class="hidden-input" accept=".json">
+
+    <script src="library.js"></script>
+</body>
+</html>

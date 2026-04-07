@@ -179,6 +179,7 @@ All cron routes log to `sync_logs` via `src/lib/sync-logger.ts`.
 | `src/scripts/geocode-retailers.js` | 3-tier geocoding (Google/CEP/Nominatim) |
 | `src/scripts/seed-rj-from-receita.ts` | Seed RJ data from crawlers DB |
 | `imports/cnpj-metadados.pdf` | Receita Federal CNPJ data layout reference |
+| `chrome-extensions/reading-room/` | Embedded Chrome MV3 extension that pushes saved articles to `/api/reading-room/ingest` (Phase 22). See `chrome-extensions/reading-room/README.md` for install + config. The extension and the Market Hub backend ship together — the extension is the producer, `/api/reading-room/ingest` + `agro_news` + entity-matcher is the consumer. |
 
 ## Data Classification (Receita Federal vs AgriSafe)
 
