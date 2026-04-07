@@ -38,6 +38,9 @@
   "exclude": [
     "node_modules",
     "merged projects data",
-    "agsf_mkthub-main"
+    "agsf_mkthub-main",
+    "tmp",
+    "local files",
+    "chrome-extensions"
   ]
 }

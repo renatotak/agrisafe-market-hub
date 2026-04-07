@@ -41,10 +41,9 @@ next-env.d.ts
 # OS
 Thumbs.db
 
-# env files
+# env files (catch-all for .env, .env.local, .env.macro, .env.development, etc.)
 .env
-.env.local
-.env.*.local
+.env.*
 
 # data files
 *.xlsx
@@ -52,3 +51,10 @@ Thumbs.db
 # merged project archives
 merged projects data/
 agsf_mkthub-main/
+
+# local-only debris dump (cleanup-YYYY-MM-DD/ batches go here)
+tmp/
+
+# user-saved local files (CSVs, PDFs, JSON exports — uploaded to Supabase as
+# needed, not committed because they may contain sensitive data and are large)
+local files/
