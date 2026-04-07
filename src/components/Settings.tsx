@@ -1,11 +1,16 @@
 "use client";
 
+import { useState } from "react";
 import { Lang, t } from "@/lib/i18n";
 import {
   Download, BarChart3, TestTube, Radar, Newspaper, Calendar, Store,
   PenTool, BookOpen, Scale, Database, Brain, LayoutDashboard,
-  Shield, Server, Workflow, ArrowRight,
+  Shield, Server, Workflow, ArrowRight, Puzzle, Copy, Check, FileText,
+  Folder, Settings as SettingsIcon, Play,
 } from "lucide-react";
+
+const EXTENSION_FOLDER_PATH = "chrome-extensions/reading-room";
+const CHROME_EXTENSIONS_URL = "chrome://extensions";
 
 const APP_VERSION = "1.0.0";
 
@@ -30,6 +35,32 @@ const MODULE_LIST = [
   { key: "modDataSources" as const, icon: Database },
   { key: "modKnowledge" as const, icon: Brain },
 ];
+
+function CopyableCode({ text, label }: { text: string; label?: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard API requires HTTPS in some browsers; ignore silently
+    }
+  };
+  return (
+    <div className="flex items-center gap-2 bg-neutral-50 border border-neutral-200 rounded-md px-3 py-2 font-mono text-[12px] text-neutral-700">
+      <code className="flex-1 truncate">{text}</code>
+      <button
+        onClick={handleCopy}
+        className="flex items-center gap-1 text-[10px] font-bold text-neutral-500 hover:text-brand-primary transition-colors shrink-0"
+        title={label || "Copy"}
+      >
+        {copied ? <Check size={11} className="text-emerald-600" /> : <Copy size={11} />}
+        {copied ? "Copied" : label || "Copy"}
+      </button>
+    </div>
+  );
+}
 
 export function Settings({ lang }: { lang: Lang }) {
   const tr = t(lang).settings;
@@ -107,6 +138,130 @@ export function Settings({ lang }: { lang: Lang }) {
               </div>
             );
           })}
+        </div>
+      </div>
+
+      {/* Reading Room Chrome extension install guide (Phase 22 follow-up) */}
+      <div className="bg-white rounded-lg border border-neutral-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-6">
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-md bg-brand-primary/10 flex items-center justify-center">
+              <Puzzle size={18} className="text-brand-primary" />
+            </div>
+            <div>
+              <h3 className="text-[17px] font-bold text-neutral-900">{tr.extTitle}</h3>
+              <p className="text-[12px] text-neutral-500 mt-0.5">{tr.extSubtitle}</p>
+            </div>
+          </div>
+          <a
+            href="https://github.com/renatotak/agsf_mkthub/tree/main/chrome-extensions/reading-room"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold text-brand-primary border border-brand-primary rounded-md hover:bg-brand-primary/5 transition-colors shrink-0"
+          >
+            <FileText size={12} />
+            {tr.extReadDocs}
+          </a>
+        </div>
+
+        {/* Why install — quick value bullets */}
+        <div className="bg-brand-surface/30 border border-brand-primary/15 rounded-md p-4 mb-5">
+          <p className="text-[11px] font-bold text-brand-primary uppercase tracking-wider mb-2">
+            {tr.extWhyTitle}
+          </p>
+          <ul className="space-y-1.5">
+            {[tr.extWhy1, tr.extWhy2, tr.extWhy3].map((line, i) => (
+              <li key={i} className="flex items-start gap-2 text-[12px] text-neutral-700 leading-relaxed">
+                <span className="w-1.5 h-1.5 rounded-full bg-brand-primary mt-[6px] shrink-0" />
+                <span>{line}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {/* Where it lives */}
+        <div className="mb-5">
+          <div className="flex items-center gap-1.5 mb-2">
+            <Folder size={13} className="text-neutral-500" />
+            <p className="text-[11px] font-bold text-neutral-700 uppercase tracking-wider">
+              {tr.extLocationTitle}
+            </p>
+          </div>
+          <p className="text-[12px] text-neutral-600 mb-2">{tr.extLocationDesc}</p>
+          <CopyableCode text={EXTENSION_FOLDER_PATH} />
+        </div>
+
+        {/* Step 1 — Install */}
+        <div className="mb-5">
+          <div className="flex items-center gap-1.5 mb-3">
+            <Download size={13} className="text-brand-primary" />
+            <p className="text-[11px] font-bold text-neutral-900 uppercase tracking-wider">
+              {tr.extInstallTitle}
+            </p>
+          </div>
+          <ol className="space-y-3">
+            {[
+              { title: tr.extStep1Title, desc: tr.extStep1Desc, code: CHROME_EXTENSIONS_URL },
+              { title: tr.extStep2Title, desc: tr.extStep2Desc },
+              { title: tr.extStep3Title, desc: tr.extStep3Desc },
+              { title: tr.extStep4Title, desc: tr.extStep4Desc },
+            ].map((step, i) => (
+              <li key={i} className="flex gap-3">
+                <div className="w-6 h-6 rounded-full bg-brand-primary text-white flex items-center justify-center text-[11px] font-bold shrink-0">
+                  {i + 1}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] font-semibold text-neutral-900">{step.title}</p>
+                  <p className="text-[12px] text-neutral-600 leading-relaxed mt-0.5">{step.desc}</p>
+                  {step.code && (
+                    <div className="mt-2">
+                      <CopyableCode text={step.code} />
+                    </div>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ol>
+        </div>
+
+        {/* Step 2 — Configure */}
+        <div className="mb-5">
+          <div className="flex items-center gap-1.5 mb-3">
+            <SettingsIcon size={13} className="text-brand-primary" />
+            <p className="text-[11px] font-bold text-neutral-900 uppercase tracking-wider">
+              {tr.extConfigTitle}
+            </p>
+          </div>
+          <ol className="space-y-2">
+            {[tr.extConfigStep1, tr.extConfigStep2, tr.extConfigStep3, tr.extConfigStep4, tr.extConfigStep5].map((line, i) => (
+              <li key={i} className="flex gap-3">
+                <div className="w-6 h-6 rounded-full bg-neutral-200 text-neutral-700 flex items-center justify-center text-[11px] font-bold shrink-0">
+                  {i + 1}
+                </div>
+                <p className="text-[12px] text-neutral-700 leading-relaxed flex-1">{line}</p>
+              </li>
+            ))}
+          </ol>
+        </div>
+
+        {/* Daily usage */}
+        <div>
+          <div className="flex items-center gap-1.5 mb-3">
+            <Play size={13} className="text-brand-primary" />
+            <p className="text-[11px] font-bold text-neutral-900 uppercase tracking-wider">
+              {tr.extUsageTitle}
+            </p>
+          </div>
+          <ol className="space-y-2">
+            {[tr.extUsage1, tr.extUsage2, tr.extUsage3].map((line, i) => (
+              <li key={i} className="flex gap-3">
+                <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[11px] font-bold shrink-0">
+                  {i + 1}
+                </div>
+                <p className="text-[12px] text-neutral-700 leading-relaxed flex-1">{line}</p>
+              </li>
+            ))}
+          </ol>
         </div>
       </div>
 
