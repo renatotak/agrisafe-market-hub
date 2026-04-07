@@ -114,7 +114,10 @@ export function DashboardMap({ lang }: { lang: Lang }) {
   const [showWeather, setShowWeather] = useState(true);
   const [showNews, setShowNews] = useState(true);
   const [showRJ, setShowRJ] = useState(true);
-  const [eventTimeFilter, setEventTimeFilter] = useState<number | null>(30); // days
+  // Phase 23B fix: default to 90 days. With 30d default and most agro fairs
+  // running May–October, the user only saw ~5 events on the map even though
+  // 22 upcoming ones existed in the events table.
+  const [eventTimeFilter, setEventTimeFilter] = useState<number | null>(90); // days
   const [mapTypeId, setMapTypeId] = useState<"terrain" | "satellite">("terrain");
 
   // Data state
@@ -354,7 +357,12 @@ export function DashboardMap({ lang }: { lang: Lang }) {
     }
 
     return markers;
-  }, [showEvents, showWeather, ufFilter, citySearch, allEvents, allWeather, bbox]);
+    // Phase 23B fix: deps array was missing showNews, showRJ, eventTimeFilter,
+    // allNews, activeRJ — so toggling those layers (or changing the time
+    // filter) silently no-op'd because the memoized markers never recomputed.
+    // The toggle BUTTON would update its visual state via useState rerender,
+    // but the map markers stayed stale.
+  }, [showEvents, showWeather, showNews, showRJ, eventTimeFilter, ufFilter, citySearch, allEvents, allWeather, allNews, activeRJ, bbox]);
 
   const activeMarker = filteredMarkers.find(m => m.id === activeMarkerId);
 
