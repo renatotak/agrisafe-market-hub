@@ -77,6 +77,7 @@ export default function Home() {
 }
 
 import { DashboardMap } from "@/components/DashboardMap";
+import { ChapterModal } from "@/components/ChapterModal";
 
 // ─── Executive Dashboard Overview ───
 
@@ -85,6 +86,7 @@ function DashboardOverview({ lang, setActiveModule }: { lang: Lang; setActiveMod
   const [kpis, setKpis] = useState({
     newsCount: 0, eventsCount: 0, rjCount: 0, retailersCount: 0,
     sourcesHealthy: 0, sourcesTotal: 0, topMover: null as { name: string; change: number } | null,
+    scrapersBroken: 0, scrapersDegraded: 0,
   });
 
   // Fetch live KPIs from Supabase + APIs
@@ -121,6 +123,19 @@ function DashboardOverview({ lang, setActiveModule }: { lang: Lang; setActiveMod
         }
       });
 
+    // Phase 19A — Scraper resilience layer (separate from sync_logs).
+    // Surface broken/degraded count so the user sees red on the Dados KPI
+    // when a scraper has flipped to broken via the runScraper() wrapper.
+    fetch("/api/scraper-health").then(r => r.json()).then(json => {
+      if (json.success && json.summary) {
+        setKpis(prev => ({
+          ...prev,
+          scrapersBroken: json.summary.broken || 0,
+          scrapersDegraded: json.summary.degraded || 0,
+        }));
+      }
+    }).catch(() => {});
+
     // Top mover from live prices
     fetch("/api/prices-na").then(r => r.json()).then(json => {
       if (json.success && json.data?.length > 0) {
@@ -140,12 +155,23 @@ function DashboardOverview({ lang, setActiveModule }: { lang: Lang; setActiveMod
     }).catch(() => {});
   }, []);
 
+  const [selectedChapter, setSelectedChapter] = useState<Module | null>(null);
+
+  const handleKpiClick = (mod: Module) => {
+    setSelectedChapter(mod);
+  };
+
+  const handleCTA = (mod: Module) => {
+    setSelectedChapter(null);
+    setActiveModule(mod);
+  };
+
   return (
     <div className="space-y-6">
 
       {/* Compact KPI Strip — all live data */}
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
-        <button onClick={() => setActiveModule("market")} className="rounded-lg px-3 py-2.5 bg-white border border-neutral-200 text-left hover:border-brand-primary transition-colors group">
+        <button onClick={() => handleKpiClick("market")} className="rounded-lg px-3 py-2.5 bg-white border border-neutral-200 text-left hover:border-brand-primary transition-colors group">
           <p className="text-[9px] font-semibold text-neutral-400 uppercase">{lang === "pt" ? "Mercado" : "Market"}</p>
           {kpis.topMover ? (
             <>
@@ -163,25 +189,25 @@ function DashboardOverview({ lang, setActiveModule }: { lang: Lang; setActiveMod
           )}
         </button>
 
-        <button onClick={() => setActiveModule("news")} className="rounded-lg px-3 py-2.5 bg-white border border-neutral-200 text-left hover:border-brand-primary transition-colors">
+        <button onClick={() => handleKpiClick("news")} className="rounded-lg px-3 py-2.5 bg-white border border-neutral-200 text-left hover:border-brand-primary transition-colors">
           <p className="text-[9px] font-semibold text-neutral-400 uppercase">{lang === "pt" ? "Notícias" : "News"}</p>
           <p className="text-[20px] font-bold text-neutral-900 leading-tight mt-0.5">{kpis.newsCount}</p>
           <p className="text-[10px] text-neutral-400">{lang === "pt" ? "indexadas" : "indexed"}</p>
         </button>
 
-        <button onClick={() => setActiveModule("events")} className="rounded-lg px-3 py-2.5 bg-white border border-neutral-200 text-left hover:border-brand-primary transition-colors">
+        <button onClick={() => handleKpiClick("events")} className="rounded-lg px-3 py-2.5 bg-white border border-neutral-200 text-left hover:border-brand-primary transition-colors">
           <p className="text-[9px] font-semibold text-neutral-400 uppercase">{lang === "pt" ? "Eventos" : "Events"}</p>
           <p className="text-[20px] font-bold text-neutral-900 leading-tight mt-0.5">{kpis.eventsCount}</p>
           <p className="text-[10px] text-neutral-400">{lang === "pt" ? "próximos" : "upcoming"}</p>
         </button>
 
-        <button onClick={() => setActiveModule("recuperacao")} className="rounded-lg px-3 py-2.5 bg-error-light/20 border border-error-light/50 text-left hover:border-error transition-colors">
+        <button onClick={() => handleKpiClick("recuperacao")} className="rounded-lg px-3 py-2.5 bg-error-light/20 border border-error-light/50 text-left hover:border-error transition-colors">
           <p className="text-[9px] font-semibold text-error/70 uppercase">{lang === "pt" ? "Rec. Judicial" : "Judicial Rec."}</p>
           <p className="text-[20px] font-bold text-error-dark leading-tight mt-0.5">{kpis.rjCount}</p>
           <p className="text-[10px] text-error/60">{lang === "pt" ? "processos" : "cases"}</p>
         </button>
 
-        <button onClick={() => setActiveModule("retailers")} className="rounded-lg px-3 py-2.5 bg-white border border-neutral-200 text-left hover:border-brand-primary transition-colors">
+        <button onClick={() => handleKpiClick("retailers")} className="rounded-lg px-3 py-2.5 bg-white border border-neutral-200 text-left hover:border-brand-primary transition-colors">
           <p className="text-[9px] font-semibold text-neutral-400 uppercase">{lang === "pt" ? "Revendas" : "Retailers"}</p>
           <p className="text-[20px] font-bold text-neutral-900 leading-tight mt-0.5">
             {kpis.retailersCount > 1000 ? `${(kpis.retailersCount / 1000).toFixed(0)}k+` : kpis.retailersCount}
@@ -189,13 +215,41 @@ function DashboardOverview({ lang, setActiveModule }: { lang: Lang; setActiveMod
           <p className="text-[10px] text-neutral-400">{lang === "pt" ? "canais" : "channels"}</p>
         </button>
 
-        <button onClick={() => setActiveModule("dataSources")} className="rounded-lg px-3 py-2.5 bg-neutral-900 text-left hover:bg-black transition-colors">
-          <p className="text-[9px] font-semibold text-neutral-500 uppercase">{lang === "pt" ? "Dados" : "Data"}</p>
-          <p className="text-[20px] font-bold text-white leading-tight mt-0.5">{kpis.sourcesHealthy}/{kpis.sourcesTotal}</p>
-          <p className="text-[10px] text-neutral-500">{lang === "pt" ? "fontes ativas" : "active sources"}</p>
+        <button
+          onClick={() => handleKpiClick("dataSources")}
+          className={`rounded-lg px-3 py-2.5 text-left transition-colors ${
+            kpis.scrapersBroken > 0
+              ? "bg-error border border-error-dark hover:bg-error-dark"
+              : kpis.scrapersDegraded > 0
+              ? "bg-warning border border-warning hover:bg-warning"
+              : "bg-neutral-900 hover:bg-black"
+          }`}
+        >
+          <p className="text-[9px] font-semibold text-neutral-500 uppercase flex items-center gap-1">
+            {lang === "pt" ? "Dados" : "Data"}
+            {kpis.scrapersBroken > 0 && (
+              <AlertTriangle size={10} className="text-white" />
+            )}
+          </p>
+          <p className="text-[20px] font-bold text-white leading-tight mt-0.5">
+            {kpis.sourcesHealthy}/{kpis.sourcesTotal}
+          </p>
+          <p className="text-[10px] text-neutral-300">
+            {kpis.scrapersBroken > 0
+              ? lang === "pt"
+                ? `${kpis.scrapersBroken} scraper(s) quebrado(s)`
+                : `${kpis.scrapersBroken} scraper(s) broken`
+              : kpis.scrapersDegraded > 0
+              ? lang === "pt"
+                ? `${kpis.scrapersDegraded} degradado(s)`
+                : `${kpis.scrapersDegraded} degraded`
+              : lang === "pt"
+              ? "fontes ativas"
+              : "active sources"}
+          </p>
         </button>
 
-        <button onClick={() => setActiveModule("contentHub")} className="rounded-lg px-3 py-2.5 bg-brand-surface/20 border border-brand-light text-left hover:border-brand-primary transition-colors">
+        <button onClick={() => handleKpiClick("contentHub")} className="rounded-lg px-3 py-2.5 bg-brand-surface/20 border border-brand-light text-left hover:border-brand-primary transition-colors">
           <p className="text-[9px] font-semibold text-neutral-400 uppercase">{lang === "pt" ? "Conteúdo" : "Content"}</p>
           <p className="text-[14px] font-bold text-neutral-900 leading-tight mt-0.5">AgriSafe</p>
           <p className="text-[10px] text-brand-primary font-medium">{lang === "pt" ? "Central" : "Hub"}</p>
@@ -219,6 +273,14 @@ function DashboardOverview({ lang, setActiveModule }: { lang: Lang; setActiveMod
 
       {/* Notícias Agrícolas — News only (cotações moved to Pulso do Mercado) */}
       <NANoticiasWidget lang={lang} />
+
+      <ChapterModal
+        isOpen={selectedChapter !== null}
+        onClose={() => setSelectedChapter(null)}
+        chapter={selectedChapter}
+        lang={lang}
+        onCTA={handleCTA}
+      />
     </div>
   );
 }
