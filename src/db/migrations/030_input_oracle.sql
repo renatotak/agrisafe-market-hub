@@ -104,7 +104,11 @@ CREATE TABLE IF NOT EXISTS industry_product_uses (
   pest_slug        text,
   source_dataset   text NOT NULL DEFAULT 'agrofit_federal',
   created_at       timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (product_id, culture_slug, COALESCE(pest_slug, ''))
+  -- Postgres does not allow expressions in inline UNIQUE constraints, so we
+  -- use NULLS NOT DISTINCT (PG 15+, supported by Supabase) to make NULL
+  -- pest_slug values be treated as equal — that way the bulk scraper's
+  -- onConflict='product_id,culture_slug,pest_slug' upsert dedupes correctly.
+  UNIQUE NULLS NOT DISTINCT (product_id, culture_slug, pest_slug)
 );
 
 CREATE INDEX IF NOT EXISTS idx_ipu_culture_slug
