@@ -43,10 +43,13 @@ export async function GET(request: Request) {
     // Industry profiles — Sunday only (heavier AGROFIT API usage)
     // Phase 20 — AGROFIT bulk catalog also Sunday-only (weekly cadence,
     // ~18 seed queries × ≤8 pages = up to 144 API calls per run)
+    // Phase 23 — AgroAdvance events list also Sunday-only (annual reference
+    // page, only changes occasionally; no point hitting it daily)
     ...(new Date().getDay() === 0
       ? [
           { name: 'industry-profiles', path: '/api/cron/sync-industry-profiles' },
           { name: 'agrofit-bulk', path: '/api/cron/sync-agrofit-bulk' },
+          { name: 'events-agroadvance', path: '/api/cron/sync-events-agroadvance' },
         ]
       : []),
   ]

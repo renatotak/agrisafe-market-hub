@@ -1,7 +1,7 @@
 # AgriSafe Market Hub — Roadmap
 
 > **Last updated:** 2026-04-07
-> **Status:** Phase 17 complete (5-entity foundation). Phase 19A complete (scraper resilience foundation: `scraper_registry`, `scraper_runs`, `scraper_knowledge`, `runScraper()` wrapper, `/api/scraper-health` endpoint, DataSources Scraper Health tab, Dashboard KPI surfacing). Phase 19B partial (FAOSTAT live in Pulso do Mercado → Contexto Macro for soja/milho/café/trigo/algodão). Phase 20A complete (federal AGROFIT bulk + Inteligência de Insumos Oracle UX). Phase 21 complete (Radar Competitivo CRUD + Harvey Ball matrix + web enrichment). Phase 22 complete (Notícias Agro CRUD + news_sources table + reading-room ingest endpoint). 4-vertical architecture, 13+ modules, 38 Supabase tables, 32 SQL migrations.
+> **Status:** Phase 17 complete (5-entity foundation). Phase 19A complete (scraper resilience foundation: `scraper_registry`, `scraper_runs`, `scraper_knowledge`, `runScraper()` wrapper, `/api/scraper-health` endpoint, DataSources Scraper Health tab, Dashboard KPI surfacing). Phase 19B partial (FAOSTAT live in Pulso do Mercado → Contexto Macro for soja/milho/café/trigo/algodão). Phase 20A complete (federal AGROFIT bulk + Inteligência de Insumos Oracle UX). Phase 21 complete (Radar Competitivo CRUD + Harvey Ball matrix + web enrichment). Phase 22 complete (Notícias Agro CRUD + news_sources table + reading-room ingest endpoint). Phase 23A complete (Eventos Agro: AgroAdvance scraper, source provenance badges, AI enrichment button, EventTracker refactored to read from Supabase). 4-vertical architecture, 13+ modules, 38 Supabase tables, 34 SQL migrations.
 > **For the latest user-defined task list, see** `documentation/TODO_2026-04-06.md`.
 
 ---
@@ -205,13 +205,25 @@ The current `AgInputIntelligence.tsx` was a wrapper around AGROFIT/Bioinsumos li
 
 ## Phase 23 — Eventos Agro: Missing Sources + Source Detail + AI Enrichment
 
-- [ ] Scrape and ingest events from:
-  - https://baldebranco.com.br/confira-os-grandes-eventos-do-agro-em-2026/
-  - https://agroadvance.com.br/blog-feiras-e-eventos-agro-2026/
-- [ ] Show **source provenance** on every event card
-- [ ] Button to let an agent **enrich event details** from the event's website (algorithmic first, LLM only for the prose summary)
-- [ ] Schema additions: `events.organizer_cnpj` (FK to companies), `events.location_lat/lng`
-- [ ] **App Campo integration** — events feed becomes the calendar source for the AgriSafe field-sales mobile app
+### Phase 23A — Schema, scrapers, UI refactor ✅ COMPLETE (2026-04-07)
+
+The Eventos Agro chapter previously read from `/api/events-na` (a live AgroAgenda proxy) — the Supabase `events` table that the cron populated was orphaned in the UI. Phase 23A unifies on the Supabase table as the single source of truth and adds the second cron source.
+
+- [x] **Migration 034** — extends `events` with `source_name`, `source_url` (the LISTING source, distinct from the event's own `website`), `organizer_cnpj`, `latitude`, `longitude`, `enriched_at`, `enrichment_summary`, `enrichment_source` (`gemini` | `openai` | `manual`). Backfills `source_name='AgroAgenda'` on every existing `na-*` row + `source_name='Manual'` on the 6 mig 006 seed rows. Seeds the `sync-events-agroadvance` row in `scraper_registry`. Seeds a `scraper_knowledge.kind='note'` row documenting why baldebranco.com.br is deferred (free-text paragraphs hostile to deterministic scraping per guardrail #1).
+- [x] **AgroAdvance scraper** — `/api/cron/sync-events-agroadvance` parses agroadvance.com.br/blog-feiras-e-eventos-agro-2026/ via deterministic Cheerio selectors (`<h4>` event name + `<p><strong>Data:</strong> ...` / `Local:` / `Site Oficial:` patterns), with Portuguese date-range regex (`DD a DD de MONTH de YYYY` + cross-month variants) and a 27-state name → 2-letter UF lookup. Uses `runScraper()` (Phase 19A protocol). ~27 events scraped per run. Wired into `sync-all` Sunday-only (annual reference page, no daily benefit).
+- [x] **`baldebranco` deferred with documented rationale** — page is free-text paragraphs under `<strong>MONTH</strong>` headers with no semantic field separation. Per guardrail #1 we are NOT shipping LLM-extraction. The `scraper_knowledge` row at scraper_id=`sync-events-agroadvance` kind=`note` records the analysis + two future paths (wait for structured page OR build a one-shot manual LLM extractor with human review).
+- [x] **`sync-events-na` stamps `source_name='AgroAgenda'` + `source_url`** on every upsert going forward. No full migration to `runScraper()` (existing crons stay on `logSync()` until they break, per the Phase 19A protocol).
+- [x] **`/api/events-db`** — new public read endpoint, ISR cached 10 min. Reads from the unified `events` table, maps each row to the existing `AgroEvent` UI shape (extracts city/UF from the `location` text), surfaces `source_name`, `enriched_at`, `enrichment_summary`, lat/lng. Returns per-source counts so the UI can render filter chips.
+- [x] **`/api/events/enrich`** — POST endpoint for the per-event Enrich button. Fetches the event's `website` URL via Cheerio, extracts main paragraph text + meta description (algorithmic), then *optionally* calls Gemini with a Portuguese system prompt to write a 2-3 paragraph executive summary. If `GEMINI_API_KEY` is missing, falls back to a manual summary built from the meta description. Writes back to `events.enrichment_summary` + `enriched_at` + `enrichment_source` (`gemini` | `manual`). LLM step is at the very END of the pipeline and only generates prose — never decides what to extract.
+- [x] **EventTracker.tsx refactor** — now reads from `/api/events-db` instead of `/api/events-na`. Source provenance badge per card (color-coded by source: AgroAgenda blue, AgroAdvance green, Manual grey, Reading Room indigo). New 🌟 AI badge when `enriched_at` is set. New "Enrich" / "Re-enrich" button per card (visible when `website` is set). Toast on enrich success/failure. New source filter chip row showing per-source counts. Calendar + list views also show source badges. Header now lists all sources dynamically with their counts. Footer attribution lists every source instead of hardcoded AgroAgenda.
+
+### Phase 23B — Deferred
+
+- [ ] **App Campo integration** — events feed becomes the calendar source for the AgriSafe field-sales mobile app. Requires the App Campo project's mobile-side API contract.
+- [ ] **Geocoding backfill** — populate `events.latitude` / `longitude` for the existing 47 rows so the Dashboard map can plot them. Reuse the 3-tier geocoding pattern from `geocode-retailers.js`.
+- [ ] **`organizer_cnpj` linking** — when a scraper finds a CNPJ in the event description, route through `ensureLegalEntityUid()` so each event ties to a `legal_entity` (Phase 17 alignment).
+- [ ] **baldebranco scraper** — only revisit if (a) the page becomes more structured or (b) the user explicitly authorizes a manual LLM extractor with human review.
+- [ ] **Migrate `sync-events-na` to `runScraper()`** — currently still on `logSync()`. Migrate when the scraper breaks or otherwise gets touched.
 
 ---
 

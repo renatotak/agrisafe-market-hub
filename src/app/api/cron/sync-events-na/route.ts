@@ -193,6 +193,9 @@ export async function GET(request: Request) {
           content_opportunity_en: `Follow full coverage on Notícias Agrícolas.`,
           website: item.url,
           upcoming: dateStart ? new Date(dateStart) >= new Date() : false,
+          // Phase 23: source provenance
+          source_name: 'AgroAgenda',
+          source_url: EVENTS_URL,
         })
       }
     }
