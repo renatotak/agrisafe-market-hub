@@ -2,8 +2,8 @@
   "manifest_version": 3,
   "name": "AgriSafe Reading Room",
   "short_name": "Reading Room",
-  "version": "2.1.0",
-  "description": "Save articles with one click. Pushes to AgriSafe Market Hub /api/reading-room/ingest for centralized agro intelligence.",
+  "version": "3.0.0",
+  "description": "One-click save with automatic sync to the AgriSafe Market Hub via /api/reading-room/ingest.",
   "permissions": [
     "storage",
     "contextMenus",
@@ -13,10 +13,7 @@
   "host_permissions": [
     "http://localhost:3000/*",
     "http://localhost:3001/*",
-    "https://*.vercel.app/*",
-    "https://api.anthropic.com/*",
-    "https://api.openai.com/*",
-    "https://generativelanguage.googleapis.com/*"
+    "https://*.vercel.app/*"
   ],
   "action": {
     "default_popup": "popup.html",

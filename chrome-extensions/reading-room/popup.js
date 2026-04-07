@@ -149,6 +149,27 @@ async function handleSave() {
   articles.unshift(article);
   await saveArticles();
   showSuccess(article);
+
+  // Auto-push to AgriSafe Market Hub via background service worker.
+  // Fire-and-forget — the popup closes shortly after, so we don't await.
+  // Background stamps mkthubSyncedAt on success so the next library render
+  // shows the synced badge.
+  chrome.runtime.sendMessage(
+    { type: 'push-to-mkthub', article },
+    (result) => {
+      // chrome.runtime.lastError fires if the popup closed before the
+      // background worker replied — that's fine, the push still happens.
+      if (chrome.runtime.lastError) return;
+      if (result && !result.ok) {
+        // Surface auth/config failures so the user knows to fix Settings.
+        // Network errors are silent — the article is in the local library
+        // and a future edit-then-save will retry.
+        if (/secret|HTTP 401|HTTP 403/i.test(result.error || '')) {
+          toast('Market Hub: ' + result.error);
+        }
+      }
+    }
+  );
 }
 
 // ── SUCCESS VIEW ──
