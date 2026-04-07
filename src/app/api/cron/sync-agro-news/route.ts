@@ -14,15 +14,19 @@ const parser = new Parser({
   },
 })
 
+// Order matters: the FIRST match wins. credit/judicial precede livestock so that
+// articles mentioning the institutional name "Ministério da Agricultura e Pecuária"
+// in a credit or RJ context don't get tagged livestock by accident. Kept in sync
+// with the duplicate inside src/app/api/reading-room/ingest/route.ts.
 function categorize(title: string, summary: string): string {
   const text = `${title} ${summary}`.toLowerCase()
   if (/soja|milho|café|açúcar|algodão|commodity|cotaç/.test(text)) return 'commodities'
-  if (/boi|vaca|bezerro|gado|pecuária|suíno|frango|aves|leite|carne|pastagem/.test(text)) return 'livestock'
-  if (/crédito|financ|banco|selic|juro/.test(text)) return 'credit'
-  if (/tecnolog|ia|inovaç|startup|digital|drone|satelit/.test(text)) return 'technology'
-  if (/polític|govern|lei|regulament|ministér|mapa|conab/.test(text)) return 'policy'
-  if (/sustentab|ambient|carbono|esg|desmat/.test(text)) return 'sustainability'
   if (/recuperação judicial|falência|judicial|tribunal/.test(text)) return 'judicial'
+  if (/crédito|financ|banco|selic|juro|cpr|lca|cra|fidc|fiagro|barter/.test(text)) return 'credit'
+  if (/boi|vaca|bezerro|gado|pecuarista|suíno|frango|aves|leite|carne|pastagem/.test(text)) return 'livestock'
+  if (/tecnolog|inovaç|startup|digital|drone|satelit/.test(text)) return 'technology'
+  if (/polític|govern|lei|regulament|mapa|conab/.test(text)) return 'policy'
+  if (/sustentab|ambient|carbono|esg|desmat/.test(text)) return 'sustainability'
   return 'general'
 }
 
