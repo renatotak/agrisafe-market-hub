@@ -95,8 +95,8 @@ function DashboardOverview({ lang, setActiveModule }: { lang: Lang; setActiveMod
     supabase.from("agro_news").select("*", { count: "exact", head: true })
       .then(({ count }) => setKpis(prev => ({ ...prev, newsCount: count || 0 })));
 
-    // Events count (upcoming)
-    fetch("/api/events-na").then(r => r.json()).then(json => {
+    // Events count (upcoming) — events-db unifies AgroAgenda + AgroAdvance + Manual sources
+    fetch("/api/events-db").then(r => r.json()).then(json => {
       if (json.success && json.data) {
         const upcoming = json.data.filter((e: any) => new Date(e.dataInicio) >= new Date()).length;
         setKpis(prev => ({ ...prev, eventsCount: upcoming }));
