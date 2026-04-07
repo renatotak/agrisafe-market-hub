@@ -6,6 +6,7 @@ import {
   Search, Leaf, FlaskConical, Map as MapIcon, Loader2, AlertCircle,
   ChevronLeft, ChevronRight, BookMarked, ExternalLink,
   Link, GitBranch, ChevronDown, ChevronUp, Info, Layers,
+  Sparkles, Zap, TrendingDown,
 } from "lucide-react";
 
 interface ProductRow {
@@ -18,12 +19,46 @@ interface ProductRow {
   holder: string;
 }
 
-type Tab = "chemicals" | "biologicals" | "soils" | "glossary";
+type Tab = "oracle" | "chemicals" | "biologicals" | "soils" | "glossary";
+
+// Phase 20 — Oracle types
+interface OracleBrand {
+  product_id: number;
+  product_name: string;
+  manufacturer_display: string | null;
+  manufacturer_country: string | null;
+  formulation: string | null;
+  toxicity_class: string | null;
+  environmental_class: string | null;
+  url_agrofit: string | null;
+}
+
+interface OracleMolecule {
+  ingredient_id: string;
+  ingredient_name: string;
+  ingredient_display: string | null;
+  category: string | null;
+  holder_count: number;
+  brand_count: number;
+  competitiveness: "patented" | "limited" | "generic" | "commodity";
+  brands: OracleBrand[];
+}
+
+const ORACLE_CULTURES = [
+  { slug: "soja", label_pt: "Soja", label_en: "Soybean" },
+  { slug: "milho", label_pt: "Milho", label_en: "Corn" },
+  { slug: "algodao", label_pt: "Algodão", label_en: "Cotton" },
+  { slug: "cafe", label_pt: "Café", label_en: "Coffee" },
+  { slug: "cana", label_pt: "Cana", label_en: "Sugar Cane" },
+  { slug: "trigo", label_pt: "Trigo", label_en: "Wheat" },
+  { slug: "feijao", label_pt: "Feijão", label_en: "Beans" },
+  { slug: "arroz", label_pt: "Arroz", label_en: "Rice" },
+];
 
 export function AgInputIntelligence({ lang }: { lang: Lang }) {
   const tr = t(lang);
   const [searchTerm, setSearchTerm] = useState("");
-  const [activeTab, setActiveTab] = useState<Tab>("chemicals");
+  const [activeTab, setActiveTab] = useState<Tab>("oracle");
   const [results, setResults] = useState<ProductRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -37,6 +72,39 @@ export function AgInputIntelligence({ lang }: { lang: Lang }) {
   const [selectedTermId, setSelectedTermId] = useState<string | null>(null);
   const [termDetails, setTermDetails] = useState<any | null>(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
+  // Phase 20 — Oracle state
+  const [oracleCulture, setOracleCulture] = useState<string>("soja");
+  const [oraclePest, setOraclePest] = useState<string>("");
+  const [oracleLoading, setOracleLoading] = useState(false);
+  const [oracleMolecules, setOracleMolecules] = useState<OracleMolecule[]>([]);
+  const [oracleError, setOracleError] = useState<string | null>(null);
+  const [oracleSearched, setOracleSearched] = useState(false);
+  const [expandedMolecule, setExpandedMolecule] = useState<string | null>(null);
+
+  const handleOracleSearch = async () => {
+    if (!oracleCulture) return;
+    setOracleLoading(true);
+    setOracleError(null);
+    setExpandedMolecule(null);
+    try {
+      const params = new URLSearchParams({ culture: oracleCulture, limit: "30" });
+      if (oraclePest.trim()) params.set("pest", oraclePest.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-"));
+      const res = await fetch(`/api/inputs/oracle?${params.toString()}`);
+      const json = await res.json();
+      if (json.success) {
+        setOracleMolecules(json.molecules || []);
+      } else {
+        setOracleError(json.error || "Failed to query Oracle");
+        setOracleMolecules([]);
+      }
+    } catch (e: any) {
+      setOracleError(e.message || "Network error");
+      setOracleMolecules([]);
+    } finally {
+      setOracleLoading(false);
+      setOracleSearched(true);
+    }
+  };
 
   const handleGlossarySearch = async () => {
     if (!glossaryQuery || glossaryQuery.length < 2) return;
@@ -198,10 +266,22 @@ export function AgInputIntelligence({ lang }: { lang: Lang }) {
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-2 border-b border-neutral-200">
+      <div className="flex items-center gap-2 border-b border-neutral-200 overflow-x-auto">
+        <button
+          onClick={() => setActiveTab("oracle")}
+          className={`flex items-center gap-2 px-4 py-3 text-[14px] font-semibold border-b-2 transition-colors whitespace-nowrap ${
+            activeTab === "oracle"
+              ? "border-brand-primary text-brand-primary"
+              : "border-transparent text-neutral-500 hover:text-neutral-700"
+          }`}
+        >
+          <Sparkles size={16} />
+          {tr.inputs.oracleTab}
+          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-brand-primary/10 text-brand-primary">v0</span>
+        </button>
         <button
           onClick={() => setActiveTab("chemicals")}
-          className={`flex items-center gap-2 px-4 py-3 text-[14px] font-semibold border-b-2 transition-colors ${
+          className={`flex items-center gap-2 px-4 py-3 text-[14px] font-semibold border-b-2 transition-colors whitespace-nowrap ${
             activeTab === "chemicals"
               ? "border-brand-primary text-brand-primary"
               : "border-transparent text-neutral-500 hover:text-neutral-700"
@@ -246,7 +326,196 @@ export function AgInputIntelligence({ lang }: { lang: Lang }) {
         </button>
       </div>
 
-      {activeTab === "glossary" ? (
+      {activeTab === "oracle" ? (
+        <div className="space-y-4">
+          {/* Oracle search panel */}
+          <div className="bg-white rounded-lg border border-neutral-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5">
+            <div className="flex items-center gap-2 mb-1">
+              <Sparkles size={16} className="text-brand-primary" />
+              <h3 className="text-[16px] font-bold text-neutral-900">{tr.inputs.oracleTitle}</h3>
+            </div>
+            <p className="text-[12px] text-neutral-500 mb-4">{tr.inputs.oracleSubtitle}</p>
+
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+              <div className="md:col-span-4">
+                <label className="block text-[10px] font-bold text-neutral-500 uppercase tracking-wider mb-1">
+                  {tr.inputs.oracleCultureLabel}
+                </label>
+                <select
+                  value={oracleCulture}
+                  onChange={(e) => setOracleCulture(e.target.value)}
+                  className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-md text-[13px] focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary"
+                >
+                  {ORACLE_CULTURES.map((c) => (
+                    <option key={c.slug} value={c.slug}>
+                      {lang === "pt" ? c.label_pt : c.label_en}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="md:col-span-5">
+                <label className="block text-[10px] font-bold text-neutral-500 uppercase tracking-wider mb-1">
+                  {tr.inputs.oraclePestLabel}
+                </label>
+                <input
+                  type="text"
+                  value={oraclePest}
+                  onChange={(e) => setOraclePest(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleOracleSearch()}
+                  placeholder={lang === "pt" ? "ex: ferrugem asiática, lagarta" : "e.g. asian rust, caterpillar"}
+                  className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-md text-[13px] focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary"
+                />
+              </div>
+              <div className="md:col-span-3">
+                <button
+                  onClick={handleOracleSearch}
+                  disabled={oracleLoading}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-brand-primary text-white rounded-md text-[13px] font-bold hover:bg-brand-dark transition-colors disabled:opacity-50"
+                >
+                  {oracleLoading ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                  {tr.inputs.oracleSearch}
+                </button>
+              </div>
+            </div>
+            <p className="text-[10px] text-neutral-400 italic mt-3 flex items-start gap-1.5">
+              <Info size={10} className="mt-0.5 flex-shrink-0" />
+              {tr.inputs.oracleHint}
+            </p>
+          </div>
+
+          {/* Oracle results */}
+          {oracleError && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-[13px] text-red-700">
+              <strong>{lang === "pt" ? "Erro:" : "Error:"}</strong> {oracleError}
+            </div>
+          )}
+
+          {oracleSearched && !oracleError && oracleMolecules.length === 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-[13px] text-amber-800">
+              {tr.inputs.oracleNoResults}
+            </div>
+          )}
+
+          {!oracleSearched && (
+            <div className="bg-neutral-50 border border-dashed border-neutral-200 rounded-lg p-12 text-center">
+              <Sparkles size={36} className="mx-auto mb-3 text-neutral-300" />
+              <p className="text-[13px] text-neutral-500">{tr.inputs.oracleEmpty}</p>
+            </div>
+          )}
+
+          {oracleMolecules.length > 0 && (
+            <>
+              {/* Summary strip */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-white border border-neutral-200 rounded-lg p-3">
+                  <p className="text-[9px] font-bold text-neutral-400 uppercase">{tr.inputs.oracleMolecules}</p>
+                  <p className="text-[20px] font-bold text-neutral-900 leading-tight">{oracleMolecules.length}</p>
+                </div>
+                <div className="bg-white border border-neutral-200 rounded-lg p-3">
+                  <p className="text-[9px] font-bold text-neutral-400 uppercase">{tr.inputs.oracleBrands}</p>
+                  <p className="text-[20px] font-bold text-neutral-900 leading-tight">
+                    {oracleMolecules.reduce((acc, m) => acc + m.brands.length, 0)}
+                  </p>
+                </div>
+                <div className="bg-white border border-neutral-200 rounded-lg p-3">
+                  <p className="text-[9px] font-bold text-neutral-400 uppercase">{tr.inputs.oracleHolders}</p>
+                  <p className="text-[20px] font-bold text-neutral-900 leading-tight">
+                    {Math.max(...oracleMolecules.map((m) => m.holder_count))}
+                  </p>
+                </div>
+              </div>
+
+              {/* Molecules list */}
+              <div className="space-y-2">
+                {oracleMolecules.map((m) => {
+                  const isExpanded = expandedMolecule === m.ingredient_id;
+                  const competitivenessLabel =
+                    m.competitiveness === "patented" ? tr.inputs.oracleCompetitivenessPatented :
+                    m.competitiveness === "limited" ? tr.inputs.oracleCompetitivenessLimited :
+                    m.competitiveness === "generic" ? tr.inputs.oracleCompetitivenessGeneric :
+                    tr.inputs.oracleCompetitivenessCommodity;
+                  const competitivenessClass =
+                    m.competitiveness === "patented" ? "bg-red-50 text-red-700 border-red-200" :
+                    m.competitiveness === "limited" ? "bg-amber-50 text-amber-700 border-amber-200" :
+                    m.competitiveness === "generic" ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
+                    "bg-blue-50 text-blue-700 border-blue-200";
+
+                  return (
+                    <div key={m.ingredient_id} className="bg-white border border-neutral-200 rounded-lg overflow-hidden">
+                      <button
+                        onClick={() => setExpandedMolecule(isExpanded ? null : m.ingredient_id)}
+                        className="w-full p-4 flex items-center gap-4 hover:bg-neutral-50/50 transition-colors text-left"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h4 className="text-[14px] font-bold text-neutral-900">
+                              {m.ingredient_display || m.ingredient_name}
+                            </h4>
+                            {m.category && (
+                              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-neutral-100 text-neutral-600 uppercase">
+                                {m.category}
+                              </span>
+                            )}
+                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${competitivenessClass}`}>
+                              {m.competitiveness === "commodity" || m.competitiveness === "generic" ? (
+                                <TrendingDown size={9} className="inline mr-0.5" />
+                              ) : null}
+                              {competitivenessLabel}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3 text-[11px] text-neutral-500">
+                            <span><strong className="text-neutral-700">{m.holder_count}</strong> {tr.inputs.oracleHolders}</span>
+                            <span><strong className="text-neutral-700">{m.brands.length}</strong> {tr.inputs.oracleBrands}</span>
+                          </div>
+                        </div>
+                        {isExpanded ? <ChevronUp size={16} className="text-neutral-400" /> : <ChevronDown size={16} className="text-neutral-400" />}
+                      </button>
+
+                      {isExpanded && (
+                        <div className="border-t border-neutral-100 bg-neutral-50/30">
+                          <table className="w-full text-[12px]">
+                            <thead className="text-[9px] uppercase font-bold text-neutral-500">
+                              <tr>
+                                <th className="text-left px-4 py-2">{tr.inputs.brand}</th>
+                                <th className="text-left px-4 py-2">{tr.inputs.oracleManufacturer}</th>
+                                <th className="text-left px-4 py-2">{tr.inputs.oracleFormulation}</th>
+                                <th className="text-left px-4 py-2">{tr.inputs.oracleToxicity}</th>
+                                <th className="px-4 py-2"></th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {m.brands.map((b) => (
+                                <tr key={b.product_id} className="border-t border-neutral-100">
+                                  <td className="px-4 py-2 font-bold text-neutral-900">{b.product_name}</td>
+                                  <td className="px-4 py-2 text-neutral-600">{b.manufacturer_display || "—"}</td>
+                                  <td className="px-4 py-2 text-neutral-500">{b.formulation || "—"}</td>
+                                  <td className="px-4 py-2 text-neutral-500">{b.toxicity_class || "—"}</td>
+                                  <td className="px-4 py-2 text-right">
+                                    {b.url_agrofit && (
+                                      <a
+                                        href={b.url_agrofit}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-[10px] text-brand-primary font-bold hover:underline inline-flex items-center gap-1"
+                                      >
+                                        {tr.inputs.oracleViewOnAgrofit} <ExternalLink size={9} />
+                                      </a>
+                                    )}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
+      ) : activeTab === "glossary" ? (
         <div className="space-y-4">
           {/* Glossary Search */}
           <div className="bg-white rounded-lg border border-neutral-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4">

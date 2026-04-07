@@ -41,8 +41,13 @@ export async function GET(request: Request) {
     // a few hundred KB and let runScraper() exercise the protocol every cycle.
     { name: 'faostat', path: '/api/cron/sync-faostat' },
     // Industry profiles — Sunday only (heavier AGROFIT API usage)
+    // Phase 20 — AGROFIT bulk catalog also Sunday-only (weekly cadence,
+    // ~18 seed queries × ≤8 pages = up to 144 API calls per run)
     ...(new Date().getDay() === 0
-      ? [{ name: 'industry-profiles', path: '/api/cron/sync-industry-profiles' }]
+      ? [
+          { name: 'industry-profiles', path: '/api/cron/sync-industry-profiles' },
+          { name: 'agrofit-bulk', path: '/api/cron/sync-agrofit-bulk' },
+        ]
       : []),
   ]
 

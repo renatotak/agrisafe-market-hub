@@ -1,7 +1,7 @@
 # AgriSafe Market Hub — Roadmap
 
 > **Last updated:** 2026-04-07
-> **Status:** Phase 17 complete (5-entity foundation). Phase 19A complete (scraper resilience foundation: `scraper_registry`, `scraper_runs`, `scraper_knowledge`, `runScraper()` wrapper, `/api/scraper-health` endpoint, DataSources Scraper Health tab, Dashboard KPI surfacing). Phase 19B partial (FAOSTAT live in Pulso do Mercado → Contexto Macro for soja/milho/café/trigo/algodão). 4-vertical architecture, 13+ modules, 33 Supabase tables, 29 SQL migrations.
+> **Status:** Phase 17 complete (5-entity foundation). Phase 19A complete (scraper resilience foundation: `scraper_registry`, `scraper_runs`, `scraper_knowledge`, `runScraper()` wrapper, `/api/scraper-health` endpoint, DataSources Scraper Health tab, Dashboard KPI surfacing). Phase 19B partial (FAOSTAT live in Pulso do Mercado → Contexto Macro for soja/milho/café/trigo/algodão). Phase 20A complete (federal AGROFIT bulk + Inteligência de Insumos Oracle UX). 4-vertical architecture, 13+ modules, 36 Supabase tables, 30 SQL migrations.
 > **For the latest user-defined task list, see** `docs/TODO_2026-04-06.md`.
 
 ---
@@ -159,14 +159,27 @@ The pre-Phase-19 cron pipeline only used `logSync()` (a flat per-run pass/fail r
 
 ## Phase 20 — Inteligência de Insumos Build-Out
 
-The current `AgInputIntelligence.tsx` is a wrapper around AGROFIT/Bioinsumos search. The user wants this to become an **oracle** for ag-input substitution.
+The current `AgInputIntelligence.tsx` was a wrapper around AGROFIT/Bioinsumos live search. Phase 20 turns it into an **oracle** for ag-input substitution: a normalized local DB of registered products that supports "give me cheaper alternatives to brand X for culture Y" queries via algorithmic JOIN through molecule + holder count.
 
-- [ ] **Federal source**: full AGROFIT registered products list (defensives + fertilizers + biologicals)
-- [ ] **State sources**: per-state agriculture secretariat lists (each `secretaria de agricultura` publishes its own approved list)
-- [ ] Database schema: `active_ingredients` ↔ `commercial_brands` ↔ `manufacturers (companies)` — proper FK to the `companies` table
-- [ ] First-batch scraper for the federal AGROFIT list, then state lists in priority order (MT, MS, GO, PR, RS, SP, MG, BA)
-- [ ] **Oracle UX**: user enters a culture + region → app suggests cheaper alternatives to patented products commonly used by producers in that region. Shows molecule equivalence, brand alternatives, price range.
-- [ ] Source registry entries for all the public ag-input lists
+### Phase 20A — Federal AGROFIT slice ✅ COMPLETE (2026-04-07)
+
+- [x] **Federal source**: full AGROFIT registered products via Embrapa AgroAPI (`/agrofit/v1/search/produtos-formulados`). Bulk scraper iterates a fixed seed-query list (6 cultures + 12 active ingredients) and dedupes by `numero_registro` since the API has no list-all endpoint.
+- [x] **Migration 030** — extends `industry_products` from migration 014 with `formulation`, `url_agrofit`, `source_dataset`, `scraped_at`, `confidentiality`, plus a UNIQUE partial index on `agrofit_registro` for idempotent upserts. Adds 3 new normalized helper tables:
+  - `active_ingredients` — molecule master with `holder_count` denormalized cache (the substitution-competitiveness signal)
+  - `industry_product_ingredients` — product × ingredient junction
+  - `industry_product_uses` — junction normalizing AGROFIT's `indicacao_uso[]` into `(product_id, culture_slug, pest_slug)` rows for fast Oracle JOINs
+  - `v_oracle_brand_alternatives` — view that the Oracle endpoint queries
+  - Seeds `sync-agrofit-bulk` in `scraper_registry` (Phase 19A protocol)
+- [x] **`/api/cron/sync-agrofit-bulk`** — TypeScript scraper using `runScraper()`. Fetches via the existing `searchAgrofitProducts()` helper, normalizes into the 4 tables, anchors manufacturers (`titular_registro`) to the existing `industries` table via `agrofit_holder_names[]` lookup. Sunday-only in `sync-all` (~144 max API calls).
+- [x] **`/api/inputs/oracle`** — substitution query endpoint. JOIN through `v_oracle_brand_alternatives`. Groups by molecule, sorts by `holder_count desc` (most competitive first), classifies competitiveness as `patented` (1 holder) → `limited` (2-3) → `generic` (4-10) → `commodity` (10+). Algorithmic only — no LLM.
+- [x] **AgInputIntelligence.tsx Oracle tab** — new tab (default landing) with: culture select (8 cultures), pest free-text input, molecule cards showing competitiveness badge + holder/brand counts, expandable brand list per molecule with manufacturer + formulation + toxicity + AGROFIT deep link. Bilingual via `inputs.oracle*` keys.
+
+### Phase 20B — Deferred (needs user input)
+
+- [ ] **State sources**: per-state agriculture secretariat lists (each `secretaria de agricultura` publishes its own approved list). Priority states: MT, MS, GO, PR, RS, SP, MG, BA. Schema is ready (`industry_products.source_dataset` enum already includes `state_secretaria_*` values) — needs URLs and selectors per state, which require live verification.
+- [ ] **Manufacturer backfill**: enrich `industries.agrofit_holder_names[]` from the new bulk catalog. Currently the bulk scraper leaves `industry_id = null` when the AGROFIT `titular_registro` doesn't match any pre-existing holder name variant. A follow-up should walk distinct titulars and propose new `industries` rows.
+- [ ] **Real price data**: the v0 Oracle uses `holder_count` as a proxy for "cheaper alternative". A real price comparison needs scraping retailer price tables — not in scope for Phase 20 (depends on Phase 24/27).
+- [ ] **Region awareness**: ROADMAP originally said "culture + region → suggestions". The v0 ignores region because all federal AGROFIT records are nationally valid. Region-aware filtering kicks in once the state secretariat scrapers ship.
 
 ---
 
