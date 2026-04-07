@@ -132,32 +132,51 @@ export function DashboardMap({ lang }: { lang: Lang }) {
 
   // Fetch data on mount
   useEffect(() => {
-    // Events
-    fetch("/api/events-na").then(r => r.json()).then(json => {
+    // Events — Phase 23B: read from /api/events-db (the unified Supabase
+    // events table with multi-source data). Prefer the row's own latitude
+    // and longitude (populated by src/scripts/geocode-events.js); fall
+    // back to the hardcoded resolveCoords() city dictionary only when
+    // the row hasn't been geocoded yet.
+    fetch("/api/events-db").then(r => r.json()).then(json => {
       if (!json.success || !json.data) return;
       const now = new Date();
       const markers: MapMarker[] = [];
       for (const ev of json.data) {
-        if (ev.formato === "Online" || (!ev.cidade && !ev.estado)) continue;
-        const coords = resolveCoords(ev.cidade, ev.estado);
-        if (!coords) continue;
+        if (ev.formato === "Online") continue;
         const evDate = ev.dataInicio || "";
         // Only upcoming events
         if (evDate && new Date(evDate) < now) continue;
+
+        // Prefer pre-geocoded coordinates from the events table
+        let lat: number | null = null;
+        let lng: number | null = null;
+        if (typeof ev.latitude === "number" && typeof ev.longitude === "number") {
+          lat = ev.latitude;
+          lng = ev.longitude;
+        } else if (ev.cidade || ev.estado) {
+          const coords = resolveCoords(ev.cidade, ev.estado);
+          if (coords) { lat = coords.lat; lng = coords.lng; }
+        }
+        if (lat == null || lng == null) continue;
+
         markers.push({
           id: `ev-${ev.id}`,
           type: "event",
-          lat: coords.lat + (Math.random() - 0.5) * 0.01,
-          lng: coords.lng + (Math.random() - 0.5) * 0.01,
+          // Tiny jitter so co-located events don't fully overlap
+          lat: lat + (Math.random() - 0.5) * 0.01,
+          lng: lng + (Math.random() - 0.5) * 0.01,
           title: ev.nome,
           subtitle: [ev.cidade, ev.estado].filter(Boolean).join(", "),
-          url: ev.slug ? `https://agroagenda.agr.br/event/${ev.slug}` : undefined,
+          url: ev.website || ev.source_url || (ev.slug ? `https://agroagenda.agr.br/event/${ev.slug}` : undefined),
           uf: ev.estado || "",
           date: evDate,
           extra: (
             <div className="mt-1 space-y-0.5">
               <p className="text-[11px] text-neutral-500">{evDate}</p>
-              {ev.tipo && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-brand-primary/10 text-brand-primary">{ev.tipo}</span>}
+              <div className="flex items-center gap-1">
+                {ev.tipo && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-brand-primary/10 text-brand-primary">{ev.tipo}</span>}
+                {ev.source_name && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-neutral-100 text-neutral-600 uppercase">{ev.source_name}</span>}
+              </div>
             </div>
           ),
         });
