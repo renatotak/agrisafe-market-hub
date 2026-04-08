@@ -9,7 +9,7 @@ import {
   Store, Search, ChevronDown, ChevronUp, MapPin, Building2,
   Loader2, ChevronLeft, ChevronRight, Filter, X, Map as MapIcon, LayoutList,
   Users, FileSearch, ExternalLink, Calendar, Briefcase, Shield, CheckCircle2, XCircle,
-  Pencil, Save, Globe, Lock, MessageSquareText, Phone, Mail,
+  Pencil, Save, Globe, Lock, MessageSquareText, Phone, Mail, ArrowUpDown, ArrowUp, ArrowDown,
 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { RetailerExpandedPanel } from "@/components/RetailerExpandedPanel";
@@ -132,9 +132,23 @@ export function RetailersDirectory({ lang }: { lang: Lang }) {
   // KPI stats — kept for the header subtitle ("X canais mapeados em Y estados")
   const [stats, setStats] = useState({ total: 0, distribuidores: 0, cooperativas: 0, estados: 0 });
 
+  // Server-side sort. Defaults to razao_social ASC (matches the old hardcoded order).
+  type SortField = "razao_social" | "grupo_acesso" | "classificacao" | "faixa_faturamento" | "porte_name";
+  const [sortField, setSortField] = useState<SortField>("razao_social");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
   useEffect(() => { fetchRetailers(); fetchFilterOptions(); fetchStats(); }, []);
-  useEffect(() => { setPage(0); }, [search, ufFilter, grupoFilter, classificacaoFilter]);
-  useEffect(() => { fetchRetailers(); }, [page, search, ufFilter, grupoFilter, classificacaoFilter]);
+  useEffect(() => { setPage(0); }, [search, ufFilter, grupoFilter, classificacaoFilter, sortField, sortDir]);
+  useEffect(() => { fetchRetailers(); }, [page, search, ufFilter, grupoFilter, classificacaoFilter, sortField, sortDir]);
+
+  const toggleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortDir("asc");
+    }
+  };
   useEffect(() => { if (viewMode === "map") fetchMapLocations(); }, [viewMode, ufFilter, grupoFilter, classificacaoFilter, search]);
 
   const fetchStats = async () => {
@@ -160,7 +174,11 @@ export function RetailersDirectory({ lang }: { lang: Lang }) {
 
   const fetchRetailers = async () => {
     setLoading(true);
-    let query = supabase.from("retailers").select("*", { count: "exact" }).order("razao_social").range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+    let query = supabase
+      .from("retailers")
+      .select("*", { count: "exact" })
+      .order(sortField, { ascending: sortDir === "asc", nullsFirst: false })
+      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
 
     if (search.trim()) query = query.or(`razao_social.ilike.%${search.trim()}%,nome_fantasia.ilike.%${search.trim()}%,cnpj_raiz.ilike.%${search.trim()}%`);
     if (grupoFilter) query = query.eq("grupo_acesso", grupoFilter);
@@ -310,11 +328,11 @@ export function RetailersDirectory({ lang }: { lang: Lang }) {
               <table className="w-full text-[14px]">
                 <thead>
                   <tr className="bg-neutral-50 text-[10px] font-semibold text-neutral-500 uppercase tracking-[0.05em] border-b border-neutral-200">
-                    <th className="px-4 py-3 text-left">{lang === "pt" ? "Empresa" : "Company"}</th>
-                    <th className="px-4 py-3 text-left hidden md:table-cell">{lang === "pt" ? "Grupo" : "Group"}</th>
-                    <th className="px-4 py-3 text-center hidden md:table-cell">{lang === "pt" ? "Class." : "Class."}</th>
-                    <th className="px-4 py-3 text-left hidden lg:table-cell">{lang === "pt" ? "Faturamento" : "Revenue"}</th>
-                    <th className="px-4 py-3 text-left hidden xl:table-cell">{lang === "pt" ? "Porte" : "Size"}</th>
+                    <SortHeader label={lang === "pt" ? "Empresa" : "Company"} field="razao_social" sortField={sortField} sortDir={sortDir} onToggle={toggleSort} />
+                    <SortHeader label={lang === "pt" ? "Grupo" : "Group"} field="grupo_acesso" sortField={sortField} sortDir={sortDir} onToggle={toggleSort} className="hidden md:table-cell" />
+                    <SortHeader label={lang === "pt" ? "Class." : "Class."} field="classificacao" sortField={sortField} sortDir={sortDir} onToggle={toggleSort} align="center" className="hidden md:table-cell" />
+                    <SortHeader label={lang === "pt" ? "Faturamento" : "Revenue"} field="faixa_faturamento" sortField={sortField} sortDir={sortDir} onToggle={toggleSort} className="hidden lg:table-cell" />
+                    <SortHeader label={lang === "pt" ? "Porte" : "Size"} field="porte_name" sortField={sortField} sortDir={sortDir} onToggle={toggleSort} className="hidden xl:table-cell" />
                     <th className="px-4 py-3 w-8"></th>
                   </tr>
                 </thead>
@@ -355,6 +373,40 @@ export function RetailersDirectory({ lang }: { lang: Lang }) {
           grupoColors={GRUPO_COLORS} />
       )}
     </div>
+  );
+}
+
+// ─── Sortable column header ──────────────────────────────────────────────────
+
+function SortHeader({
+  label,
+  field,
+  sortField,
+  sortDir,
+  onToggle,
+  align = "left",
+  className = "",
+}: {
+  label: string;
+  field: string;
+  sortField: string;
+  sortDir: "asc" | "desc";
+  onToggle: (field: any) => void;
+  align?: "left" | "center";
+  className?: string;
+}) {
+  const active = sortField === field;
+  const Icon = !active ? ArrowUpDown : sortDir === "asc" ? ArrowUp : ArrowDown;
+  return (
+    <th className={`px-4 py-3 text-${align} ${className}`}>
+      <button
+        onClick={() => onToggle(field)}
+        className={`inline-flex items-center gap-1.5 font-semibold uppercase tracking-[0.05em] hover:text-neutral-800 transition-colors ${active ? "text-brand-primary" : "text-neutral-500"}`}
+      >
+        {label}
+        <Icon size={11} className={active ? "" : "opacity-40"} />
+      </button>
+    </th>
   );
 }
 
