@@ -25,6 +25,7 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { runScraper, type ScraperFn } from '@/lib/scraper-runner'
+import { classifyCnaes } from '@/lib/cnae-classifier'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -63,6 +64,7 @@ interface CNJNormRow extends Record<string, unknown> {
   effective_at: null
   impact_level: 'high' | 'medium' | 'low'
   affected_areas: string[]
+  affected_cnaes: string[]
   source_url: string
 }
 
@@ -155,18 +157,23 @@ const cnjAtosScraper: ScraperFn<CNJNormRow> = async () => {
       const year = (ato.data_publicacao || '').slice(0, 4)
       const numberLabel = year ? `${ato.numero}/${year}` : String(ato.numero)
       const sourceUrl = `https://atos.cnj.jus.br/atos/detalhar/${ato.id}`
+      const title = `CNJ ${ato.tipo} ${numberLabel}`
+      const summary = ementaText.slice(0, 500)
+      const affectedAreas = extractAffectedAreas(haystack)
+      const affectedCnaes = classifyCnaes({ title, summary, affected_areas: affectedAreas })
 
       hits.push({
         id: `cnj-${ato.id}`,
         body: 'CNJ',
         norm_type: normType,
         norm_number: numberLabel,
-        title: `CNJ ${ato.tipo} ${numberLabel}`,
-        summary: ementaText.slice(0, 500),
+        title,
+        summary,
         published_at: ato.data_publicacao,
         effective_at: null,
         impact_level: classifyImpact(haystack),
-        affected_areas: extractAffectedAreas(haystack),
+        affected_areas: affectedAreas,
+        affected_cnaes: affectedCnaes,
         source_url: sourceUrl,
       })
     }

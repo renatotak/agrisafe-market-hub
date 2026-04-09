@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/utils/supabase/admin";
+import { logActivity } from "@/lib/activity-log";
 import {
   loadMatchableEntities,
   matchEntitiesInText,
@@ -173,6 +174,18 @@ export async function POST(req: NextRequest) {
       { status: 500 },
     );
   }
+
+  // Phase 24G2 — log every reading-room ingest into activity_log
+  await logActivity(supabase, {
+    action: "upsert",
+    target_table: "agro_news",
+    target_id: newsId,
+    source: "reading-room-extension",
+    source_kind: "extension",
+    summary: `${cleanTitle.slice(0, 180)}`,
+    confidentiality: "agrisafe_published",
+    metadata: { source_url: url, source_name: sourceName },
+  });
 
   // ─── 4. Algorithm-first entity-mention detection ────────────
   let entityMentionsWritten = 0;

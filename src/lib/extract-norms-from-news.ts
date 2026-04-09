@@ -1,3 +1,5 @@
+import { classifyCnaes } from './cnae-classifier'
+
 /**
  * Phase 24F — Detect new legal norms mentioned inside news articles.
  *
@@ -36,6 +38,8 @@ export interface NormCandidate {
   impact_level: 'high' | 'medium' | 'low'
   /** Affected areas (cpr, fiagro, recuperacao_judicial, etc). */
   affected_areas: string[]
+  /** Phase 24G2 — CNAE codes the norm affects (deterministic from cnae-classifier.ts). */
+  affected_cnaes: string[]
   /** URL of the source article — used for traceability. */
   source_url: string
 }
@@ -212,16 +216,21 @@ export function extractNormsFromNews(article: {
       const snippet = text.slice(snippetStart, snippetEnd).replace(/\s+/g, ' ').trim()
 
       const titleParts = [np.body, np.norm_type, number].filter(Boolean)
+      const builtTitle = titleParts.join(' ').toUpperCase().replace('LEI ', 'Lei ').replace('PROVIMENTO ', 'Provimento ').replace('RESOLUCAO', 'Resolução').replace('CIRCULAR', 'Circular').replace('INSTRUCAO_NORMATIVA', 'Instrução Normativa').replace('INSTRUCAO', 'Instrução').replace('PORTARIA', 'Portaria').replace('DECRETO', 'Decreto').replace('MEDIDA_PROVISORIA', 'Medida Provisória').replace('LEI_COMPLEMENTAR', 'Lei Complementar').replace('RECOMENDACAO', 'Recomendação')
+      const builtSummary = snippet.slice(0, 500)
+      const areas = extractAffectedAreas(text)
       candidates.push({
         id,
         body: np.body || 'OUTROS',
         norm_type: np.norm_type,
         norm_number: number,
-        title: titleParts.join(' ').toUpperCase().replace('LEI ', 'Lei ').replace('PROVIMENTO ', 'Provimento ').replace('RESOLUCAO', 'Resolução').replace('CIRCULAR', 'Circular').replace('INSTRUCAO_NORMATIVA', 'Instrução Normativa').replace('INSTRUCAO', 'Instrução').replace('PORTARIA', 'Portaria').replace('DECRETO', 'Decreto').replace('MEDIDA_PROVISORIA', 'Medida Provisória').replace('LEI_COMPLEMENTAR', 'Lei Complementar').replace('RECOMENDACAO', 'Recomendação'),
-        summary: snippet.slice(0, 500),
+        title: builtTitle,
+        summary: builtSummary,
         published_at: (article.published_at || new Date().toISOString()).slice(0, 10),
         impact_level: classifyImpact(text),
-        affected_areas: extractAffectedAreas(text),
+        affected_areas: areas,
+        // Phase 24G2 — auto-classify CNAEs from title/summary/areas
+        affected_cnaes: classifyCnaes({ title: builtTitle, summary: builtSummary, affected_areas: areas }),
         source_url: article.source_url,
       })
     }

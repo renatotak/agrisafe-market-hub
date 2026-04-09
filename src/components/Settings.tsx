@@ -9,6 +9,7 @@ import {
   Folder, Settings as SettingsIcon, Play,
 } from "lucide-react";
 import { AnalysisLensesEditor } from "@/components/AnalysisLensesEditor";
+import { ActivityLogPanel } from "@/components/ActivityLogPanel";
 
 const EXTENSION_FOLDER_PATH = "chrome-extensions/reading-room";
 const CHROME_EXTENSIONS_URL = "chrome://extensions";
@@ -144,6 +145,9 @@ export function Settings({ lang }: { lang: Lang }) {
 
       {/* Editable Analysis Lenses (Phase 24B) */}
       <AnalysisLensesEditor lang={lang} />
+
+      {/* Activity Log (Phase 24G2) */}
+      <ActivityLogPanel lang={lang} />
 
       {/* Reading Room Chrome extension install guide (Phase 22 follow-up) */}
       <div className="bg-white rounded-lg border border-neutral-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-6">

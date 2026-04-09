@@ -4,6 +4,7 @@ import { logSync } from '@/lib/sync-logger'
 import { loadMatchableEntities, matchEntitiesInText, writeEntityMentions } from '@/lib/entity-matcher'
 import { isGeminiConfigured, generateEmbeddingBatch } from '@/lib/gemini'
 import { extractNormsFromNews } from '@/lib/extract-norms-from-news'
+import { logActivityBatch } from '@/lib/activity-log'
 import Parser from 'rss-parser'
 
 export const dynamic = 'force-dynamic'
@@ -201,12 +202,27 @@ export async function GET(request: Request) {
                 effective_at: null,
                 impact_level: c.impact_level,
                 affected_areas: c.affected_areas,
+                affected_cnaes: c.affected_cnaes, // Phase 24G2
                 source_url: c.source_url,
               }))
               const { error: normErr } = await supabase
                 .from('regulatory_norms')
                 .upsert(normRows, { onConflict: 'id', ignoreDuplicates: false })
-              if (!normErr) totalNormsDetected += normRows.length
+              if (!normErr) {
+                totalNormsDetected += normRows.length
+                // Phase 24G2 — log each detected norm so the Settings feed
+                // shows news-derived norms distinct from CNJ/CVM scraper hits
+                await logActivityBatch(supabase, normRows.map((nr) => ({
+                  action: 'upsert' as const,
+                  target_table: 'regulatory_norms',
+                  target_id: nr.id,
+                  source: 'sync-agro-news:norm_extractor',
+                  source_kind: 'cron' as const,
+                  actor: 'cron',
+                  summary: `${nr.title} (detected in news)`.slice(0, 200),
+                  metadata: { news_url: item.link, body: nr.body, norm_type: nr.norm_type },
+                })))
+              }
             }
           }
         }

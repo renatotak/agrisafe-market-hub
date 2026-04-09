@@ -1,34 +1,45 @@
 import { env } from 'process'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { generateEmbedding, summarizeText, isGeminiConfigured } from '@/lib/gemini'
+import { resolveCallerTier, visibleTiers } from '@/lib/confidentiality'
 
 export async function POST(req: Request) {
   try {
     if (!isGeminiConfigured()) {
-      return new Response(JSON.stringify({ 
-        success: false, 
-        message: 'Gemini API not configured' 
+      return new Response(JSON.stringify({
+        success: false,
+        message: 'Gemini API not configured'
       }), { status: 400 })
     }
 
     const { prompt, history = [], lang = 'pt' } = await req.json()
     if (!prompt) {
-      return new Response(JSON.stringify({ 
-        success: false, 
-        message: 'Prompt is required' 
+      return new Response(JSON.stringify({
+        success: false,
+        message: 'Prompt is required'
       }), { status: 400 })
     }
 
     const supabase = createAdminClient()
 
+    // Phase 24G — resolve the caller's confidentiality tier so the
+    // semantic search RPC only surfaces rows the caller is allowed to
+    // see. Defaults to `public` for unauthenticated requests; an
+    // authenticated AgriSafe team session unlocks the full
+    // public + agrisafe_published + agrisafe_confidential set.
+    const callerTier = await resolveCallerTier(supabase, req)
+    const visible = visibleTiers(callerTier)
+
     // 1. Get embedding for the prompt
     const queryEmbedding = await generateEmbedding(prompt)
 
-    // 2. Search knowledge base (Tier 1-4)
+    // 2. Search knowledge base — tier-filtered via the new
+    //    `filter_confidentiality` arg added in migration 040.
     const { data: contextItems, error: searchError } = await supabase.rpc('match_knowledge_items', {
       query_embedding: queryEmbedding,
       match_threshold: 0.3,
-      match_count: 5
+      match_count: 5,
+      filter_confidentiality: visible,
     })
 
     if (searchError) throw searchError
@@ -61,10 +72,12 @@ ${history.map((h: any) => `${h.role === 'user' ? 'Usuário' : 'Oráculo'}: ${h.c
     return new Response(JSON.stringify({
       success: true,
       answer,
+      caller_tier: callerTier,
       context: (contextItems || []).map((it: any) => ({
         id: it.id,
         title: it.title,
         tier: it.tier,
+        confidentiality: it.confidentiality,
         source_url: it.source_url
       }))
     }), {

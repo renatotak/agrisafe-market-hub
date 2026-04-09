@@ -48,27 +48,61 @@ const UA = "Mozilla/5.0 (compatible; AgriSafe MarketHub/1.0; +https://agsf-mkthu
 
 // ─── Constants (mirrors src/app/api/cron/sync-cvm-agro/route.ts) ───────────
 
+// Phase 24G2 — tightened pattern (drop generic fundo.*agro false positive)
 const BODY_AGRO_PATTERN =
-  /agroneg[óo]cio|crédito rural|fiagro|\bcpr\b|c[ée]dula de produto rural|\bcra\b|barter|cadeia agr[íi]col|insumo agr[íi]col|cooperativa agr[íi]col|defensivo|fertilizant|sement[se]|FII[\s-]*agro|fundo.{0,30}agro/i;
+  /agroneg[óo]cio|crédito rural|fiagro|\bcpr\b|c[ée]dula de produto rural|\bcra\b\s+(?:do\s+)?agroneg|barter agr[íi]col|cadeia agr[íi]col|insumo agr[íi]col|cooperativa agr[íi]col|defensivo agr[íi]col|fertilizant|sement[se]\s+(?:fiscaliz|registro)|FII[\s-]*agro/i;
 
 const PT_MONTHS = {
   janeiro: 1, fevereiro: 2, março: 3, marco: 3, abril: 4, maio: 5, junho: 6,
   julho: 7, agosto: 8, setembro: 9, outubro: 10, novembro: 11, dezembro: 12,
 };
 
-function extractDate(text) {
-  const t = text.toLowerCase();
-  const m = t.match(/(\d{1,2})\s+de\s+([a-zçãéí]+)\s+de\s+(\d{4})/i);
-  if (m) {
+// Phase 24G2 — DD/MM/YYYY-first extractor (mirrors the daily route)
+function extractDate(body) {
+  const t = body.toLowerCase();
+  const footerMarkers = [
+    "atualizado em",
+    "última atualização",
+    "última modificação",
+    "data da última modificação",
+    "arquivos relacionados",
+  ];
+  let cut = t.length;
+  for (const marker of footerMarkers) {
+    const idx = t.indexOf(marker);
+    if (idx > 0 && idx < cut) cut = idx;
+  }
+  const head = body.slice(0, cut);
+
+  // Pass 1: DD/MM/YYYY (CVM legacy format, sits right after the title)
+  const slashRe = /(\d{1,2})\/(\d{1,2})\/(\d{4})/g;
+  let m;
+  while ((m = slashRe.exec(head)) !== null) {
+    const day = parseInt(m[1], 10);
+    const month = parseInt(m[2], 10);
+    const year = parseInt(m[3], 10);
+    if (day < 1 || day > 31 || month < 1 || month > 12) continue;
+    if (year < 1976 || year > 2099) continue;
+    return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
+
+  // Pass 2: "DD de MONTH de YYYY"
+  const ptDateRe = /(\d{1,2})\s+de\s+([a-zçãéí]+)\s+de\s+(\d{4})/gi;
+  const lower = head.toLowerCase();
+  while ((m = ptDateRe.exec(lower)) !== null) {
     const day = parseInt(m[1], 10);
     const month = PT_MONTHS[m[2]];
     const year = parseInt(m[3], 10);
-    if (month) {
-      return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-    }
+    if (!month || year < 1976 || year > 2099) continue;
+    return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
   }
-  const iso = text.match(/(\d{4}-\d{2}-\d{2})/);
-  if (iso) return iso[1];
+
+  // Pass 3: ISO
+  const isoMatch = head.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    const y = parseInt(isoMatch[1], 10);
+    if (y >= 1976 && y <= 2099) return isoMatch[0];
+  }
   return null;
 }
 

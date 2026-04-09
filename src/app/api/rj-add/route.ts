@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { logActivity } from "@/lib/activity-log";
 
 /**
  * /api/rj-add — manually add a Recuperação Judicial row by CNPJ (Phase 24C).
@@ -233,6 +234,21 @@ export async function POST(req: NextRequest) {
     .maybeSingle();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Phase 24G2 — log to activity feed (fail-soft)
+  await logActivity(supabaseAdmin, {
+    action: "upsert",
+    target_table: "recuperacao_judicial",
+    target_id: id,
+    source: "manual:rj_add",
+    source_kind: "manual",
+    summary: `${entityName} (${state || "—"}) — ${status}${debtValue ? ` · R$ ${debtValue.toLocaleString("pt-BR")}` : ""}`.slice(0, 200),
+    metadata: {
+      cnpj: fullCnpj,
+      enriched_brasilapi: !!brasilApi,
+      enriched_debt_scraped: scrapedDebt.debt != null,
+    },
+  });
 
   return NextResponse.json({
     ok: true,

@@ -34,6 +34,8 @@ import {
 } from "lucide-react";
 import { IndustryProfile } from "@/components/IndustryProfile";
 import { EntityMapShell, EntityMapMarker, EntityMapLayer } from "@/components/EntityMapShell";
+import { EntityCrmPanel } from "@/components/EntityCrmPanel";
+import { StreetViewTile } from "@/components/StreetViewTile";
 
 interface Industry {
   id: string;
@@ -951,6 +953,24 @@ function IndustryExpandedPanel({
           </div>
         </div>
       )}
+
+      {/* ── Phase 24G — Street View tile (matriz only) ── */}
+      {(() => {
+        const matriz = establishments?.find((e) => e.matriz_filial === "1" || e.ordem === "0001");
+        if (!matriz) return null;
+        if (matriz.latitude == null || matriz.longitude == null) return null;
+        return (
+          <StreetViewTile
+            latitude={Number(matriz.latitude)}
+            longitude={Number(matriz.longitude)}
+            label={`${matriz.municipio || ""}${matriz.uf ? "/" + matriz.uf : ""}`}
+            lang={lang}
+          />
+        );
+      })()}
+
+      {/* ── Phase 24G — CRM panel (entity_uid only) ── */}
+      <EntityCrmPanel entityUid={ind.kind === "imported" ? ind.id : null} lang={lang} />
     </div>
   );
 }

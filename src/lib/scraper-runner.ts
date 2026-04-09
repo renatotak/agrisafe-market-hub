@@ -25,6 +25,7 @@
 import { SupabaseClient } from '@supabase/supabase-js'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { logSync } from '@/lib/sync-logger'
+import { logActivity } from '@/lib/activity-log'
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -374,6 +375,30 @@ export async function runScraper<T extends Record<string, unknown>>(
     errors: isSuccess ? 0 : 1,
     status: isSuccess ? 'success' : 'error',
     error_message: errorMessage,
+  })
+
+  // 8. Phase 24G2 — write to activity_log so the Settings → Activity Log
+  // panel surfaces every scraper run with its row count and status. The
+  // helper is fail-soft, so a missing/locked activity_log doesn't break
+  // the scraper.
+  await logActivity(supabase, {
+    action: 'upsert',
+    target_table: registry.target_table || 'unknown',
+    target_id: null, // a single run touches many rows; the run_id is the granular pointer
+    source: scraperId,
+    source_kind: 'cron',
+    actor: 'cron',
+    summary: isSuccess
+      ? `${scraperId}: ${result?.rows?.length ?? 0} rows fetched in ${durationMs}ms`
+      : `${scraperId} ${status}: ${errorMessage || 'unknown error'}`,
+    metadata: {
+      run_id: runId,
+      status,
+      duration_ms: durationMs,
+      rows_fetched: result?.rows?.length ?? 0,
+      consecutive_failures: newConsecutiveFailures,
+      validation_error_count: validationErrors.length,
+    },
   })
 
   return {

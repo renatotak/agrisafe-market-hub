@@ -16,6 +16,8 @@ import { RetailerExpandedPanel } from "@/components/RetailerExpandedPanel";
 import { RiskSignals } from "@/components/RiskSignals";
 import { RetailerKpiRow } from "@/components/RetailerKpiRow";
 import { EntityMapShell, EntityMapMarker, EntityMapLayer } from "@/components/EntityMapShell";
+import { EntityCrmPanel } from "@/components/EntityCrmPanel";
+import { StreetViewTile } from "@/components/StreetViewTile";
 
 const PAGE_SIZE = 25;
 const MAP_LIMIT = 500; // max markers on map
@@ -736,6 +738,27 @@ function RetailerRow({ retailer: r, lang, expanded, onToggle, locations, onRetai
               retailerName={r.nome_fantasia || r.consolidacao || r.razao_social}
               lang={lang}
             />
+
+            {/* ── Phase 24G — Street View tile (matriz lat/lng) ── */}
+            {(() => {
+              const matriz = locations?.find((loc: any) => loc.cnpj?.replace(/\D/g, "")?.slice(8, 12) === "0001");
+              if (!matriz || matriz.latitude == null || matriz.longitude == null) return null;
+              return (
+                <div className="my-4">
+                  <StreetViewTile
+                    latitude={Number(matriz.latitude)}
+                    longitude={Number(matriz.longitude)}
+                    label={`${matriz.municipio || ""}${matriz.uf ? "/" + matriz.uf : ""}`}
+                    lang={lang}
+                  />
+                </div>
+              );
+            })()}
+
+            {/* ── Phase 24G — CRM panel ── */}
+            <div className="my-4">
+              <EntityCrmPanel entityUid={r.entity_uid} lang={lang} />
+            </div>
 
             {/* ── Locations ── */}
             {locations ? (

@@ -27,6 +27,7 @@ import { NextResponse } from 'next/server'
 import * as cheerio from 'cheerio'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { runScraper, type ScraperFn } from '@/lib/scraper-runner'
+import { classifyCnaes } from '@/lib/cnae-classifier'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -41,11 +42,13 @@ const CVM_INDEX_PAGES = [
 ] as const
 
 // Body must match at least one of these for the doc to count as "agro".
-// Generous because once we land on a CVM instrução page the false-positive
-// risk is low — these are not retail-news pages where every CNPJ digit
-// could trigger a false hit.
+// Tightened in Phase 24G2 — the previous `fundo.{0,30}agro` clause matched
+// generic "fundo de investimento" rules that mention agro businesses in
+// passing (e.g. CVM 165, CVM 600), surfacing them as agro-flavored when
+// they're really just fund-structure rules. We now require explicit FIAGRO
+// or one of the other agribusiness-specific keywords.
 const BODY_AGRO_PATTERN =
-  /agroneg[óo]cio|crédito rural|fiagro|\bcpr\b|c[ée]dula de produto rural|\bcra\b|barter|cadeia agr[íi]col|insumo agr[íi]col|cooperativa agr[íi]col|defensivo|fertilizant|sement[se]|FII[\s-]*agro|fundo.{0,30}agro/i
+  /agroneg[óo]cio|crédito rural|fiagro|\bcpr\b|c[ée]dula de produto rural|\bcra\b\s+(?:do\s+)?agroneg|barter agr[íi]col|cadeia agr[íi]col|insumo agr[íi]col|cooperativa agr[íi]col|defensivo agr[íi]col|fertilizant|sement[se]\s+(?:fiscaliz|registro)|FII[\s-]*agro/i
 
 // Stable id: "cvm-<inst-number>" so re-runs idempotently upsert the
 // same row. The id collides intentionally with rows the cron-fed
@@ -107,6 +110,7 @@ interface CVMNorm extends Record<string, unknown> {
   effective_at: null
   impact_level: 'high' | 'medium' | 'low'
   affected_areas: string[]
+  affected_cnaes: string[]
   source_url: string
 }
 
@@ -139,21 +143,71 @@ const PT_MONTHS: Record<string, number> = {
   julho: 7, agosto: 8, setembro: 9, outubro: 10, novembro: 11, dezembro: 12,
 }
 
-function extractDate(html: string): string | null {
-  const t = html.toLowerCase()
-  // "29 de agosto de 2016"
-  const m = t.match(/(\d{1,2})\s+de\s+([a-zçãéí]+)\s+de\s+(\d{4})/i)
-  if (m) {
+// Phase 24G2 — fixed CVM date extractor.
+//
+// CVM legacy HTML pages put the publication date in DD/MM/YYYY format
+// IMMEDIATELY after the title, e.g.:
+//
+//   "Instrução CVM 422 (Revogada) 08/09/2005 Dispõe acerca de..."
+//   "Resolução CVM 175 23/12/2022 Dispõe sobre a constituição..."
+//
+// The earlier extractor only knew about "DD de MONTH de YYYY" and ISO
+// dates, neither of which matched, so it fell through to the
+// `new Date().toISOString()` default and stamped every Revogada page
+// with today's date.
+//
+// New strategy: prefer slash-format dates that appear in the first 200
+// chars of body text — that's where CVM consistently puts the
+// publication date. Fall back to PT-month and ISO formats. Reject
+// dates that appear AFTER common footer markers ("atualizado em").
+function extractDate(body: string): string | null {
+  const t = body.toLowerCase()
+
+  const footerMarkers = [
+    'atualizado em',
+    'última atualização',
+    'última modificação',
+    'data da última modificação',
+    'arquivos relacionados',
+  ]
+  let cut = t.length
+  for (const marker of footerMarkers) {
+    const idx = t.indexOf(marker)
+    if (idx > 0 && idx < cut) cut = idx
+  }
+  const head = body.slice(0, cut)
+
+  // Pass 1 (preferred): first DD/MM/YYYY in the head, valid year range.
+  // CVM pages put this 30-200 chars in, right after the title.
+  const slashRe = /(\d{1,2})\/(\d{1,2})\/(\d{4})/g
+  let m: RegExpExecArray | null
+  while ((m = slashRe.exec(head)) !== null) {
+    const day = parseInt(m[1], 10)
+    const month = parseInt(m[2], 10)
+    const year = parseInt(m[3], 10)
+    if (day < 1 || day > 31 || month < 1 || month > 12) continue
+    if (year < 1976 || year > 2099) continue
+    return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+  }
+
+  // Pass 2: "DD de MONTH de YYYY" anywhere in the head.
+  const ptDateRe = /(\d{1,2})\s+de\s+([a-zçãéí]+)\s+de\s+(\d{4})/gi
+  const lower = head.toLowerCase()
+  while ((m = ptDateRe.exec(lower)) !== null) {
     const day = parseInt(m[1], 10)
     const month = PT_MONTHS[m[2]]
     const year = parseInt(m[3], 10)
-    if (month) {
-      return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-    }
+    if (!month || year < 1976 || year > 2099) continue
+    return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
   }
-  // ISO yyyy-mm-dd
-  const iso = html.match(/(\d{4}-\d{2}-\d{2})/)
-  if (iso) return iso[1]
+
+  // Pass 3: ISO date.
+  const isoMatch = head.match(/(\d{4})-(\d{2})-(\d{2})/)
+  if (isoMatch) {
+    const y = parseInt(isoMatch[1], 10)
+    if (y >= 1976 && y <= 2099) return isoMatch[0]
+  }
+
   return null
 }
 
@@ -188,6 +242,8 @@ async function fetchCVMNorm(url: string): Promise<CVMNorm | null> {
   if (!BODY_AGRO_PATTERN.test(haystack)) return null
 
   const publishedAt = extractDate(body) || new Date().toISOString().slice(0, 10)
+  const affectedAreas = extractAffectedAreas(haystack)
+  const affectedCnaes = classifyCnaes({ title, summary, affected_areas: affectedAreas })
 
   return {
     id: makeId(meta.number),
@@ -199,7 +255,8 @@ async function fetchCVMNorm(url: string): Promise<CVMNorm | null> {
     published_at: publishedAt,
     effective_at: null,
     impact_level: classifyImpact(haystack),
-    affected_areas: extractAffectedAreas(haystack),
+    affected_areas: affectedAreas,
+    affected_cnaes: affectedCnaes,
     source_url: url,
   }
 }

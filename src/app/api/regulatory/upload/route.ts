@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { classifyCnaes } from "@/lib/cnae-classifier";
+import { logActivity } from "@/lib/activity-log";
 
 /**
  * /api/regulatory/upload — manual norm submission (Phase 24C).
@@ -94,6 +96,9 @@ export async function POST(req: NextRequest) {
   // can tell hand-curated rows from RSS-classified ones.
   const id = `manual:${bodyName}_${normType}_${normNumber || "x"}_${publishedAt}_${slugify(title)}`.slice(0, 200);
 
+  // Phase 24G2 — auto-classify affected CNAEs from title + summary + areas
+  const affectedCnaes = classifyCnaes({ title, summary, affected_areas: affectedAreas });
+
   const row = {
     id,
     body: bodyName,
@@ -105,6 +110,7 @@ export async function POST(req: NextRequest) {
     effective_at: effectiveAt,
     impact_level: impact,
     affected_areas: affectedAreas,
+    affected_cnaes: affectedCnaes,
     source_url: sourceUrl,
   };
 
@@ -117,6 +123,17 @@ export async function POST(req: NextRequest) {
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  // Phase 24G2 — log to activity feed (fail-soft)
+  await logActivity(supabaseAdmin, {
+    action: "upsert",
+    target_table: "regulatory_norms",
+    target_id: id,
+    source: "manual:regulatory_upload",
+    source_kind: "manual",
+    summary: `${bodyName} ${normType} ${normNumber || ""} — ${title}`.slice(0, 200),
+    metadata: { affected_areas: affectedAreas, affected_cnaes: affectedCnaes, impact: impact },
+  });
 
   return NextResponse.json({ ok: true, norm: data });
 }

@@ -31,6 +31,7 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { runScraper, type ScraperFn } from '@/lib/scraper-runner'
+import { classifyCnaes } from '@/lib/cnae-classifier'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -161,6 +162,12 @@ export async function GET(request: Request) {
       effective_at: null,
       impact_level: r.impact_level,
       affected_areas: r.affected_areas,
+      // Phase 24G2 — auto-classify CNAEs from title/summary/areas
+      affected_cnaes: classifyCnaes({
+        title: r.title,
+        summary: r.summary,
+        affected_areas: r.affected_areas,
+      }),
       source_url: r.source_url,
     }))
 
