@@ -12,17 +12,17 @@ Market Hub is the **knowledge engine** of the AgriSafe ecosystem. It captures pu
 
 | Vertical | Modules | Purpose |
 |----------|---------|---------|
-| **Ingestão de Dados** | Fontes de Dados (with Scraper Health tab), Registro de Fontes (176 sources) | Monitor and control all data pipelines |
-| **Inteligência de Mercado** | Pulso do Mercado (BCB + NA + FAOSTAT macro), Radar Competitivo, Notícias Agro (Reading Room ingest), Eventos Agro (AgroAgenda + AgroAdvance), Diretório de Canais (CRM-style), Diretório de Indústrias, Dashboard Map | Capture and analyze market signals |
+| **Ingestão de Dados** | Fontes de Dados (Scraper Health tab + **Source CRUD** with Add / Edit / Delete from the UI, Phase 25), 176 sources in `data_sources` table, weekly auto-healthcheck cron | Monitor and control all data pipelines |
+| **Inteligência de Mercado** | Pulso do Mercado (BCB + NA + FAOSTAT + WB Pink Sheet macro), Radar Competitivo, Notícias Agro (Reading Room ingest), Eventos Agro (AgroAgenda + AgroAdvance), Diretório de Canais (CRM-style), Diretório de Indústrias, Dashboard Map | Capture and analyze market signals |
 | **Marketing & Conteúdo** | Central de Conteúdo (articles, topic pipeline, calendar, campaigns) | Create proprietary content from intelligence |
-| **Regulatório** | Marco Regulatório, Recuperação Judicial, AgInput Intelligence (SmartSolos + AGROFIT + Bioinsumos) | Legal compliance & input intelligence |
+| **Regulatório** | Marco Regulatório (CNJ + CVM + BCB + key laws + norms-affecting-entity view), Recuperação Judicial (CRUD with BrasilAPI + DDG debt scrape), AgInput Intelligence (SmartSolos + AGROFIT + Bioinsumos) | Legal compliance & input intelligence |
 
 ## Tech Stack
 
 - **Next.js 16** (App Router) + TypeScript strict + Tailwind CSS 4
-- **Supabase** (PostgreSQL + RLS + pgvector) — 50 tables, 34 SQL migrations, 5-entity model live
+- **Supabase** (PostgreSQL + RLS + pgvector) — 57 tables, 45 SQL migrations, 5-entity model live
 - **Recharts** + `@vis.gl/react-google-maps` for Bloomberg-style data visualization
-- **Vercel** deployment with daily cron pipeline (consolidated via `/api/cron/sync-all` — single Hobby-plan cron)
+- **Hybrid deployment** — Vercel hosts the Next.js webapp + manual cron triggers; **20 cron jobs run on a 24/7 Mac mini via launchd** (Phase 25), each with its own schedule. See [launchd/README.md](launchd/README.md) for the install path. Vercel Hobby's single-cron limit is now history.
 - **Reading Room Chrome extension** at `chrome-extensions/reading-room/` auto-syncs saved articles to `/api/reading-room/ingest`
 
 ## Quick Start
@@ -42,6 +42,7 @@ npm run dev
 | [CLAUDE.md](CLAUDE.md) | **AI agents** — Claude-specific context & tool-specific workflow |
 | [PLAYBOOK.md](PLAYBOOK.md) | **Operators** — data journeys, operational how-tos, persona routines |
 | [ROADMAP.md](ROADMAP.md) | **Team** — current status, pending tasks, phase history |
+| [launchd/README.md](launchd/README.md) | **Mac ops** — Phase 25 launchd cron pipeline install + ops manual |
 | [documentation/REQUIREMENTS.md](documentation/REQUIREMENTS.md) | Functional & non-functional requirements (FR/NFR) |
 | [documentation/KNOWLEDGE_ARCHITECTURE.md](documentation/KNOWLEDGE_ARCHITECTURE.md) | 4-tier data hierarchy & tagging model |
 | [documentation/SCRAPER_SPECIFICATIONS.md](documentation/SCRAPER_SPECIFICATIONS.md) | Scraper selectors, contracts, resilience checklists |
