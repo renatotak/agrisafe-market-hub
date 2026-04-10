@@ -1,36 +1,21 @@
+/**
+ * Phase 25 — thin route wrapper.
+ *
+ * The full BCB SGS sync logic now lives in `src/jobs/sync-market-data.ts`
+ * so it can be invoked from BOTH this Next.js cron route AND the launchd
+ * CLI wrapper at `src/scripts/cron/sync-market-data.ts`. This route stays
+ * useful for manual triggers from the dashboard, the Vercel fallback
+ * cron, and ad-hoc curl tests.
+ *
+ * The job module owns its own logging (sync_logs + activity_log), so the
+ * route only handles auth + the HTTP envelope.
+ */
+
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/utils/supabase/admin'
-import { logSync } from '@/lib/sync-logger'
-import { logActivity } from '@/lib/activity-log'
+import { runSyncMarketData } from '@/jobs/sync-market-data'
 
 export const dynamic = 'force-dynamic'
-
-// BCB SGS series codes
-const COMMODITY_SERIES: Record<string, { series: number; unit: string; source: string }> = {
-  soy:    { series: 11752, unit: 'R$/sc 60kg', source: 'CEPEA/BCB' },
-  corn:   { series: 11753, unit: 'R$/sc 60kg', source: 'CEPEA/BCB' },
-  coffee: { series: 11754, unit: 'R$/sc 60kg', source: 'CEPEA/BCB' },
-  sugar:  { series: 11755, unit: 'R$/sc 50kg', source: 'CEPEA/BCB' },
-  cotton: { series: 11756, unit: '¢/lb',       source: 'CEPEA/BCB' },
-  citrus: { series: 11757, unit: 'R$/cx 40.8kg', source: 'CEPEA/BCB' },
-}
-
-const INDICATOR_SERIES: Record<string, { series: number; format: (v: string) => string }> = {
-  usd_brl: { series: 1,   format: (v) => `R$ ${parseFloat(v).toFixed(4)}` },
-  selic:   { series: 432, format: (v) => `${parseFloat(v).toFixed(2)}%` },
-}
-
-async function fetchBCB(seriesCode: number, count = 2): Promise<{ data: string; valor: string }[]> {
-  const url = `https://api.bcb.gov.br/dados/serie/bcdata.sgs.${seriesCode}/dados/ultimos/${count}?formato=json`
-  const res = await fetch(url, { signal: AbortSignal.timeout(15000) })
-  if (!res.ok) throw new Error(`BCB series ${seriesCode}: HTTP ${res.status}`)
-  return res.json()
-}
-
-function parseBCBDate(dateStr: string): string {
-  const [day, month, year] = dateStr.split('/')
-  return `${year}-${month}-${day}`
-}
 
 export async function GET(request: Request) {
   const authHeader = request.headers.get('authorization')
@@ -41,144 +26,19 @@ export async function GET(request: Request) {
     return new Response('Unauthorized', { status: 401 })
   }
 
-  const startedAt = new Date().toISOString()
+  const supabase = createAdminClient()
+  const result = await runSyncMarketData(supabase)
 
-  try {
-    const supabase = createAdminClient()
-    const results: Record<string, unknown> = {}
-    const errors: string[] = []
-
-    // Sync commodity prices from BCB SGS API
-    for (const [id, config] of Object.entries(COMMODITY_SERIES)) {
-      try {
-        const data = await fetchBCB(config.series, 2)
-        if (data.length === 0) continue
-
-        const latest = data[data.length - 1]
-        const previous = data.length > 1 ? data[data.length - 2] : null
-        const price = parseFloat(latest.valor)
-        const prevPrice = previous ? parseFloat(previous.valor) : null
-        const change24h = prevPrice ? parseFloat(((price - prevPrice) / prevPrice * 100).toFixed(2)) : 0
-
-        // Update latest view
-        const { error } = await supabase
-          .from('commodity_prices')
-          .update({
-            price,
-            change_24h: change24h,
-            unit: config.unit,
-            source: config.source,
-            last_update: parseBCBDate(latest.data),
-          })
-          .eq('id', id)
-
-        if (error) throw error
-
-        // Insert daily history row (upsert on commodity_id + recorded_at)
-        await supabase
-          .from('commodity_price_history')
-          .upsert({
-            commodity_id: id,
-            price,
-            change_24h: change24h,
-            recorded_at: parseBCBDate(latest.data),
-          }, { onConflict: 'commodity_id,recorded_at' })
-
-        results[id] = { price, change24h, date: latest.data }
-      } catch (e: any) {
-        errors.push(`${id}: ${e.message}`)
-      }
-    }
-
-    // Sync macro indicators (USD/BRL, Selic)
-    for (const [id, config] of Object.entries(INDICATOR_SERIES)) {
-      try {
-        const data = await fetchBCB(config.series, 2)
-        if (data.length === 0) continue
-
-        const latest = data[data.length - 1]
-        const previous = data.length > 1 ? data[data.length - 2] : null
-        const currentVal = parseFloat(latest.valor)
-        const prevVal = previous ? parseFloat(previous.valor) : null
-
-        let trend: 'up' | 'down' | 'stable' = 'stable'
-        if (prevVal !== null) {
-          if (currentVal > prevVal) trend = 'up'
-          else if (currentVal < prevVal) trend = 'down'
-        }
-
-        const { error } = await supabase
-          .from('market_indicators')
-          .update({
-            value: config.format(latest.valor),
-            trend,
-            source: 'BCB',
-          })
-          .eq('id', id)
-
-        if (error) throw error
-        results[id] = { value: config.format(latest.valor), trend }
-      } catch (e: any) {
-        errors.push(`${id}: ${e.message}`)
-      }
-    }
-
-    const recordCount = Object.keys(results).length
-    const runStatus = errors.length === 0 ? 'success' : recordCount > 0 ? 'partial' : 'error'
-    await logSync(supabase, {
-      source: 'sync-market-data',
-      started_at: startedAt,
-      finished_at: new Date().toISOString(),
-      records_fetched: Object.keys(COMMODITY_SERIES).length + Object.keys(INDICATOR_SERIES).length,
-      records_inserted: recordCount,
-      errors: errors.length,
-      status: runStatus,
-      error_message: errors.length > 0 ? errors.join('; ') : undefined,
-    })
-
-    // Phase 24G2 — activity feed (fail-soft)
-    await logActivity(supabase, {
-      action: 'update',
-      target_table: 'commodity_prices',
-      source: 'sync-market-data',
-      source_kind: 'cron',
-      actor: 'cron',
-      summary: `BCB SGS: ${recordCount} commodities/indicators atualizados${errors.length ? ` (${errors.length} erro(s))` : ''}`,
-      metadata: { status: runStatus, updated: recordCount, errors: errors.length },
-    })
-
-    return NextResponse.json({
-      success: true,
-      message: 'Market data synchronized from BCB SGS',
-      timestamp: new Date().toISOString(),
-      results,
-      errors: errors.length > 0 ? errors : undefined,
-    })
-  } catch (error: any) {
-    console.error('Error syncing market data:', error)
-    try {
-      const supabase = createAdminClient()
-      await logSync(supabase, {
-        source: 'sync-market-data',
-        started_at: startedAt,
-        finished_at: new Date().toISOString(),
-        records_fetched: 0, records_inserted: 0, errors: 1,
-        status: 'error',
-        error_message: error.message,
-      })
-      await logActivity(supabase, {
-        action: 'update',
-        target_table: 'commodity_prices',
-        source: 'sync-market-data',
-        source_kind: 'cron',
-        actor: 'cron',
-        summary: `sync-market-data falhou: ${error.message}`.slice(0, 200),
-        metadata: { status: 'error', error: error.message },
-      })
-    } catch {}
-    return NextResponse.json(
-      { success: false, error: error.message || 'Failed to sync data' },
-      { status: 500 }
-    )
-  }
+  return NextResponse.json(
+    {
+      success: result.ok,
+      message: result.ok ? 'Market data synchronized from BCB SGS' : 'Failed to sync data',
+      timestamp: result.finishedAt,
+      duration_ms: result.durationMs,
+      records_updated: result.recordsUpdated,
+      results: result.stats?.results,
+      errors: result.errors.length > 0 ? result.errors : undefined,
+    },
+    { status: result.ok ? 200 : 500 },
+  )
 }

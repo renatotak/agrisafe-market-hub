@@ -1,0 +1,120 @@
+{
+  "$schema_doc": "Source-of-truth config for all 18 launchd cron jobs. Edit this file then run `node launchd/generate-plists.js` to regenerate launchd/plists/*.plist. Each entry produces one .plist file. The 'schedule' field accepts either { interval: <seconds> } for StartInterval or { calendar: { Hour, Minute, Weekday? } } for StartCalendarInterval. Weekday: 0=Sun, 1=Mon, ..., 6=Sat. All clock times are in the Mac's local timezone (set the Mac to America/Sao_Paulo so cadences match Brazilian agro hours).",
+
+  "jobs": [
+    {
+      "name": "sync-market-data",
+      "description": "BCB SGS commodity prices + macro indicators",
+      "schedule": { "interval": 1800 },
+      "comment": "Every 30min — BCB SGS refreshes during BCB business hours (Brazil)"
+    },
+    {
+      "name": "sync-agro-news",
+      "description": "RSS news from registered sources",
+      "schedule": { "interval": 7200 },
+      "comment": "Every 2h — fresher than the old daily Vercel run"
+    },
+    {
+      "name": "sync-recuperacao-judicial",
+      "description": "Legal RSS for agro RJ filings",
+      "schedule": { "interval": 14400 },
+      "comment": "Every 4h"
+    },
+    {
+      "name": "sync-regulatory",
+      "description": "Legal RSS for regulatory norms",
+      "schedule": { "interval": 14400 },
+      "comment": "Every 4h"
+    },
+    {
+      "name": "sync-prices-na",
+      "description": "Notícias Agrícolas regional commodity prices (stub)",
+      "schedule": { "interval": 3600 },
+      "comment": "Every 1h — currently a stub, doesn't persist"
+    },
+    {
+      "name": "sync-cnj-atos",
+      "description": "CNJ atos JSON API → regulatory_norms",
+      "schedule": { "calendar": { "Hour": 9, "Minute": 0 } },
+      "comment": "Daily 09:00 local"
+    },
+    {
+      "name": "sync-events-na",
+      "description": "Notícias Agrícolas events list",
+      "schedule": { "calendar": { "Hour": 6, "Minute": 0 } },
+      "comment": "Daily 06:00 local"
+    },
+    {
+      "name": "sync-competitors",
+      "description": "Generate competitor signals from agro_news",
+      "schedule": { "calendar": { "Hour": 10, "Minute": 0 } },
+      "comment": "Daily 10:00 local — needs sync-agro-news output"
+    },
+    {
+      "name": "sync-retailer-intelligence",
+      "description": "Gemini-based retailer intelligence batch",
+      "schedule": { "calendar": { "Hour": 11, "Minute": 0 } },
+      "comment": "Daily 11:00 local"
+    },
+    {
+      "name": "sync-faostat",
+      "description": "FAOSTAT crop production + exports",
+      "schedule": { "calendar": { "Hour": 2, "Minute": 0 } },
+      "comment": "Daily 02:00 local"
+    },
+    {
+      "name": "sync-scraper-healthcheck",
+      "description": "GitHub /zen probe — runScraper smoke test",
+      "schedule": { "calendar": { "Hour": 23, "Minute": 0 } },
+      "comment": "Daily 23:00 local"
+    },
+    {
+      "name": "archive-old-news",
+      "description": "Summarize + archive >3mo news",
+      "schedule": { "calendar": { "Hour": 4, "Minute": 0 } },
+      "comment": "Daily 04:00 local"
+    },
+    {
+      "name": "sync-industry-profiles",
+      "description": "AGROFIT defensivos per industry holder",
+      "schedule": { "calendar": { "Hour": 3, "Minute": 0, "Weekday": 0 } },
+      "comment": "Sunday 03:00 local"
+    },
+    {
+      "name": "sync-agrofit-bulk",
+      "description": "AGROFIT seed-query bulk crawl",
+      "schedule": { "calendar": { "Hour": 4, "Minute": 0, "Weekday": 0 } },
+      "comment": "Sunday 04:00 local"
+    },
+    {
+      "name": "sync-events-agroadvance",
+      "description": "AgroAdvance annual events page",
+      "schedule": { "calendar": { "Hour": 5, "Minute": 0, "Weekday": 0 } },
+      "comment": "Sunday 05:00 local"
+    },
+    {
+      "name": "sync-cvm-agro",
+      "description": "CVM legislacao instructions/resolutions walker",
+      "schedule": { "calendar": { "Hour": 6, "Minute": 0, "Weekday": 0 } },
+      "comment": "Sunday 06:00 local"
+    },
+    {
+      "name": "sync-bcb-rural",
+      "description": "BCB rural credit reference catalog",
+      "schedule": { "calendar": { "Hour": 7, "Minute": 0, "Weekday": 0 } },
+      "comment": "Sunday 07:00 local"
+    },
+    {
+      "name": "sync-key-agro-laws",
+      "description": "Curated key agro laws (CPR / Falências / Nova Lei do Agro)",
+      "schedule": { "calendar": { "Hour": 8, "Minute": 0, "Weekday": 0 } },
+      "comment": "Sunday 08:00 local"
+    },
+    {
+      "name": "sync-worldbank-prices",
+      "description": "World Bank Pink Sheet annual prices",
+      "schedule": { "calendar": { "Hour": 9, "Minute": 0, "Weekday": 0 } },
+      "comment": "Sunday 09:00 local"
+    }
+  ]
+}
