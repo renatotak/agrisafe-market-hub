@@ -9,7 +9,7 @@ import { MockBadge } from "@/components/ui/MockBadge";
 import {
   ExternalLink, AlertTriangle, Calendar, BookOpen,
   ChevronDown, ChevronUp, Search, Clock, BarChart3, Filter,
-  Upload, List, X, Loader2, Plus, Database, Globe,
+  Upload, List, X, Loader2, Plus, Database, Globe, Building2,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
@@ -85,6 +85,12 @@ export function RegulatoryFramework({ lang }: { lang: Lang }) {
   const [showUpload, setShowUpload] = useState(false);
   const [showSources, setShowSources] = useState(false);
 
+  // Phase 26 — affected entity counts per norm
+  const [affectedCounts, setAffectedCounts] = useState<Record<number, number>>({});
+  const [drilldownNormId, setDrilldownNormId] = useState<number | null>(null);
+  const [drilldownEntities, setDrilldownEntities] = useState<any[]>([]);
+  const [drilldownLoading, setDrilldownLoading] = useState(false);
+
   // Reload norms after a successful upload so the new row appears
   // immediately without a page refresh.
   const refreshNorms = async () => {
@@ -112,6 +118,32 @@ export function RegulatoryFramework({ lang }: { lang: Lang }) {
         setLoading(false);
       });
   }, []);
+
+  // Phase 26 — fetch affected entity counts
+  useEffect(() => {
+    fetch("/api/regulatory/affected-entities")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data?.norms) {
+          const map: Record<number, number> = {};
+          for (const n of data.norms) map[n.norm_id] = n.affected_entity_count ?? 0;
+          setAffectedCounts(map);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const openDrilldown = async (normId: number) => {
+    setDrilldownNormId(normId);
+    setDrilldownLoading(true);
+    setDrilldownEntities([]);
+    try {
+      const r = await fetch(`/api/regulatory/affected-entities?norm_id=${normId}`);
+      const data = await r.json();
+      setDrilldownEntities(data?.entities || []);
+    } catch { /* fail-soft */ }
+    setDrilldownLoading(false);
+  };
 
   // ─── Computed Data ───
 
@@ -460,6 +492,15 @@ export function RegulatoryFramework({ lang }: { lang: Lang }) {
                       ))}
                     </div>
                     <div className="flex items-center gap-3 text-[11px] text-neutral-400 shrink-0">
+                      {(affectedCounts[norm.id] ?? 0) > 0 && (
+                        <button
+                          onClick={() => openDrilldown(norm.id)}
+                          className="flex items-center gap-1 bg-brand-surface/50 text-brand-primary px-2.5 py-1 rounded-full font-medium hover:bg-brand-primary/10 transition-colors"
+                        >
+                          <Building2 size={12} />
+                          {affectedCounts[norm.id]} {tr.regulatory.affectedEntities}
+                        </button>
+                      )}
                       {norm.effective_at && (
                         <span className="flex items-center gap-1">
                           <Calendar size={12} />
@@ -503,6 +544,44 @@ export function RegulatoryFramework({ lang }: { lang: Lang }) {
 
       {/* Phase 24C — Sources list modal */}
       {showSources && <SourcesListModal lang={lang} onClose={() => setShowSources(false)} />}
+
+      {/* Phase 26 — Affected entities drilldown modal */}
+      {drilldownNormId !== null && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setDrilldownNormId(null)}>
+          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full max-h-[70vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-5 border-b border-neutral-200">
+              <h3 className="text-[14px] font-bold text-neutral-900 flex items-center gap-2">
+                <Building2 size={16} className="text-brand-primary" />
+                {tr.regulatory.affectedEntitiesTitle}
+                {!drilldownLoading && (
+                  <span className="text-[11px] font-normal text-neutral-400">({drilldownEntities.length})</span>
+                )}
+              </h3>
+              <button onClick={() => setDrilldownNormId(null)} className="text-neutral-400 hover:text-neutral-600"><X size={18} /></button>
+            </div>
+            <div className="overflow-y-auto flex-1 p-5">
+              {drilldownLoading ? (
+                <div className="flex items-center justify-center py-10">
+                  <Loader2 size={20} className="animate-spin text-brand-primary" />
+                </div>
+              ) : drilldownEntities.length === 0 ? (
+                <p className="text-[12px] text-neutral-500 text-center py-8">{tr.regulatory.noAffectedEntities}</p>
+              ) : (
+                <div className="space-y-2">
+                  {drilldownEntities.map((e: any) => (
+                    <div key={e.entity_uid} className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg bg-neutral-50 border border-neutral-100">
+                      <div className="min-w-0">
+                        <p className="text-[12px] font-semibold text-neutral-800 truncate">{e.display_name || e.legal_name}</p>
+                        <p className="text-[10px] text-neutral-400">{e.tax_id}{e.uf ? ` · ${e.uf}` : ""}{e.primary_cnae ? ` · CNAE ${e.primary_cnae}` : ""}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
