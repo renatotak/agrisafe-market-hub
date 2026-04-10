@@ -115,6 +115,12 @@
       "description": "World Bank Pink Sheet annual prices",
       "schedule": { "calendar": { "Hour": 9, "Minute": 0, "Weekday": 0 } },
       "comment": "Sunday 09:00 local"
+    },
+    {
+      "name": "sync-source-registry-healthcheck",
+      "description": "Re-check 176 entries in source-registry.json (read-only)",
+      "schedule": { "calendar": { "Hour": 10, "Minute": 0, "Weekday": 0 } },
+      "comment": "Sunday 10:00 local — flags newly broken sources in activity_log"
     }
   ]
 }

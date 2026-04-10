@@ -7,10 +7,11 @@ import { mockSyncLogs } from "@/data/mock";
 import type { MockSyncLog } from "@/data/mock";
 import sourceData from "@/data/source-registry.json";
 import { MockBadge } from "@/components/ui/MockBadge";
+import { SourceFormModal, type SourceRow } from "@/components/SourceFormModal";
 import {
   CheckCircle2, AlertTriangle, XCircle, Circle, ExternalLink,
   Search, Globe, ChevronDown, ChevronUp, Zap, Layers, X,
-  Database, Info, Activity, Wrench, RefreshCw,
+  Database, Info, Activity, Wrench, RefreshCw, Plus, Pencil, Trash2,
 } from "lucide-react";
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
@@ -55,7 +56,11 @@ interface DomainGroup {
   overallStatus: string;
 }
 
-const registrySources: RegistrySource[] = sourceData as RegistrySource[];
+// Phase 25 — JSON file is now a STATIC FALLBACK only. Live data comes
+// from /api/data-sources (table data_sources). DataSources.tsx fetches
+// on mount and threads the result down through props. If the API errors
+// out, the static fallback keeps the UI functional.
+const STATIC_REGISTRY_FALLBACK: RegistrySource[] = sourceData as RegistrySource[];
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -173,6 +178,24 @@ export function DataSources({ lang }: { lang: Lang }) {
   const [liveLogs, setLiveLogs] = useState<MockSyncLog[]>([]);
   const [logsAreReal, setLogsAreReal] = useState(false);
 
+  // Phase 25 — fetch live data_sources from the API; fall back to static JSON.
+  const [registrySources, setRegistrySources] = useState<RegistrySource[]>(STATIC_REGISTRY_FALLBACK);
+  const [registryIsLive, setRegistryIsLive] = useState(false);
+
+  const refreshRegistry = async () => {
+    try {
+      const res = await fetch("/api/data-sources?include_inactive=false");
+      if (!res.ok) return;
+      const json = await res.json();
+      if (Array.isArray(json.sources) && json.sources.length > 0) {
+        setRegistrySources(json.sources as RegistrySource[]);
+        setRegistryIsLive(true);
+      }
+    } catch {
+      // Network error → static fallback already in state
+    }
+  };
+
   useEffect(() => {
     async function fetchLogs() {
       const { data } = await supabase
@@ -183,9 +206,10 @@ export function DataSources({ lang }: { lang: Lang }) {
       if (data?.length) { setLiveLogs(data as MockSyncLog[]); setLogsAreReal(true); }
     }
     fetchLogs();
+    refreshRegistry();
   }, []);
 
-  // Real KPIs from registry JSON (not mock)
+  // Real KPIs from registry (live or fallback)
   const totalSources  = registrySources.length;
   const activeCount   = registrySources.filter(s => s.url_status === "active").length;
   const errorCount    = registrySources.filter(s => s.url_status === "error").length;
@@ -250,9 +274,16 @@ export function DataSources({ lang }: { lang: Lang }) {
         ))}
       </div>
 
-      {tab === "registry" && <RegistryTab lang={lang} />}
+      {tab === "registry" && (
+        <RegistryTab
+          lang={lang}
+          sources={registrySources}
+          isLive={registryIsLive}
+          onRefresh={refreshRegistry}
+        />
+      )}
       {tab === "history"  && <HistoryTab lang={lang} logs={liveLogs} isReal={logsAreReal} />}
-      {tab === "quality"  && <QualityTab lang={lang} logs={liveLogs} logsAreReal={logsAreReal} />}
+      {tab === "quality"  && <QualityTab lang={lang} logs={liveLogs} logsAreReal={logsAreReal} sources={registrySources} />}
       {tab === "health"   && <ScraperHealthTab lang={lang} />}
     </div>
   );
@@ -262,7 +293,14 @@ export function DataSources({ lang }: { lang: Lang }) {
 
 type SortField = "domain" | "org" | "count" | "status";
 
-function RegistryTab({ lang }: { lang: Lang }) {
+interface RegistryTabProps {
+  lang: Lang;
+  sources: RegistrySource[];
+  isLive: boolean;
+  onRefresh: () => Promise<void>;
+}
+
+function RegistryTab({ lang, sources, isLive, onRefresh }: RegistryTabProps) {
   const tr = t(lang);
   const [search, setSearch]                 = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
@@ -274,14 +312,49 @@ function RegistryTab({ lang }: { lang: Lang }) {
   const [sortDir, setSortDir]               = useState<"asc" | "desc">("desc");
   const [expandedDomain, setExpandedDomain] = useState<string | null>(null);
 
+  // Phase 25 — Add/Edit modal state + delete confirmation
+  const [modalMode, setModalMode] = useState<"add" | "edit" | null>(null);
+  const [editTarget, setEditTarget] = useState<RegistrySource | null>(null);
+
   const toggleSort = (field: SortField) => {
     if (sortField === field) setSortDir(sortDir === "asc" ? "desc" : "asc");
     else { setSortField(field); setSortDir("asc"); }
   };
 
+  const handleEdit = (s: RegistrySource) => {
+    setEditTarget(s);
+    setModalMode("edit");
+  };
+
+  const handleDelete = async (s: RegistrySource) => {
+    const ok = window.confirm(
+      lang === "pt"
+        ? `Desativar fonte "${s.name}"?\n\nEntradas seedadas (do registry inicial) só podem ser desativadas (soft-delete). Entradas adicionadas manualmente podem ser removidas com Shift+Click.`
+        : `Disable source "${s.name}"?\n\nSeeded entries can only be disabled (soft-delete). Manual entries can be hard-deleted with Shift+Click.`,
+    );
+    if (!ok) return;
+    try {
+      const res = await fetch(`/api/data-sources?id=${encodeURIComponent(s.id)}`, { method: "DELETE" });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(`Erro: ${err.error || res.statusText}`);
+        return;
+      }
+      await onRefresh();
+    } catch (e: any) {
+      alert(`Network error: ${e?.message || e}`);
+    }
+  };
+
+  const handleSaved = async () => {
+    setModalMode(null);
+    setEditTarget(null);
+    await onRefresh();
+  };
+
   const allGroups = useMemo(() => {
     const map = new Map<string, DomainGroup>();
-    for (const s of registrySources) {
+    for (const s of sources) {
       const domain = extractDomain(s.url);
       let group = map.get(domain);
       if (!group) {
@@ -303,7 +376,7 @@ function RegistryTab({ lang }: { lang: Lang }) {
     }
     for (const g of map.values()) g.overallStatus = computeOverallStatus(g);
     return Array.from(map.values());
-  }, []);
+  }, [sources]);
 
   const filtered = useMemo(() => {
     let result = [...allGroups];
@@ -344,25 +417,55 @@ function RegistryTab({ lang }: { lang: Lang }) {
 
   const moduleStats = useMemo(() => {
     const counts: Record<string, number> = {};
-    for (const s of registrySources) {
+    for (const s of sources) {
       const mod = CATEGORY_TO_MODULE[s.category] || "outros";
       if (mod === "dataSources") continue; // Organization-only chapter
       counts[mod] = (counts[mod] || 0) + 1;
     }
     return Object.entries(counts).sort((a, b) => b[1] - a[1]);
-  }, []);
+  }, [sources]);
 
-  const categories  = [...new Set(registrySources.map(s => s.category))].sort();
-  const frequencies = [...new Set(registrySources.map(s => s.frequency))].sort();
+  const categories  = useMemo(() => [...new Set(sources.map(s => s.category))].sort(), [sources]);
+  const frequencies = useMemo(() => [...new Set(sources.map(s => s.frequency))].sort(), [sources]);
   const hasFilters  = search || categoryFilter || frequencyFilter || statusFilter || usedFilter !== "all";
 
   return (
     <div className="space-y-4">
+      {/* Phase 25 — Add Source button + live/static badge */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-[11px] text-neutral-500">
+          {isLive ? (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-success-light text-success-dark border border-success/20 font-semibold">
+              <span className="w-1.5 h-1.5 rounded-full bg-success-dark" />
+              {lang === "pt" ? "Tabela ao vivo" : "Live table"}
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-neutral-100 text-neutral-600 border border-neutral-200 font-semibold">
+              {lang === "pt" ? "Fallback estático" : "Static fallback"}
+            </span>
+          )}
+          <button
+            onClick={() => onRefresh()}
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-neutral-500 hover:text-brand-primary"
+            title={lang === "pt" ? "Recarregar" : "Refresh"}
+          >
+            <RefreshCw size={11} />
+          </button>
+        </div>
+        <button
+          onClick={() => { setEditTarget(null); setModalMode("add"); }}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-semibold text-white bg-brand-primary hover:bg-brand-dark transition-colors"
+        >
+          <Plus size={13} />
+          {lang === "pt" ? "Adicionar Fonte" : "Add Source"}
+        </button>
+      </div>
+
       {/* Category strip — clickable filters */}
       <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
         {categories.filter(c => c !== "outros").slice(0, 6).map(cat => {
           const info  = CATEGORY_LABELS[cat] || CATEGORY_LABELS.outros;
-          const count = registrySources.filter(s => s.category === cat).length;
+          const count = sources.filter(s => s.category === cat).length;
           return (
             <button key={cat}
               onClick={() => setCategoryFilter(categoryFilter === cat ? "" : cat)}
@@ -517,7 +620,9 @@ function RegistryTab({ lang }: { lang: Lang }) {
                 return (
                   <DomainRow key={group.domain} group={group} lang={lang}
                     isExpanded={isExpanded}
-                    onToggle={() => setExpandedDomain(isExpanded ? null : group.domain)} />
+                    onToggle={() => setExpandedDomain(isExpanded ? null : group.domain)}
+                    onEdit={handleEdit}
+                    onDelete={handleDelete} />
                 );
               })}
             </tbody>
@@ -531,14 +636,27 @@ function RegistryTab({ lang }: { lang: Lang }) {
           </div>
         )}
       </div>
+
+      {/* Phase 25 — Add / Edit modal */}
+      {modalMode && (
+        <SourceFormModal
+          mode={modalMode}
+          initial={editTarget as unknown as SourceRow | null}
+          onSaved={handleSaved}
+          onClose={() => { setModalMode(null); setEditTarget(null); }}
+          lang={lang}
+        />
+      )}
     </div>
   );
 }
 
 // ─── Domain Row ───────────────────────────────────────────────────────────────
 
-function DomainRow({ group, lang, isExpanded, onToggle }: {
+function DomainRow({ group, lang, isExpanded, onToggle, onEdit, onDelete }: {
   group: DomainGroup; lang: Lang; isExpanded: boolean; onToggle: () => void;
+  onEdit?: (s: RegistrySource) => void;
+  onDelete?: (s: RegistrySource) => void;
 }) {
   const hasUsed = group.usedCount > 0;
 
@@ -621,7 +739,9 @@ function DomainRow({ group, lang, isExpanded, onToggle }: {
 
               {/* Endpoint list */}
               <div className="space-y-1.5">
-                {group.sources.map(s => <EndpointDetail key={s.id} s={s} lang={lang} />)}
+                {group.sources.map(s => (
+                  <EndpointDetail key={s.id} s={s} lang={lang} onEdit={onEdit} onDelete={onDelete} />
+                ))}
               </div>
             </div>
           </td>
@@ -687,13 +807,18 @@ function HealthBadge({ status, active, error, inactive }: {
 
 // ─── Endpoint Detail ──────────────────────────────────────────────────────────
 
-function EndpointDetail({ s, lang }: { s: RegistrySource; lang: Lang }) {
+function EndpointDetail({ s, lang, onEdit, onDelete }: {
+  s: RegistrySource;
+  lang: Lang;
+  onEdit?: (s: RegistrySource) => void;
+  onDelete?: (s: RegistrySource) => void;
+}) {
   const freqInfo = FREQ_LABELS[s.frequency] || { pt: s.frequency, en: s.frequency };
   // Phase 24C — derive target tables from category map
   const targetTables = CATEGORY_TO_TABLES[s.category] || [];
 
   return (
-    <div className="flex items-start gap-3 px-3 py-2 rounded-md bg-white border border-neutral-100 hover:border-neutral-200 transition-colors">
+    <div className="flex items-start gap-3 px-3 py-2 rounded-md bg-white border border-neutral-100 hover:border-neutral-200 transition-colors group">
       {/* URL status icon */}
       <div className="mt-0.5 flex-shrink-0">
         {s.url_status === "active"    && <CheckCircle2 size={12} className="text-success-dark" />}
@@ -757,6 +882,30 @@ function EndpointDetail({ s, lang }: { s: RegistrySource; lang: Lang }) {
         <span className="hidden md:inline-block text-[10px] font-mono text-neutral-400 bg-neutral-50 px-1.5 py-0.5 rounded flex-shrink-0">
           {s.data_type}
         </span>
+      )}
+
+      {/* Phase 25 — Edit/Delete actions, visible on row hover */}
+      {(onEdit || onDelete) && (
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+          {onEdit && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onEdit(s); }}
+              className="p-1 rounded text-neutral-400 hover:text-brand-primary hover:bg-brand-surface"
+              title={lang === "pt" ? "Editar fonte" : "Edit source"}
+            >
+              <Pencil size={11} />
+            </button>
+          )}
+          {onDelete && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onDelete(s); }}
+              className="p-1 rounded text-neutral-400 hover:text-error hover:bg-error-light"
+              title={lang === "pt" ? "Desativar fonte" : "Disable source"}
+            >
+              <Trash2 size={11} />
+            </button>
+          )}
+        </div>
       )}
     </div>
   );
@@ -852,7 +1001,12 @@ function HistoryTab({ lang, logs, isReal }: { lang: Lang; logs: MockSyncLog[]; i
 
 // ─── Tab: Data Quality ────────────────────────────────────────────────────────
 
-function QualityTab({ lang, logs, logsAreReal }: { lang: Lang; logs: MockSyncLog[]; logsAreReal: boolean }) {
+function QualityTab({ lang, logs, logsAreReal, sources }: {
+  lang: Lang;
+  logs: MockSyncLog[];
+  logsAreReal: boolean;
+  sources: RegistrySource[];
+}) {
   const tr = t(lang);
 
   const dailyVolume: Record<string, number> = {};
@@ -864,29 +1018,29 @@ function QualityTab({ lang, logs, logsAreReal }: { lang: Lang; logs: MockSyncLog
   });
   const volumeData = Object.entries(dailyVolume).reverse().map(([date, count]) => ({ date, count }));
 
-  // Real stats derived from the registry JSON
+  // Real stats derived from the live registry (data_sources table or static fallback)
   const realStats = [
     {
       name: lang === "pt" ? "Domínios catalogados" : "Catalogued domains",
-      value: [...new Set(registrySources.map(s => extractDomain(s.url)))].length,
-      note: lang === "pt" ? "Orgs únicas no arquivo JSON" : "Unique orgs in JSON file",
+      value: [...new Set(sources.map(s => extractDomain(s.url)))].length,
+      note: lang === "pt" ? "Orgs únicas" : "Unique orgs",
       real: true,
     },
     {
       name: lang === "pt" ? "Endpoints ativos" : "Active endpoints",
-      value: registrySources.filter(s => s.url_status === "active").length,
+      value: sources.filter(s => s.url_status === "active").length,
       note: lang === "pt" ? "URL status = active" : "URL status = active",
       real: true,
     },
     {
       name: lang === "pt" ? "Automatizados" : "Automated",
-      value: registrySources.filter(s => s.automated).length,
-      note: lang === "pt" ? "automated: true no JSON" : "automated: true in JSON",
+      value: sources.filter(s => s.automated).length,
+      note: lang === "pt" ? "Scraper rodando" : "Scraper running",
       real: true,
     },
     {
       name: lang === "pt" ? "Sem verificação" : "Unchecked",
-      value: registrySources.filter(s => s.url_status === "unchecked").length,
+      value: sources.filter(s => s.url_status === "unchecked").length,
       note: lang === "pt" ? "Pendente de checagem de URL" : "Pending URL check",
       real: true,
     },

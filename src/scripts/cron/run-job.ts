@@ -47,6 +47,7 @@ import { runSyncEventsAgroadvance } from '@/jobs/sync-events-agroadvance'
 import { runSyncFaostat } from '@/jobs/sync-faostat'
 import { runSyncAgrofitBulk } from '@/jobs/sync-agrofit-bulk'
 import { runSyncScraperHealthcheck } from '@/jobs/sync-scraper-healthcheck'
+import { runSyncSourceRegistryHealthcheck } from '@/jobs/sync-source-registry-healthcheck'
 
 import type { JobResult } from '@/jobs/types'
 
@@ -72,6 +73,7 @@ const JOB_REGISTRY: Record<string, JobFn> = {
   'sync-faostat':             runSyncFaostat,
   'sync-agrofit-bulk':        runSyncAgrofitBulk,
   'sync-scraper-healthcheck': runSyncScraperHealthcheck,
+  'sync-source-registry-healthcheck': runSyncSourceRegistryHealthcheck,
 }
 
 async function main() {
