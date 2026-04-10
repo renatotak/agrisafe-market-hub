@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, Component } from "react";
 import { APIProvider, Map as GMap, AdvancedMarker, InfoWindow, useMap } from "@vis.gl/react-google-maps";
 import {
   Calendar, Eye, EyeOff, ExternalLink,
@@ -9,6 +9,24 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import type { Lang } from "@/lib/i18n";
+
+// Error boundary to prevent Google Maps failures from crashing the whole page
+class MapErrorBoundary extends Component<
+  { children: React.ReactNode; fallback: React.ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: { children: React.ReactNode; fallback: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  render() {
+    if (this.state.hasError) return this.props.fallback;
+    return this.props.children;
+  }
+}
 
 // ─── City coordinates ──────────────────────────────────────────────────────
 
@@ -559,6 +577,11 @@ export function DashboardMap({ lang }: { lang: Lang }) {
       {/* ── Map ── */}
       <div id="dashboard-map-container" className="relative w-full h-[380px] bg-neutral-100">
         {MAP_KEY ? (
+          <MapErrorBoundary fallback={
+            <div className="flex items-center justify-center h-full text-neutral-500 text-sm gap-2">
+              <AlertCircle size={16} /> Google Maps failed to load. The API key may be expired.
+            </div>
+          }>
           <APIProvider apiKey={MAP_KEY}>
             <GMap
               defaultCenter={mapCenter}
@@ -655,6 +678,7 @@ export function DashboardMap({ lang }: { lang: Lang }) {
                 onClear={() => { setBbox(null); setBboxDirty(false); }} />
             </GMap>
           </APIProvider>
+          </MapErrorBoundary>
         ) : (
           <div className="flex items-center justify-center h-full text-neutral-500 text-sm">
             Google Maps API key not configured.
