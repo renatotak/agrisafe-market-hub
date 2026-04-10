@@ -2,11 +2,12 @@ import { login } from "./actions";
 import { Leaf } from "lucide-react";
 import { t } from "@/lib/i18n";
 
-export default function LoginPage({
+export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: { message: string, error: string };
+  searchParams: Promise<{ message?: string; error?: string }>;
 }) {
+  const params = await searchParams;
   return (
     <div className="flex-1 flex flex-col w-full px-8 sm:max-w-md justify-center gap-2 p-4 h-screen mx-auto">
       <div className="flex items-center gap-2 justify-center mb-8">
@@ -17,13 +18,13 @@ export default function LoginPage({
       </div>
 
       <form className="flex-1 flex flex-col w-full gap-4 text-foreground">
-        
-        {searchParams?.error && (
+
+        {params?.error && (
           <p className="mt-4 p-4 bg-red-50 text-red-600 text-sm border-s-4 border-red-500 mb-4">
-            {searchParams.error}
+            {params.error}
           </p>
         )}
-        
+
         <div className="flex flex-col gap-2">
           <label className="text-md font-medium text-slate-700" htmlFor="email">
             Email
@@ -56,9 +57,9 @@ export default function LoginPage({
           Sign In / Entrar
         </button>
 
-        {searchParams?.message && (
+        {params?.message && (
           <p className="mt-4 p-4 bg-gray-50 text-slate-600 text-center">
-            {searchParams.message}
+            {params.message}
           </p>
         )}
       </form>
