@@ -10,14 +10,20 @@ const supabaseAdmin = createClient(
 
 /** GET — fetch all notes for a company */
 export async function GET(req: NextRequest) {
-  const cnpjBasico = req.nextUrl.searchParams.get("cnpj_basico")?.replace(/\D/g, "");
-  if (!cnpjBasico) return NextResponse.json({ error: "cnpj_basico required" }, { status: 400 });
+  const entityUid = req.nextUrl.searchParams.get("entity_uid");
+  let cnpjBasico = req.nextUrl.searchParams.get("cnpj_basico")?.replace(/\D/g, "");
 
-  const root = cnpjBasico.padStart(8, "0");
-  const { data, error } = await supabaseAdmin
-    .from("company_notes")
-    .select("field_key, value, updated_at")
-    .eq("cnpj_basico", root);
+  if (entityUid && !cnpjBasico) {
+    const { data: entity } = await supabaseAdmin.from("legal_entities").select("tax_id").eq("entity_uid", entityUid).maybeSingle();
+    if (entity?.tax_id) cnpjBasico = entity.tax_id.slice(0, 8);
+  }
+  if (!cnpjBasico && !entityUid) return NextResponse.json({ error: "cnpj_basico or entity_uid required" }, { status: 400 });
+
+  const root = cnpjBasico?.padStart(8, "0");
+  let query = supabaseAdmin.from("company_notes").select("field_key, value, updated_at");
+  if (entityUid) query = query.eq("entity_uid", entityUid);
+  else query = query.eq("cnpj_basico", root!);
+  const { data, error } = await query;
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
@@ -32,15 +38,21 @@ export async function GET(req: NextRequest) {
 /** POST — upsert one or more notes */
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const cnpjBasico = body.cnpj_basico?.replace(/\D/g, "");
+  let cnpjBasico = body.cnpj_basico?.replace(/\D/g, "");
+  const bodyEntityUid = body.entity_uid;
   const updates = body.notes as Record<string, string>; // { field_key: value }
 
+  if (bodyEntityUid && !cnpjBasico) {
+    const { data: entity } = await supabaseAdmin.from("legal_entities").select("tax_id").eq("entity_uid", bodyEntityUid).maybeSingle();
+    if (entity?.tax_id) cnpjBasico = entity.tax_id.slice(0, 8);
+  }
+
   if (!cnpjBasico || !updates || typeof updates !== "object") {
-    return NextResponse.json({ error: "cnpj_basico and notes required" }, { status: 400 });
+    return NextResponse.json({ error: "cnpj_basico or entity_uid + notes required" }, { status: 400 });
   }
 
   const root = cnpjBasico.padStart(8, "0");
-  const entityUid = await ensureLegalEntityUid(supabaseAdmin, root);
+  const entityUid = bodyEntityUid || await ensureLegalEntityUid(supabaseAdmin, root);
 
   const rows = Object.entries(updates).map(([field_key, value]) => ({
     cnpj_basico: root,

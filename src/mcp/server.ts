@@ -311,7 +311,7 @@ server.tool(
       "commodity_prices", "macro_statistics",
       "knowledge_items", "news_knowledge",
       "key_persons", "meetings", "leads",
-      "data_sources", "activity_log",
+      "data_sources", "activity_log", "executive_briefings",
     ]
 
     const counts = await Promise.all(
@@ -322,6 +322,136 @@ server.tool(
     )
 
     return { content: [{ type: "text" as const, text: `AgriSafe Market Hub — Database Stats\n\n${counts.join("\n")}` }] }
+  },
+)
+
+// ── Tool: executive_briefing ────────────────────────────────────────────────
+
+server.tool(
+  "executive_briefing",
+  "Get today's (or a specific date's) executive briefing — a structured summary of news, market moves, regulations, RJ alerts, upcoming events, and price anomalies.",
+  {
+    date: z.string().optional().describe("Date in YYYY-MM-DD format (defaults to latest)"),
+  },
+  async ({ date }) => {
+    let query = supabase
+      .from("executive_briefings")
+      .select("*")
+      .order("briefing_date", { ascending: false })
+      .limit(1)
+    if (date) query = query.eq("briefing_date", date)
+
+    const { data } = await query.maybeSingle()
+    if (!data) {
+      return { content: [{ type: "text" as const, text: "No briefing available." }] }
+    }
+
+    const sections: string[] = []
+    sections.push(`── Executive Briefing: ${data.briefing_date} ──\n`)
+    if (data.executive_summary) sections.push(data.executive_summary)
+
+    const moves = data.market_moves || []
+    if (moves.length > 0) {
+      sections.push("\n── Market Moves ──\n" + moves.map((m: any) => `${m.commodity}: ${m.change_pct > 0 ? "+" : ""}${m.change_pct}% (${m.unit})`).join("\n"))
+    }
+
+    const ruptures = data.price_ruptures || []
+    if (ruptures.length > 0) {
+      sections.push("\n── Price Anomalies (2σ+) ──\n" + ruptures.map((r: any) => `⚠ ${r.commodity}: ${r.change_pct > 0 ? "+" : ""}${r.change_pct}% (${r.sigma}σ, stddev=${r.stddev}%)`).join("\n"))
+    }
+
+    const news = data.top_news || []
+    if (news.length > 0) {
+      sections.push("\n── Top News ──\n" + news.map((n: any, i: number) => `${i + 1}. [${n.category}] ${n.title}`).join("\n"))
+    }
+
+    const regs = data.regulatory_updates || []
+    if (regs.length > 0) {
+      sections.push("\n── Regulatory Updates ──\n" + regs.map((r: any) => `[${r.body}/${r.impact}] ${r.title}`).join("\n"))
+    }
+
+    const events = data.upcoming_events || []
+    if (events.length > 0) {
+      sections.push("\n── Upcoming Events ──\n" + events.map((e: any) => `${e.date}: ${e.name} (${e.location})`).join("\n"))
+    }
+
+    return { content: [{ type: "text" as const, text: sections.join("\n") }] }
+  },
+)
+
+// ── Tool: price_anomalies ───────────────────────────────────────────────────
+
+server.tool(
+  "price_anomalies",
+  "Detect price anomalies by comparing current commodity price changes against historical standard deviation. Returns commodities where |change| exceeds the threshold in sigma units.",
+  {
+    threshold: z.number().min(1).max(5).default(2).describe("Sigma threshold (default 2)"),
+  },
+  async ({ threshold }) => {
+    const [{ data: prices }, { data: stats }] = await Promise.all([
+      supabase.from("commodity_prices").select("id, name_pt, name_en, price, change_24h, unit"),
+      supabase.from("v_commodity_price_stats").select("*"),
+    ])
+
+    if (!prices || !stats) {
+      return { content: [{ type: "text" as const, text: "No price data available for anomaly detection." }] }
+    }
+
+    const statsMap = new Map(stats.map((s: any) => [s.commodity_id, s]))
+    const anomalies: string[] = []
+    let clean = 0
+
+    for (const p of prices) {
+      const s = statsMap.get(p.id)
+      if (!s || !s.stddev_change || parseFloat(s.stddev_change) === 0) continue
+      const change = parseFloat(p.change_24h || "0")
+      const stddev = parseFloat(s.stddev_change)
+      const sigma = Math.abs(change) / stddev
+      if (sigma >= threshold) {
+        anomalies.push(`⚠ ${p.name_en} (${p.id}): ${change > 0 ? "+" : ""}${change.toFixed(2)}% | ${sigma.toFixed(1)}σ | price: ${p.price} ${p.unit} | stddev: ${stddev.toFixed(2)}% (${s.obs_count} obs)`)
+      } else {
+        clean++
+      }
+    }
+
+    const text = anomalies.length === 0
+      ? `No anomalies detected at ${threshold}σ threshold. All ${clean} commodities within normal range.`
+      : `${anomalies.length} anomaly(ies) detected (${threshold}σ threshold):\n\n${anomalies.join("\n")}\n\n${clean} commodity(ies) within normal range.`
+
+    return { content: [{ type: "text" as const, text }] }
+  },
+)
+
+// ── Tool: events_upcoming ───────────────────────────────────────────────────
+
+server.tool(
+  "events_upcoming",
+  "List upcoming agribusiness events (conferences, fairs, expos) from AgroAgenda and AgroAdvance sources.",
+  {
+    days: z.number().min(1).max(180).default(30).describe("Look-ahead window in days"),
+    limit: z.number().min(1).max(30).default(10),
+  },
+  async ({ days, limit }) => {
+    const today = new Date().toISOString().slice(0, 10)
+    const until = new Date(Date.now() + days * 86400000).toISOString().slice(0, 10)
+
+    const { data } = await supabase
+      .from("events")
+      .select("name, start_date, end_date, location, website, source_name")
+      .gte("start_date", today)
+      .lte("start_date", until)
+      .order("start_date")
+      .limit(limit)
+
+    if (!data || data.length === 0) {
+      return { content: [{ type: "text" as const, text: `No events in the next ${days} days.` }] }
+    }
+
+    const text = data.map((e: any) =>
+      `${e.start_date?.slice(0, 10)}${e.end_date ? ` – ${e.end_date.slice(0, 10)}` : ""}: ${e.name}\n  Location: ${e.location || "—"} | Source: ${e.source_name || "—"}${e.website ? `\n  URL: ${e.website}` : ""}`
+    ).join("\n\n")
+
+    return { content: [{ type: "text" as const, text: `${data.length} upcoming event(s):\n\n${text}` }] }
   },
 )
 
