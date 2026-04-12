@@ -298,7 +298,16 @@ function MarketHighlights({
   const topGainer = [...arr].sort((a, b) => b.avgVariation - a.avgVariation)[0];
   const topLoser = [...arr].sort((a, b) => a.avgVariation - b.avgVariation)[0];
   const mostVolatile = [...arr].sort((a, b) => Math.abs(b.avgVariation) - Math.abs(a.avgVariation))[0];
-  const ruptures = arr.filter((c) => Math.abs(c.avgVariation) > 2).length;
+
+  // Phase 28 — data-driven anomaly detection via rolling stddev
+  const [anomalies, setAnomalies] = useState<{ commodity: string; name_pt: string; name_en: string; sigma: number; change_pct: number }[]>([]);
+  useEffect(() => {
+    fetch("/api/price-anomalies")
+      .then((r) => r.json())
+      .then((json) => { if (json.anomalies) setAnomalies(json.anomalies); })
+      .catch(() => {});
+  }, []);
+  const ruptures = anomalies.length;
   const latestDate = arr.find((s) => s.closingDate)?.closingDate || "";
 
   return (
@@ -345,11 +354,21 @@ function MarketHighlights({
               ))}
             </div>
             {ruptures > 0 && (
-              <div className="mt-2 pt-2 border-t border-neutral-700/50 flex items-center gap-1">
-                <Zap size={10} className="text-amber-400" />
-                <span className="text-[10px] text-amber-300 font-semibold">
-                  {ruptures} {lang === "pt" ? "movimentos atípicos" : "unusual moves"}
-                </span>
+              <div className="mt-2 pt-2 border-t border-neutral-700/50 space-y-1">
+                <div className="flex items-center gap-1">
+                  <Zap size={10} className="text-amber-400" />
+                  <span className="text-[10px] text-amber-300 font-semibold">
+                    {ruptures} {lang === "pt" ? "anomalia(s) (2σ+)" : "anomaly(ies) (2σ+)"}
+                  </span>
+                </div>
+                {anomalies.slice(0, 3).map((a) => (
+                  <div key={a.commodity} className="flex items-center justify-between text-[10px]">
+                    <span className="text-neutral-400">{lang === "pt" ? a.name_pt : a.name_en}</span>
+                    <span className={`font-bold font-mono ${a.change_pct >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                      {a.change_pct > 0 ? "+" : ""}{a.change_pct.toFixed(1)}% ({a.sigma}σ)
+                    </span>
+                  </div>
+                ))}
               </div>
             )}
           </div>
