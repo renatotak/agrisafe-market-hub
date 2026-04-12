@@ -7,14 +7,14 @@ export const dynamic = 'force-dynamic'
 /**
  * POST /api/retailer-intelligence/analyze
  * On-demand AI analysis for a single retailer (bypasses batch queue).
- * Body: { cnpj_raiz: string }
+ * Body: { cnpj_raiz: string, entity_uid?: string }
  */
 export async function POST(request: Request) {
   const body = await request.json()
-  const { cnpj_raiz } = body
+  const { cnpj_raiz, entity_uid } = body
 
-  if (!cnpj_raiz) {
-    return NextResponse.json({ error: 'cnpj_raiz required' }, { status: 400 })
+  if (!cnpj_raiz && !entity_uid) {
+    return NextResponse.json({ error: 'cnpj_raiz or entity_uid required' }, { status: 400 })
   }
 
   if (!isGeminiConfigured()) {
@@ -24,16 +24,22 @@ export async function POST(request: Request) {
   try {
     const supabase = createAdminClient()
 
-    // Load retailer
-    const { data: retailer, error: retError } = await supabase
+    // Load retailer — prefer entity_uid lookup
+    let retQuery = supabase
       .from('retailers')
-      .select('cnpj_raiz, razao_social, nome_fantasia, consolidacao, grupo_acesso, classificacao, faixa_faturamento, capital_social, porte_name')
-      .eq('cnpj_raiz', cnpj_raiz)
-      .maybeSingle()
+      .select('cnpj_raiz, entity_uid, razao_social, nome_fantasia, consolidacao, grupo_acesso, classificacao, faixa_faturamento, capital_social, porte_name')
+    if (entity_uid) retQuery = retQuery.eq('entity_uid', entity_uid)
+    else retQuery = retQuery.eq('cnpj_raiz', cnpj_raiz)
+
+    const { data: retailer, error: retError } = await retQuery.maybeSingle()
 
     if (retError || !retailer) {
       return NextResponse.json({ error: 'Retailer not found' }, { status: 404 })
     }
+
+    // Resolve both keys for downstream queries
+    const resolvedCnpjRaiz = retailer.cnpj_raiz
+    const resolvedEntityUid = retailer.entity_uid
 
     const name = retailer.nome_fantasia || retailer.consolidacao || retailer.razao_social
 
@@ -57,17 +63,17 @@ export async function POST(request: Request) {
         .limit(5),
       supabase.from('retailer_locations')
         .select('id', { count: 'exact', head: true })
-        .eq('cnpj_raiz', cnpj_raiz),
+        .eq('cnpj_raiz', resolvedCnpjRaiz),
       supabase.from('retailer_intelligence')
         .select('branch_count_current')
         .eq('cnpj_raiz', cnpj_raiz)
         .maybeSingle(),
       supabase.from('retailer_industries')
         .select('industry_id')
-        .eq('cnpj_raiz', cnpj_raiz),
+        .eq('cnpj_raiz', resolvedCnpjRaiz),
       supabase.from('company_research')
         .select('findings, summary')
-        .eq('cnpj_basico', cnpj_raiz)
+        .eq('cnpj_basico', resolvedCnpjRaiz)
         .order('searched_at', { ascending: false })
         .limit(1),
     ])
@@ -132,7 +138,8 @@ export async function POST(request: Request) {
 
     // Upsert intelligence
     const record = {
-      cnpj_raiz,
+      cnpj_raiz: resolvedCnpjRaiz,
+      entity_uid: resolvedEntityUid,
       executive_summary: analysis.executive_summary,
       market_position: analysis.market_position,
       risk_signals: analysis.risk_signals,
@@ -166,7 +173,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
-      cnpj_raiz,
+      cnpj_raiz: resolvedCnpjRaiz,
+      entity_uid: resolvedEntityUid,
       intelligence: record,
     })
   } catch (error: any) {
