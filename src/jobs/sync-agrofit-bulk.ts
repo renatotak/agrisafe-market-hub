@@ -202,6 +202,7 @@ export async function runSyncAgrofitBulk(supabase: SupabaseClient): Promise<JobR
 
     const productRows = outcome.rows.map((row) => ({
       industry_id: holderToIndustryId.get(row.titular_registro.toUpperCase().trim()) || null,
+      titular_registro: row.titular_registro,
       product_name: row.marca_comercial,
       active_ingredients: row._ingredients,
       product_type: categorize(row._classes),
