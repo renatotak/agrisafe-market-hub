@@ -12,10 +12,21 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import type { JobResult } from "@/jobs/types"
 import { logActivity } from "@/lib/activity-log"
 
+interface PriceRupture {
+  commodity: string
+  price: number
+  change_pct: number
+  avg_change: number
+  stddev: number
+  sigma: number
+  unit: string
+}
+
 interface BriefingData {
   topNews: { title: string; summary: string; category: string; source: string; url?: string }[]
   newsCount: number
   marketMoves: { commodity: string; price: number; change_pct: number; unit: string }[]
+  priceRuptures: PriceRupture[]
   newRegulations: { title: string; body: string; impact: string; areas: string[] }[]
   newRJ: { company: string; cnpj: string }[]
   upcomingEvents: { name: string; date: string; location: string }[]
@@ -39,21 +50,46 @@ async function gatherData(supabase: SupabaseClient): Promise<BriefingData> {
   // Prices — latest per commodity with change
   const { data: prices } = await supabase
     .from("commodity_prices")
-    .select("commodity, price, change_percent, unit")
+    .select("id, price, change_24h, unit")
     .order("updated_at", { ascending: false })
     .limit(10)
 
   // Sort by absolute change to find biggest movers
   const marketMoves = (prices || [])
-    .filter((p: any) => p.change_percent != null)
-    .sort((a: any, b: any) => Math.abs(b.change_percent) - Math.abs(a.change_percent))
+    .filter((p: any) => p.change_24h != null)
+    .sort((a: any, b: any) => Math.abs(b.change_24h) - Math.abs(a.change_24h))
     .slice(0, 5)
     .map((p: any) => ({
-      commodity: p.commodity,
-      price: p.price,
-      change_pct: p.change_percent,
+      commodity: p.id,
+      price: parseFloat(p.price),
+      change_pct: parseFloat(p.change_24h),
       unit: p.unit,
     }))
+
+  // Phase 28 — Anomaly detection: compare latest change_24h against rolling stddev
+  const { data: stats } = await supabase.from("v_commodity_price_stats").select("*")
+  const priceRuptures: PriceRupture[] = []
+  if (stats && prices) {
+    const statsMap = new Map(stats.map((s: any) => [s.commodity_id, s]))
+    for (const p of prices as any[]) {
+      const s = statsMap.get(p.id)
+      if (!s || !s.stddev_change || s.stddev_change === 0) continue
+      const change = parseFloat(p.change_24h || "0")
+      const sigma = Math.abs(change) / s.stddev_change
+      if (sigma >= 2) {
+        priceRuptures.push({
+          commodity: p.id,
+          price: parseFloat(p.price),
+          change_pct: change,
+          avg_change: parseFloat(s.avg_change),
+          stddev: parseFloat(s.stddev_change),
+          sigma: Math.round(sigma * 10) / 10,
+          unit: p.unit,
+        })
+      }
+    }
+    priceRuptures.sort((a, b) => b.sigma - a.sigma)
+  }
 
   // Regulatory — last 24h
   const { data: regs } = await supabase
@@ -99,6 +135,7 @@ async function gatherData(supabase: SupabaseClient): Promise<BriefingData> {
     })),
     newsCount: newsCount ?? 0,
     marketMoves,
+    priceRuptures,
     newRegulations: (regs || []).map((r: any) => ({
       title: r.title,
       body: r.body,
@@ -137,6 +174,7 @@ Focus on what changed, what requires attention, and strategic implications. If t
       news_count: data.newsCount,
       top_headlines: data.topNews.slice(0, 5).map(n => `[${n.category}] ${n.title}`),
       market_moves: data.marketMoves.map(m => `${m.commodity}: ${m.change_pct > 0 ? "+" : ""}${m.change_pct}%`),
+      price_ruptures: data.priceRuptures.map(r => `⚠ ${r.commodity}: ${r.change_pct > 0 ? "+" : ""}${r.change_pct}% (${r.sigma}σ, stddev=${r.stddev}%)`),
       new_regulations: data.newRegulations.map(r => `[${r.body}/${r.impact}] ${r.title}`),
       new_rj_filings: data.newRJ.map(r => r.company),
       upcoming_events: data.upcomingEvents.map(e => `${e.name} (${e.date}, ${e.location})`),
@@ -155,6 +193,7 @@ Focus on what changed, what requires attention, and strategic implications. If t
       const top = data.marketMoves[0]
       lines.push(`Maior movimentação: ${top.commodity} (${top.change_pct > 0 ? "+" : ""}${top.change_pct}%).`)
     }
+    if (data.priceRuptures.length > 0) lines.push(`⚠ ${data.priceRuptures.length} anomalia(s) de preço detectada(s): ${data.priceRuptures.map(r => `${r.commodity} (${r.sigma}σ)`).join(", ")}.`)
     if (data.newRegulations.length > 0) lines.push(`${data.newRegulations.length} nova(s) norma(s) regulatória(s).`)
     if (data.newRJ.length > 0) lines.push(`${data.newRJ.length} novo(s) processo(s) de recuperação judicial.`)
     if (data.upcomingEvents.length > 0) lines.push(`${data.upcomingEvents.length} evento(s) nos próximos 7 dias.`)
@@ -176,6 +215,7 @@ export async function runSyncDailyBriefing(supabase: SupabaseClient): Promise<Jo
       briefing_date: today,
       executive_summary: summary,
       market_moves: data.marketMoves,
+      price_ruptures: data.priceRuptures,
       top_news: data.topNews,
       regulatory_updates: data.newRegulations,
       rj_alerts: data.newRJ,

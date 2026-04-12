@@ -16,6 +16,7 @@ interface Briefing {
   regulatory_updates: { title: string; body: string; impact: string; areas: string[] }[];
   rj_alerts: { company: string; cnpj: string }[];
   upcoming_events: { name: string; date: string; location: string }[];
+  price_ruptures: { commodity: string; price: number; change_pct: number; sigma: number; stddev: number; unit: string }[];
   source_health: { total: number; healthy: number; error: number };
 }
 
@@ -62,6 +63,7 @@ export function ExecutiveBriefingWidget({ lang }: { lang: Lang }) {
   const hasRegs = briefing.regulatory_updates?.length > 0;
   const hasRJ = briefing.rj_alerts?.length > 0;
   const hasEvents = briefing.upcoming_events?.length > 0;
+  const hasRuptures = briefing.price_ruptures?.length > 0;
 
   return (
     <div className="bg-white rounded-lg border border-neutral-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
@@ -122,6 +124,14 @@ export function ExecutiveBriefingWidget({ lang }: { lang: Lang }) {
             </span>
           </div>
         ))}
+        {hasRuptures && (
+          <div className="flex items-center gap-1.5 text-[11px] bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+            <Activity size={12} className="text-amber-600" />
+            <span className="text-amber-700 font-bold">
+              {briefing.price_ruptures.length} {lang === "pt" ? "anomalia(s)" : "anomaly(ies)"}
+            </span>
+          </div>
+        )}
         {hasRegs && (
           <div className="flex items-center gap-1.5 text-[11px]">
             <Scale size={12} className="text-blue-600" />
@@ -159,6 +169,30 @@ export function ExecutiveBriefingWidget({ lang }: { lang: Lang }) {
       {/* Expanded details */}
       {expanded && (
         <div className="px-5 pb-5 space-y-4 border-t border-neutral-100 pt-4">
+          {/* Price Anomalies */}
+          {hasRuptures && (
+            <div>
+              <h4 className="text-[11px] font-bold text-amber-600 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                <Activity size={12} />
+                {lang === "pt" ? "Anomalias de Preço" : "Price Anomalies"}
+              </h4>
+              <div className="space-y-1.5">
+                {briefing.price_ruptures.map((r, i) => (
+                  <div key={i} className="flex items-center gap-2 text-[11px] bg-amber-50/50 border border-amber-100 rounded px-2.5 py-1.5">
+                    <span className="font-bold text-amber-700">{r.sigma}σ</span>
+                    <span className="font-semibold text-neutral-800">{r.commodity}</span>
+                    <span className={r.change_pct >= 0 ? "text-success-dark font-bold" : "text-error font-bold"}>
+                      {r.change_pct > 0 ? "+" : ""}{r.change_pct.toFixed(1)}%
+                    </span>
+                    <span className="text-neutral-400">
+                      (avg: {r.stddev.toFixed(1)}% stddev)
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Top News */}
           {hasNews && (
             <div>
