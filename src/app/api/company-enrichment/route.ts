@@ -155,9 +155,21 @@ async function fetchCompanyData(fullCnpj: string) {
 // ─── Main handler ──────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
-  const cnpjRaiz = req.nextUrl.searchParams.get("cnpj_raiz")?.replace(/\D/g, "");
+  const entityUidParam = req.nextUrl.searchParams.get("entity_uid");
+  let cnpjRaiz = req.nextUrl.searchParams.get("cnpj_raiz")?.replace(/\D/g, "");
+
+  // Resolve entity_uid → cnpj_raiz if entity_uid is provided
+  if (entityUidParam && !cnpjRaiz) {
+    const { data: entity } = await supabaseAdmin
+      .from("legal_entities")
+      .select("tax_id")
+      .eq("entity_uid", entityUidParam)
+      .maybeSingle();
+    if (entity?.tax_id) cnpjRaiz = entity.tax_id.slice(0, 8);
+  }
+
   if (!cnpjRaiz || cnpjRaiz.length < 7 || cnpjRaiz.length > 8) {
-    return NextResponse.json({ error: "cnpj_raiz required (8 digits)" }, { status: 400 });
+    return NextResponse.json({ error: "cnpj_raiz or entity_uid required" }, { status: 400 });
   }
   const root = cnpjRaiz.padStart(8, "0");
   const cacheOnly = req.nextUrl.searchParams.get("cache_only") === "true";

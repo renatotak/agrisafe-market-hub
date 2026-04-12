@@ -17,10 +17,11 @@ const EDITABLE_FIELDS = new Set([
 export async function PATCH(req: NextRequest) {
   const body = await req.json();
   const cnpjRaiz = body.cnpj_raiz?.replace(/\D/g, "");
+  const entityUid = body.entity_uid;
   const updates = body.updates as Record<string, string | null>;
 
-  if (!cnpjRaiz || !updates || typeof updates !== "object") {
-    return NextResponse.json({ error: "cnpj_raiz and updates required" }, { status: 400 });
+  if ((!cnpjRaiz && !entityUid) || !updates || typeof updates !== "object") {
+    return NextResponse.json({ error: "cnpj_raiz or entity_uid + updates required" }, { status: 400 });
   }
 
   // Filter to only allowed editable fields
@@ -35,10 +36,10 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "No editable fields provided" }, { status: 400 });
   }
 
-  const { error } = await supabaseAdmin
-    .from("retailers")
-    .update(safeUpdates)
-    .eq("cnpj_raiz", cnpjRaiz);
+  let query = supabaseAdmin.from("retailers").update(safeUpdates);
+  if (entityUid) query = query.eq("entity_uid", entityUid);
+  else query = query.eq("cnpj_raiz", cnpjRaiz);
+  const { error } = await query;
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 

@@ -181,7 +181,7 @@ export function RetailersDirectory({ lang }: { lang: Lang }) {
       .order(sortField, { ascending: sortDir === "asc", nullsFirst: false })
       .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
 
-    if (search.trim()) query = query.or(`razao_social.ilike.%${search.trim()}%,nome_fantasia.ilike.%${search.trim()}%,cnpj_raiz.ilike.%${search.trim()}%`);
+    if (search.trim()) query = query.or(`razao_social.ilike.%${search.trim()}%,nome_fantasia.ilike.%${search.trim()}%,cnpj_raiz.ilike.%${search.trim()}%,entity_uid.ilike.%${search.trim()}%`);
     if (grupoFilter) query = query.eq("grupo_acesso", grupoFilter);
     if (classificacaoFilter) query = query.eq("classificacao", classificacaoFilter);
 
@@ -220,14 +220,14 @@ export function RetailersDirectory({ lang }: { lang: Lang }) {
     setMapLoading(false);
   }, [ufFilter, search]);
 
-  const fetchLocations = async (cnpjRaiz: string) => {
-    if (locations[cnpjRaiz]) return;
+  const fetchLocations = async (key: string, cnpjRaiz: string) => {
+    if (locations[key]) return;
     const { data } = await supabase.from("retailer_locations").select("*").eq("cnpj_raiz", cnpjRaiz).order("uf");
-    if (data) setLocations(prev => ({ ...prev, [cnpjRaiz]: data }));
+    if (data) setLocations(prev => ({ ...prev, [key]: data }));
   };
 
-  const toggleExpand = (cnpjRaiz: string) => {
-    if (expandedId === cnpjRaiz) { setExpandedId(null); } else { setExpandedId(cnpjRaiz); fetchLocations(cnpjRaiz); }
+  const toggleExpand = (key: string, cnpjRaiz: string) => {
+    if (expandedId === key) { setExpandedId(null); } else { setExpandedId(key); fetchLocations(key, cnpjRaiz); }
   };
 
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
@@ -338,13 +338,16 @@ export function RetailersDirectory({ lang }: { lang: Lang }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {retailers.map((r) => (
-                    <RetailerRow key={r.cnpj_raiz} retailer={r} lang={lang} expanded={expandedId === r.cnpj_raiz}
-                      onToggle={() => toggleExpand(r.cnpj_raiz)} locations={locations[r.cnpj_raiz]}
-                      onRetailerUpdate={(cnpj, field, value) => {
-                        setRetailers(prev => prev.map(ret => ret.cnpj_raiz === cnpj ? { ...ret, [field]: value } : ret));
-                      }} />
-                  ))}
+                  {retailers.map((r) => {
+                    const rKey = r.entity_uid || r.cnpj_raiz;
+                    return (
+                      <RetailerRow key={rKey} retailer={r} lang={lang} expanded={expandedId === rKey}
+                        onToggle={() => toggleExpand(rKey, r.cnpj_raiz)} locations={locations[rKey]}
+                        onRetailerUpdate={(id, field, value) => {
+                          setRetailers(prev => prev.map(ret => (ret.entity_uid || ret.cnpj_raiz) === id ? { ...ret, [field]: value } : ret));
+                        }} />
+                    );
+                  })}
                   {retailers.length === 0 && (
                     <tr><td colSpan={6} className="px-4 py-12 text-center text-neutral-400">{lang === "pt" ? "Nenhum resultado" : "No results"}</td></tr>
                   )}
@@ -536,8 +539,9 @@ const FATURAMENTO_OPTIONS = ["ATÉ 50 MILHÕES", "ATÉ 500 MILHÕES", "ACIMA 500
 
 function RetailerRow({ retailer: r, lang, expanded, onToggle, locations, onRetailerUpdate }: {
   retailer: Retailer; lang: Lang; expanded: boolean; onToggle: () => void; locations?: any[];
-  onRetailerUpdate?: (cnpjRaiz: string, field: string, value: string) => void;
+  onRetailerUpdate?: (id: string, field: string, value: string) => void;
 }) {
+  const entityKey = r.entity_uid || r.cnpj_raiz;
   const grupoColor = GRUPO_COLORS[r.grupo_acesso || ""] || "bg-neutral-100 text-neutral-600";
   const classColor = CLASSIFICACAO_COLORS[r.classificacao || ""] || "bg-neutral-100 text-neutral-600";
   const matrizCnpj = buildMatrizCnpj(r.cnpj_raiz);
@@ -556,20 +560,23 @@ function RetailerRow({ retailer: r, lang, expanded, onToggle, locations, onRetai
   // Auto-load enrichment from cache + research when row expands
   useEffect(() => {
     if (!expanded) return;
-    fetch(`/api/company-enrichment?cnpj_raiz=${r.cnpj_raiz}&cache_only=true`)
+    const enrichParam = r.entity_uid ? `entity_uid=${r.entity_uid}` : `cnpj_raiz=${r.cnpj_raiz}`;
+    fetch(`/api/company-enrichment?${enrichParam}&cache_only=true`)
       .then(res => res.ok ? res.json() : null)
       .then(data => { if (data && data.source !== "none") setEnrichment(data); });
-    fetch(`/api/company-research?cnpj_basico=${r.cnpj_raiz}`)
+    const resParam = r.entity_uid ? `entity_uid=${r.entity_uid}` : `cnpj_basico=${r.cnpj_raiz}`;
+    fetch(`/api/company-research?${resParam}`)
       .then(res => res.ok ? res.json() : null)
       .then(data => { if (data?.research) setResearch(data.research); });
-  }, [expanded, r.cnpj_raiz]);
+  }, [expanded, r.entity_uid, r.cnpj_raiz]);
 
   const fetchEnrichment = async () => {
     if (enrichment) { setShowModal(true); return; }
     setEnrichLoading(true);
     setEnrichError(null);
     try {
-      const res = await fetch(`/api/company-enrichment?cnpj_raiz=${r.cnpj_raiz}`);
+      const param = r.entity_uid ? `entity_uid=${r.entity_uid}` : `cnpj_raiz=${r.cnpj_raiz}`;
+      const res = await fetch(`/api/company-enrichment?${param}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Erro ao consultar");
       setEnrichment(data);
@@ -588,7 +595,7 @@ function RetailerRow({ retailer: r, lang, expanded, onToggle, locations, onRetai
       const res = await fetch("/api/company-research", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cnpj_basico: r.cnpj_raiz, razao_social: r.razao_social, nome_fantasia: r.nome_fantasia }),
+        body: JSON.stringify({ cnpj_basico: r.cnpj_raiz, entity_uid: r.entity_uid, razao_social: r.razao_social, nome_fantasia: r.nome_fantasia }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Erro na pesquisa");
@@ -604,9 +611,9 @@ function RetailerRow({ retailer: r, lang, expanded, onToggle, locations, onRetai
     await fetch("/api/retailers/update", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cnpj_raiz: r.cnpj_raiz, updates: { [field]: value } }),
+      body: JSON.stringify({ cnpj_raiz: r.cnpj_raiz, entity_uid: r.entity_uid, updates: { [field]: value } }),
     });
-    onRetailerUpdate?.(r.cnpj_raiz, field, value);
+    onRetailerUpdate?.(entityKey, field, value);
   };
 
   return (

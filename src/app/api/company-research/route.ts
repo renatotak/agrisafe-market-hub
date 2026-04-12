@@ -9,8 +9,19 @@ const supabaseAdmin = createClient(
 
 /** GET — fetch saved research for a company */
 export async function GET(req: NextRequest) {
-  const cnpjBasico = req.nextUrl.searchParams.get("cnpj_basico")?.replace(/\D/g, "");
-  if (!cnpjBasico) return NextResponse.json({ error: "cnpj_basico required" }, { status: 400 });
+  const entityUid = req.nextUrl.searchParams.get("entity_uid");
+  let cnpjBasico = req.nextUrl.searchParams.get("cnpj_basico")?.replace(/\D/g, "");
+
+  if (entityUid && !cnpjBasico) {
+    const { data: entity } = await supabaseAdmin
+      .from("legal_entities")
+      .select("tax_id")
+      .eq("entity_uid", entityUid)
+      .maybeSingle();
+    if (entity?.tax_id) cnpjBasico = entity.tax_id.slice(0, 8);
+  }
+
+  if (!cnpjBasico) return NextResponse.json({ error: "cnpj_basico or entity_uid required" }, { status: 400 });
 
   const root = cnpjBasico.padStart(8, "0");
   const { data } = await supabaseAdmin
