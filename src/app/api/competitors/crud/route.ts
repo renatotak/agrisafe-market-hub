@@ -6,11 +6,11 @@ import { ensureLegalEntityUid } from "@/lib/entities";
  * Phase 21 — Competitors CRUD route.
  *
  * POST   { id?, name, vertical?, segment?, country?, website?, description_pt?,
- *          description_en?, cnpj_basico?, notes?, harvey_ball_scores? }
+ *          description_en?, tax_id?, notes?, harvey_ball_scores? }
  * PATCH  { id, ...partial }
  * DELETE { id }
  *
- * On insert/update, when `cnpj_basico` is present we resolve a stable
+ * On insert/update, when `tax_id` is present we resolve a stable
  * `entity_uid` via `ensureLegalEntityUid()` so the new competitor row joins
  * the cross-vertical 5-entity graph (Phase 17 alignment).
  *
@@ -24,7 +24,7 @@ type HarveyKey = (typeof HARVEY_DIMENSIONS)[number];
 
 const EDITABLE_FIELDS = new Set([
   "name", "vertical", "segment", "country", "website",
-  "description_pt", "description_en", "cnpj_basico", "notes",
+  "description_pt", "description_en", "tax_id", "notes",
   "score_depth", "score_precision", "score_pulse",
   "score_regulatory", "score_ux", "score_credit",
   "harvey_ball_scores",
@@ -67,16 +67,14 @@ function pickUpdates(body: Record<string, unknown>): Record<string, unknown> {
     } else if (key === "harvey_ball_scores") {
       const hb = normalizeHarvey(value);
       out[key] = hb;
-      // Mirror Harvey Ball into score_* columns so the existing matrix
-      // view and the sync-competitors cron stay coherent.
       out.score_depth = hb.depth;
       out.score_precision = hb.precision;
       out.score_pulse = hb.pulse;
       out.score_regulatory = hb.regulatory;
       out.score_ux = hb.ux;
-    } else if (key === "cnpj_basico" && typeof value === "string") {
-      const digits = value.replace(/\D/g, "").slice(0, 8);
-      out[key] = digits.length === 8 ? digits : null;
+    } else if (key === "tax_id" && typeof value === "string") {
+      // NOTE: We don't persist tax_id directly into competitors table anymore
+      // We handle entity_uid resolution downstream using this extracted value
     } else {
       out[key] = value === "" ? null : value;
     }
@@ -114,9 +112,9 @@ export async function POST(req: NextRequest) {
 
   // Resolve entity_uid via the canonical helper
   let entityUid: string | null = null;
-  const cnpjBasico = updates.cnpj_basico as string | null | undefined;
-  if (cnpjBasico) {
-    entityUid = await ensureLegalEntityUid(supabase, cnpjBasico, {
+  const inTaxId = body.tax_id as string | null | undefined;
+  if (inTaxId) {
+    entityUid = await ensureLegalEntityUid(supabase, inTaxId, {
       legalName: name,
       displayName: name,
     });
@@ -202,8 +200,10 @@ export async function PATCH(req: NextRequest) {
     updates.notes_updated_at = new Date().toISOString();
   }
 
-  // If cnpj_basico changed, refresh entity_uid
-  if ("cnpj_basico" in updates && updates.cnpj_basico) {
+  // If tax_id was supplied, refresh entity_uid (tax_id is not persisted
+  // in competitors — it's only used to resolve entity_uid via legal_entities)
+  const patchTaxId = typeof body.tax_id === "string" ? body.tax_id.replace(/\D/g, "").slice(0, 14) : null;
+  if (patchTaxId) {
     const { data: row } = await supabase
       .from("competitors")
       .select("name")
@@ -211,7 +211,7 @@ export async function PATCH(req: NextRequest) {
       .maybeSingle();
     const entityUid = await ensureLegalEntityUid(
       supabase,
-      updates.cnpj_basico as string,
+      patchTaxId,
       { legalName: row?.name ?? null, displayName: row?.name ?? null },
     );
     if (entityUid) {

@@ -24,12 +24,20 @@ export async function GET(req: NextRequest) {
   if (!cnpjBasico) return NextResponse.json({ error: "cnpj_basico or entity_uid required" }, { status: 400 });
 
   const root = cnpjBasico.padStart(8, "0");
-  const { data } = await supabaseAdmin
-    .from("company_research")
-    .select("*")
-    .eq("cnpj_basico", root)
-    .order("searched_at", { ascending: false })
-    .limit(5);
+
+  // Resolve entity_uid if only cnpj_basico was given
+  const resolvedUid = entityUid || await ensureLegalEntityUid(supabaseAdmin, root);
+
+  let data: any[] | null = null;
+  if (resolvedUid) {
+    const { data: d } = await supabaseAdmin
+      .from("company_research")
+      .select("*")
+      .eq("entity_uid", resolvedUid)
+      .order("searched_at", { ascending: false })
+      .limit(5);
+    data = d;
+  }
 
   return NextResponse.json({ cnpj_basico: root, research: data || [] });
 }
@@ -228,7 +236,6 @@ export async function POST(req: NextRequest) {
   });
 
   const row = {
-    cnpj_basico: root,
     entity_uid: entityUid,
     razao_social: razaoSocial,
     search_query: searchQuery,

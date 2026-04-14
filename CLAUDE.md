@@ -36,6 +36,8 @@ LLM tools (Gemini, OpenAI, Claude) are **last resort**, not the default.
 
 When you're tempted to add an LLM call, first ask: "Could a Python script or a regex do this?" If yes, do that.
 
+**LLM provider: Vertex AI only.** All LLM calls go through Google **Vertex AI** via `src/lib/gemini.ts`. **Do NOT use the Gemini API free tier** — it allows Google to use prompts and outputs to train their models. AgriSafe prompts contain commercial data (retailer intelligence, CNPJ data, CRM content) that must not be used for model training. Vertex AI has explicit data governance guarantees. See the "AI / LLM Provider" section below for setup.
+
 ### 2. The 5-entity data model — everything links back to these nodes
 
 Every record stored in this database must be linkable, via foreign key or stable identifier, to one or more of these five nodes. **Building a feature without thinking about which of these it ties to is a bug.**
@@ -259,7 +261,7 @@ Every cron route is also a `src/jobs/X.ts` module callable from BOTH the Next.js
 | `src/app/api/rj-add/` | **Phase 24C** manual RJ insert by CNPJ + BrasilAPI + DDG debt scrape |
 | `src/app/api/crm/` | **Phase 24G** — `/key-persons`, `/meetings`, `/leads` CRUD endpoints. All POST/PATCH/DELETE log to `activity_log`. |
 | `src/app/api/activity/` | **Phase 24G2** — read endpoint for the activity log feed |
-| `src/db/migrations/` | **51 SQL migrations.** 035=`cnpj_establishments`, 036=`analysis_lenses`, 037=Phase 24D scrapers, 038=World Bank, 039=CNJ, 040=tier-aware knowledge search, 041=CRM tables, 042=`affected_cnaes` + GIN, 043=`activity_log`, **044=`v_norms_affecting_entity`**, **045=`data_sources` table**, **046=4 macro scrapers in scraper_registry (Phase 26)**, **047=`executive_briefings` (Phase 27)**, **048=`v_commodity_price_stats` + `price_ruptures` (Phase 28)**, **049=AGROFIT UNIQUE + `industry_id`**, **050=`titular_registro` + `manufacturer_entity_uid` + Oracle view rebuild**, **051=`cron_freshness` (smart orchestrator)** |
+| `src/db/migrations/` | **53 SQL migrations.** 035=`cnpj_establishments`, 036=`analysis_lenses`, 037=Phase 24D scrapers, 038=World Bank, 039=CNJ, 040=tier-aware knowledge search, 041=CRM tables, 042=`affected_cnaes` + GIN, 043=`activity_log`, **044=`v_norms_affecting_entity`**, **045=`data_sources` table**, **046=4 macro scrapers in scraper_registry (Phase 26)**, **047=`executive_briefings` (Phase 27)**, **048=`v_commodity_price_stats` + `price_ruptures` (Phase 28)**, **049=AGROFIT UNIQUE + `industry_id`**, **050=`titular_registro` + `manufacturer_entity_uid` + Oracle view rebuild**, **051=`cron_freshness` (smart orchestrator)**, **052=entity_uid UNIQUE constraints**, **053=drop legacy `cnpj_basico`/`cnpj_raiz` from 4 tables** |
 | **`launchd/`** | **Phase 25→26** Mac launchd cron infrastructure. `jobs.json` (source of truth for schedules), `generate-plists.js` (jobs.json → plists/), `install.sh` (idempotent installer with `--reload`/`--uninstall`/`--dry-run`), `README.md` (full ops manual: Quickstart, sleep prevention, Tailscale, troubleshooting), `plists/` (25 generated `.plist` files with REPLACE_ME placeholders) |
 | `src/scripts/apply-migration.js` | **Phase 24B** — applies a single migration via `DATABASE_URL` Postgres pooler |
 | `src/scripts/seed-data-sources.js` | **Phase 25** — one-shot upsert from `source-registry.json` → `data_sources` table |
@@ -309,6 +311,29 @@ The Knowledge Base (RAG / chat) must respect this tier when answering — never 
 6. **Sample check** — `npm run cron sync-{source}` from the repo root to test locally before installing the launchd job
 7. **Persona validation** — Test through CEO / Head Inteligência / Marketing / Crédito lenses
 
+## AI / LLM Provider
+
+> **IMPORTANT — data privacy rule for the entire team.**
+
+All LLM calls (embeddings, summarization, analysis, chat) go through **Google Vertex AI**, NOT the Gemini API.
+
+| | Vertex AI (what we use) | Gemini API free tier (DO NOT USE) |
+|---|---|---|
+| Google trains on your data | **No** | **Yes** |
+| Commercial use safe | Yes | No — prompts may be used for model improvement |
+| Auth | Service account key file | API key |
+| Budget | R$1,800 GCP credits (until July 2026) | "Free" but costs privacy |
+
+**Setup for new developers:**
+1. Get the service account JSON key file from the team lead (Renato)
+2. Place it in the project root — filename must match `agrisafe-*.json`
+3. The file is auto-detected by `src/lib/gemini.ts` — no env var needed
+4. The file is gitignored (`agrisafe-*.json` in `.gitignore`) — **never commit it**
+
+**Fallback:** If no SA key file is found, the code falls back to `GEMINI_API_KEY` from `.env.local`. This key is currently disabled. Do not re-enable it for production use.
+
+**Models:** `gemini-embedding-001` (1536-dim vectors), `gemini-2.5-flash` (generation). All 12 call sites go through `src/lib/gemini.ts`.
+
 ## Environment Variables
 
 ```
@@ -319,7 +344,7 @@ NEXT_PUBLIC_GOOGLE_MAPS_API_KEY                             # Required (maps + t
 AGROAPI_CONSUMER_KEY / AGROAPI_CONSUMER_SECRET              # Required (Embrapa)
 GOOGLE_CUSTOM_SEARCH_KEY / GOOGLE_CUSTOM_SEARCH_CX          # Optional (web research, 100 free/day — currently disabled at the project level, returns 403)
 OPENAI_API_KEY                                              # Optional (archive, AI summaries, analysis lenses)
-GEMINI_API_KEY                                              # Optional (knowledge embeddings)
+GEMINI_API_KEY                                              # Optional fallback (disabled — Vertex AI preferred, see above)
 READING_ROOM_SECRET                                         # Phase 22 — Chrome extension auth
 CRON_SECRET                                                 # Optional (production cron auth gate)
 ```

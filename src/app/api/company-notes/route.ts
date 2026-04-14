@@ -20,10 +20,14 @@ export async function GET(req: NextRequest) {
   if (!cnpjBasico && !entityUid) return NextResponse.json({ error: "cnpj_basico or entity_uid required" }, { status: 400 });
 
   const root = cnpjBasico?.padStart(8, "0");
-  let query = supabaseAdmin.from("company_notes").select("field_key, value, updated_at");
-  if (entityUid) query = query.eq("entity_uid", entityUid);
-  else query = query.eq("cnpj_basico", root!);
-  const { data, error } = await query;
+  // Resolve entity_uid if only cnpj_basico was given
+  const resolvedUid = entityUid || (root ? await ensureLegalEntityUid(supabaseAdmin, root) : null);
+  if (!resolvedUid) return NextResponse.json({ error: "Could not resolve entity_uid" }, { status: 400 });
+
+  const { data, error } = await supabaseAdmin
+    .from("company_notes")
+    .select("field_key, value, updated_at")
+    .eq("entity_uid", resolvedUid);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
@@ -55,7 +59,6 @@ export async function POST(req: NextRequest) {
   const entityUid = bodyEntityUid || await ensureLegalEntityUid(supabaseAdmin, root);
 
   const rows = Object.entries(updates).map(([field_key, value]) => ({
-    cnpj_basico: root,
     entity_uid: entityUid,
     field_key,
     value: String(value),
@@ -64,7 +67,7 @@ export async function POST(req: NextRequest) {
 
   const { error } = await supabaseAdmin
     .from("company_notes")
-    .upsert(rows, { onConflict: "cnpj_basico,field_key" });
+    .upsert(rows, { onConflict: "entity_uid,field_key" });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 

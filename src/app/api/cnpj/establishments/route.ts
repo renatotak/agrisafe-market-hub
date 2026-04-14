@@ -108,9 +108,20 @@ function normalizeBrasilApi(d: any, root8: string) {
 }
 
 export async function GET(req: NextRequest) {
-  const cnpjRaizRaw = req.nextUrl.searchParams.get("cnpj_raiz")?.replace(/\D/g, "");
+  const entityUidParam = req.nextUrl.searchParams.get("entity_uid");
+  let cnpjRaizRaw = req.nextUrl.searchParams.get("cnpj_raiz")?.replace(/\D/g, "");
+
+  if (entityUidParam && !cnpjRaizRaw) {
+    const { data: entity } = await supabaseAdmin
+      .from("legal_entities")
+      .select("tax_id")
+      .eq("entity_uid", entityUidParam)
+      .maybeSingle();
+    if (entity?.tax_id) cnpjRaizRaw = entity.tax_id.slice(0, 8);
+  }
+
   if (!cnpjRaizRaw || cnpjRaizRaw.length < 7 || cnpjRaizRaw.length > 8) {
-    return NextResponse.json({ error: "cnpj_raiz required (8 digits)" }, { status: 400 });
+    return NextResponse.json({ error: "cnpj_raiz or entity_uid required" }, { status: 400 });
   }
   const root = cnpjRaizRaw.padStart(8, "0");
   const refresh = req.nextUrl.searchParams.get("refresh") === "true";

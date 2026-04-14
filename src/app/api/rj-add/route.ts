@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { logActivity } from "@/lib/activity-log";
+import { ensureLegalEntityUid } from "@/lib/entities";
 
 /**
  * /api/rj-add — manually add a Recuperação Judicial row by CNPJ (Phase 24C).
@@ -211,10 +212,17 @@ export async function POST(req: NextRequest) {
 
   const id = `manual:${cnpjRaiz}`;
 
+  // Resolve entity_uid (Phase 17 migration completion)
+  const entityUid = await ensureLegalEntityUid(supabaseAdmin, cnpjRaiz, {
+    legalName: entityName,
+    displayName: entityName,
+  });
+
   const row = {
     id,
     entity_name: entityName,
     entity_cnpj: fullCnpj,
+    entity_uid: entityUid,
     entity_type: entityType || "outros",
     court,
     case_number: caseNumber,

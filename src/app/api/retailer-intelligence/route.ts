@@ -39,22 +39,13 @@ export async function GET(request: Request) {
       entityUid = ent?.entity_uid ?? null
     }
 
-    // Fetch intelligence — prefer entity_uid lookup, fall back to cnpj_raiz
-    // for any rows that haven't been re-keyed yet.
+    // Fetch intelligence — using entity_uid lookup
     let intelligence: any = null
     if (entityUid) {
       const { data } = await supabase
         .from('retailer_intelligence')
         .select('*')
         .eq('entity_uid', entityUid)
-        .maybeSingle()
-      intelligence = data
-    }
-    if (!intelligence && cnpjRaiz) {
-      const { data } = await supabase
-        .from('retailer_intelligence')
-        .select('*')
-        .eq('cnpj_raiz', cnpjRaiz)
         .maybeSingle()
       intelligence = data
     }
@@ -66,13 +57,6 @@ export async function GET(request: Request) {
         .from('retailer_industries')
         .select('industry_id, relationship_type, source, confidence')
         .eq('retailer_entity_uid', entityUid)
-      indRels = data || []
-    }
-    if (indRels.length === 0 && cnpjRaiz) {
-      const { data } = await supabase
-        .from('retailer_industries')
-        .select('industry_id, relationship_type, source, confidence')
-        .eq('cnpj_raiz', cnpjRaiz)
       indRels = data || []
     }
 

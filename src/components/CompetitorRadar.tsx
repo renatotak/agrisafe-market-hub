@@ -44,13 +44,13 @@ interface Competitor {
   segment: string | null;
   website: string | null;
   country: string | null;
-  cnpj_basico: string | null;
   description_pt: string | null;
   description_en: string | null;
   notes: string | null;
   notes_updated_at: string | null;
   last_web_enrichment_at: string | null;
   entity_uid: string | null;
+  legal_entities: { tax_id: string } | null;
   // Legacy score columns mirrored from harvey_ball_scores
   score_depth: number | null;
   score_precision: number | null;
@@ -163,7 +163,7 @@ export function CompetitorRadar({ lang }: { lang: Lang }) {
 
     const { data } = await supabase
       .from("competitors")
-      .select(`*, competitor_signals(*)`)
+      .select(`*, legal_entities(tax_id), competitor_signals(*)`)
       .order("name");
 
     if (data && data.length > 0) {
@@ -562,7 +562,7 @@ interface ModalFormState {
   vertical: string;
   country: string;
   website: string;
-  cnpj_basico: string;
+  tax_id: string;
   description_pt: string;
   description_en: string;
   notes: string;
@@ -575,7 +575,7 @@ function emptyForm(): ModalFormState {
     vertical: "",
     country: "",
     website: "",
-    cnpj_basico: "",
+    tax_id: "",
     description_pt: "",
     description_en: "",
     notes: "",
@@ -590,7 +590,7 @@ function fromCompetitor(c: Competitor): ModalFormState {
     vertical: c.vertical || c.segment || "",
     country: c.country || "",
     website: c.website || "",
-    cnpj_basico: c.cnpj_basico || "",
+    tax_id: c.legal_entities?.tax_id || "",
     description_pt: c.description_pt || "",
     description_en: c.description_en || "",
     notes: c.notes || "",
@@ -633,7 +633,7 @@ function CompetitorModal({ lang, competitor, onClose, onSaved }: {
       vertical: form.vertical.trim() || null,
       country: form.country.trim() || null,
       website: form.website.trim() || null,
-      cnpj_basico: form.cnpj_basico.replace(/\D/g, "").slice(0, 8) || null,
+      tax_id: form.tax_id.replace(/\D/g, "").slice(0, 14) || null,
       description_pt: form.description_pt.trim() || null,
       description_en: form.description_en.trim() || null,
       notes: form.notes.trim() || null,
@@ -768,9 +768,9 @@ function CompetitorModal({ lang, competitor, onClose, onSaved }: {
                 </label>
                 <input
                   type="text"
-                  value={form.cnpj_basico}
-                  onChange={(e) => update("cnpj_basico", e.target.value.replace(/\D/g, "").slice(0, 8))}
-                  placeholder="00000000"
+                  value={form.tax_id}
+                  onChange={(e) => update("tax_id", e.target.value.replace(/\D/g, "").slice(0, 14))}
+                  placeholder="00000000000000"
                   className="w-full px-3 py-2 text-sm font-mono border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary"
                 />
                 <p className="text-[10px] text-neutral-400 mt-1">

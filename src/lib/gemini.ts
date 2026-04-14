@@ -1,13 +1,77 @@
 import { GoogleGenAI } from '@google/genai'
+import { existsSync, readFileSync, readdirSync } from 'fs'
+import { resolve } from 'path'
 
 const EMBEDDING_MODEL = 'gemini-embedding-001'
 const EMBEDDING_DIMENSIONS = 1536 // matches existing pgvector columns
-const SUMMARY_MODEL = 'gemini-2.5-flash'
+const DEFAULT_SUMMARY_MODEL = 'gemini-2.5-flash'
+
+// Cached model preference — refreshed every 5 min
+let _cachedModel: string | null = null
+let _cachedModelAt = 0
+const MODEL_CACHE_MS = 5 * 60_000
+
+async function getSummaryModel(): Promise<string> {
+  if (_cachedModel && Date.now() - _cachedModelAt < MODEL_CACHE_MS) return _cachedModel
+  try {
+    const { createAdminClient } = await import('@/utils/supabase/admin')
+    const supabase = createAdminClient()
+    const { data } = await supabase
+      .from('analysis_lenses')
+      .select('model')
+      .eq('id', '__ai_model')
+      .maybeSingle()
+    _cachedModel = data?.model || DEFAULT_SUMMARY_MODEL
+  } catch {
+    _cachedModel = DEFAULT_SUMMARY_MODEL
+  }
+  _cachedModelAt = Date.now()
+  return _cachedModel!
+}
 
 let _client: GoogleGenAI | null = null
 
+/**
+ * Find a GCP service account key file in the project root.
+ * Matches pattern: agrisafe-*.json
+ */
+function findSaKeyFile(): { credentials: any; project: string } | null {
+  try {
+    const root = resolve(process.cwd())
+    const files = readdirSync(root).filter(f => f.startsWith('agrisafe-') && f.endsWith('.json'))
+    if (files.length === 0) return null
+    const raw = readFileSync(resolve(root, files[0]), 'utf-8')
+    const creds = JSON.parse(raw)
+    if (creds.type === 'service_account' && creds.project_id) {
+      return { credentials: creds, project: creds.project_id }
+    }
+  } catch { /* file not found or malformed */ }
+  return null
+}
+
+/**
+ * Initialize the Gemini client.
+ *
+ * Two modes (Vertex AI tried first):
+ *   1. **Vertex AI** — auto-detected from agrisafe-*.json SA key file in project root
+ *   2. **Gemini API** — fallback via GEMINI_API_KEY env var
+ */
 function getClient(): GoogleGenAI | null {
   if (_client) return _client
+
+  // Try Vertex AI via SA key file
+  const sa = findSaKeyFile()
+  if (sa) {
+    _client = new GoogleGenAI({
+      vertexai: true,
+      project: sa.project,
+      location: 'us-east4',
+      googleAuthOptions: { credentials: sa.credentials },
+    } as any)
+    return _client
+  }
+
+  // Gemini API fallback
   const key = process.env.GEMINI_API_KEY
   if (!key || key.includes('your_')) return null
   _client = new GoogleGenAI({ apiKey: key })
@@ -17,6 +81,12 @@ function getClient(): GoogleGenAI | null {
 export function isGeminiConfigured(): boolean {
   return getClient() !== null
 }
+
+export function isVertexAI(): boolean {
+  return findSaKeyFile() !== null
+}
+
+export { getSummaryModel }
 
 export async function generateEmbedding(text: string): Promise<number[]> {
   const ai = getClient()
@@ -52,8 +122,9 @@ export async function summarizeText(
   const ai = getClient()
   if (!ai) throw new Error('GEMINI_API_KEY not configured')
 
+  const model = await getSummaryModel()
   const response = await ai.models.generateContent({
-    model: SUMMARY_MODEL,
+    model,
     config: {
       temperature: 0.3,
       maxOutputTokens: maxTokens,

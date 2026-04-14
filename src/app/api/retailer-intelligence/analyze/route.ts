@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { isGeminiConfigured, analyzeRetailer, generateEmbedding } from '@/lib/gemini'
+import { ensureLegalEntityUid } from '@/lib/entities'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,26 +25,28 @@ export async function POST(request: Request) {
   try {
     const supabase = createAdminClient()
 
-    // Load retailer — prefer entity_uid lookup
-    let retQuery = supabase
-      .from('retailers')
-      .select('cnpj_raiz, entity_uid, razao_social, nome_fantasia, consolidacao, grupo_acesso, classificacao, faixa_faturamento, capital_social, porte_name')
-    if (entity_uid) retQuery = retQuery.eq('entity_uid', entity_uid)
-    else retQuery = retQuery.eq('cnpj_raiz', cnpj_raiz)
+    // Load retailer by entity_uid (resolve from cnpj_raiz if needed)
+    let resolvedEntityUid = entity_uid
+    if (!resolvedEntityUid && cnpj_raiz) {
+      resolvedEntityUid = await ensureLegalEntityUid(supabase, cnpj_raiz)
+    }
+    if (!resolvedEntityUid) {
+      return NextResponse.json({ error: 'Could not resolve entity_uid' }, { status: 400 })
+    }
 
-    const { data: retailer, error: retError } = await retQuery.maybeSingle()
+    const { data: retailer, error: retError } = await supabase
+      .from('retailers')
+      .select('entity_uid, razao_social, nome_fantasia, consolidacao, grupo_acesso, classificacao, faixa_faturamento, capital_social, porte_name')
+      .eq('entity_uid', resolvedEntityUid)
+      .maybeSingle()
 
     if (retError || !retailer) {
       return NextResponse.json({ error: 'Retailer not found' }, { status: 404 })
     }
 
-    // Resolve both keys for downstream queries
-    const resolvedCnpjRaiz = retailer.cnpj_raiz
-    const resolvedEntityUid = retailer.entity_uid
-
     const name = retailer.nome_fantasia || retailer.consolidacao || retailer.razao_social
 
-    // Gather context
+    // Gather context — all queries use entity_uid
     const [
       { data: newsMatches },
       { data: eventMatches },
@@ -61,21 +64,10 @@ export async function POST(request: Request) {
         .select('id, name, date, location')
         .or(`name.ilike.%${name}%,description_pt.ilike.%${name}%`)
         .limit(5),
-      supabase.from('retailer_locations')
-        .select('id', { count: 'exact', head: true })
-        .eq('cnpj_raiz', resolvedCnpjRaiz),
-      supabase.from('retailer_intelligence')
-        .select('branch_count_current')
-        .eq('cnpj_raiz', cnpj_raiz)
-        .maybeSingle(),
-      supabase.from('retailer_industries')
-        .select('industry_id')
-        .eq('cnpj_raiz', resolvedCnpjRaiz),
-      supabase.from('company_research')
-        .select('findings, summary')
-        .eq('cnpj_basico', resolvedCnpjRaiz)
-        .order('searched_at', { ascending: false })
-        .limit(1),
+      supabase.from('retailer_locations').select('id', { count: 'exact', head: true }).eq('entity_uid', resolvedEntityUid),
+      supabase.from('retailer_intelligence').select('branch_count_current').eq('entity_uid', resolvedEntityUid).maybeSingle(),
+      supabase.from('retailer_industries').select('industry_id').eq('retailer_entity_uid', resolvedEntityUid),
+      supabase.from('company_research').select('findings, summary').eq('entity_uid', resolvedEntityUid).order('searched_at', { ascending: false }).limit(1),
     ])
 
     const prevBranches = prevIntel?.branch_count_current || 0
@@ -125,7 +117,7 @@ export async function POST(request: Request) {
       const { data: allLocs } = await supabase
         .from('retailer_locations')
         .select('cnpj, municipio, uf')
-        .eq('cnpj_raiz', cnpj_raiz)
+        .eq('entity_uid', resolvedEntityUid)
         .order('id', { ascending: false })
         .limit(branchDelta)
       newBranches = (allLocs || []).map(l => ({
@@ -138,7 +130,6 @@ export async function POST(request: Request) {
 
     // Upsert intelligence
     const record = {
-      cnpj_raiz: resolvedCnpjRaiz,
       entity_uid: resolvedEntityUid,
       executive_summary: analysis.executive_summary,
       market_position: analysis.market_position,
@@ -167,13 +158,12 @@ export async function POST(request: Request) {
 
     const { error: upsertError } = await supabase
       .from('retailer_intelligence')
-      .upsert(record, { onConflict: 'cnpj_raiz' })
+      .upsert(record, { onConflict: 'entity_uid' })
 
     if (upsertError) throw upsertError
 
     return NextResponse.json({
       success: true,
-      cnpj_raiz: resolvedCnpjRaiz,
       entity_uid: resolvedEntityUid,
       intelligence: record,
     })

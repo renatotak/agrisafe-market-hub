@@ -55,6 +55,9 @@ agsf_mkthub-main/
 # local-only debris dump (cleanup-YYYY-MM-DD/ batches go here)
 tmp/
 
+# GCP service account keys (NEVER commit)
+agrisafe-*.json
+
 # user-saved local files (CSVs, PDFs, JSON exports — uploaded to Supabase as
 # needed, not committed because they may contain sensitive data and are large)
 local files/

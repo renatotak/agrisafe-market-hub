@@ -626,25 +626,28 @@ function IndustryExpandedPanel({
   // Auto-load cached enrichment + research when row expands
   useEffect(() => {
     if (!hasCnpj || !cnpjRaiz) return;
-    fetch(`/api/company-enrichment?cnpj_raiz=${cnpjRaiz}&cache_only=true`)
+    const enrichParam = ind.kind === "imported" ? `entity_uid=${ind.id}` : `cnpj_raiz=${cnpjRaiz}`;
+    fetch(`/api/company-enrichment?${enrichParam}&cache_only=true`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (d && d.source !== "none") setEnrichment(d);
       });
-    fetch(`/api/company-research?cnpj_basico=${cnpjRaiz}`)
+    const resParam = ind.kind === "imported" ? `entity_uid=${ind.id}` : `cnpj_basico=${cnpjRaiz}`;
+    fetch(`/api/company-research?${resParam}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (d?.research) setResearch(d.research);
       });
     // Don't auto-fetch establishments — let the user click (rate-limit cost)
-  }, [hasCnpj, cnpjRaiz]);
+  }, [hasCnpj, cnpjRaiz, ind.id, ind.kind]);
 
   const fetchEnrichment = async () => {
     if (!cnpjRaiz) return;
     setEnrichLoading(true);
     setEnrichError(null);
     try {
-      const res = await fetch(`/api/company-enrichment?cnpj_raiz=${cnpjRaiz}`);
+      const param = ind.kind === "imported" ? `entity_uid=${ind.id}` : `cnpj_raiz=${cnpjRaiz}`;
+      const res = await fetch(`/api/company-enrichment?${param}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Erro ao consultar");
       setEnrichment(data);
@@ -666,6 +669,7 @@ function IndustryExpandedPanel({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           cnpj_basico: cnpjRaiz,
+          entity_uid: ind.kind === "imported" ? ind.id : undefined,
           razao_social: ind.name_display || ind.name,
           nome_fantasia: ind.name_display || ind.name,
           analysis_type: "industry",
@@ -687,7 +691,8 @@ function IndustryExpandedPanel({
     setEstLoading(true);
     setEstError(null);
     try {
-      const res = await fetch(`/api/cnpj/establishments?cnpj_raiz=${cnpjRaiz}`);
+      const param = ind.kind === "imported" ? `entity_uid=${ind.id}` : `cnpj_raiz=${cnpjRaiz}`;
+      const res = await fetch(`/api/cnpj/establishments?${param}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Erro ao buscar filiais");
       setEstablishments(data.establishments || []);
@@ -697,7 +702,7 @@ function IndustryExpandedPanel({
     } finally {
       setEstLoading(false);
     }
-  }, [cnpjRaiz]);
+  }, [cnpjRaiz, ind.id, ind.kind]);
 
   return (
     <div className="space-y-4">

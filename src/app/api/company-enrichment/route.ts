@@ -174,12 +174,17 @@ export async function GET(req: NextRequest) {
   const root = cnpjRaiz.padStart(8, "0");
   const cacheOnly = req.nextUrl.searchParams.get("cache_only") === "true";
 
-  // Check cache
-  const { data: cached } = await supabaseAdmin
-    .from("company_enrichment")
-    .select("*")
-    .eq("cnpj_basico", root)
-    .single();
+  // Check cache by entity_uid
+  const resolvedEntityUid = entityUidParam || (await ensureLegalEntityUid(supabaseAdmin, root))
+  let cached: any = null;
+  if (resolvedEntityUid) {
+    const { data } = await supabaseAdmin
+      .from("company_enrichment")
+      .select("*")
+      .eq("entity_uid", resolvedEntityUid)
+      .maybeSingle();
+    cached = data;
+  }
 
   if (cached) {
     const fetchedAt = new Date(cached.fetched_at);
@@ -217,9 +222,6 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  // Resolve / create the legal_entities row so the enrichment row carries
-  // entity_uid (Phase 17 — 5-entity model). Non-fatal if it returns null;
-  // the legacy cnpj_basico key still works.
   const entityUid = await ensureLegalEntityUid(supabaseAdmin, root, {
     legalName: result.razao_social,
     displayName: result.razao_social,
@@ -227,7 +229,6 @@ export async function GET(req: NextRequest) {
 
   // Upsert cache
   const row = {
-    cnpj_basico: root,
     entity_uid: entityUid,
     razao_social: result.razao_social,
     natureza_juridica: result.natureza_juridica,
@@ -250,14 +251,13 @@ export async function GET(req: NextRequest) {
 
   await supabaseAdmin
     .from("company_enrichment")
-    .upsert(row, { onConflict: "cnpj_basico" });
+    .upsert(row, { onConflict: "entity_uid" });
 
   return NextResponse.json({ source: result.source, ...formatResponse(row) });
 }
 
 function formatResponse(row: any) {
   return {
-    cnpj_basico: row.cnpj_basico,
     razao_social: row.razao_social,
     natureza_juridica: row.natureza_juridica,
     capital_social: row.capital_social,

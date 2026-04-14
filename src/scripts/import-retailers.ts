@@ -10,6 +10,7 @@ import XLSX from 'xlsx';
 import { createClient } from '@supabase/supabase-js';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
+import { ensureLegalEntityUid } from '../lib/entities';
 
 // Load env from .env.local
 const envPath = resolve(__dirname, '../../.env.local');
@@ -39,7 +40,7 @@ async function batchInsert(table: string, rows: Record<string, unknown>[]) {
   let inserted = 0;
   for (let i = 0; i < rows.length; i += BATCH_SIZE) {
     const batch = rows.slice(i, i + BATCH_SIZE);
-    const { error } = await supabase.from(table).upsert(batch, { onConflict: table === 'retailers' ? 'cnpj_raiz' : 'cnpj' });
+    const { error } = await supabase.from(table).upsert(batch, { onConflict: table === 'retailers' ? 'entity_uid' : 'cnpj' });
     if (error) {
       console.error(`  Error at batch ${i}-${i + batch.length}:`, error.message);
     } else {
@@ -73,10 +74,10 @@ async function main() {
   const empresasSheet = workbook.Sheets['main_empresas'];
   const empresasRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(empresasSheet);
 
-  const retailers = empresasRows
+  const rawRetailers = empresasRows
     .filter((row) => row['manter'] === 'x')
     .map((row) => ({
-      cnpj_raiz: String(row['cnpj_raiz'] ?? ''),
+      _cnpj_raiz: String(row['cnpj_raiz'] ?? ''),
       consolidacao: row['CONSOLIDAÇÃO'] ? String(row['CONSOLIDAÇÃO']) : null,
       razao_social: String(row['RAZAO_SOCIAL'] ?? row['razao_social_dez25'] ?? ''),
       nome_fantasia: row['NOME FANTASIA PADRONIZADO'] ? String(row['NOME FANTASIA PADRONIZADO']) : null,
@@ -92,9 +93,18 @@ async function main() {
       porte: row['porte'] ? String(row['porte']) : null,
       porte_name: row['porte_name'] ? String(row['porte_name']) : null,
     }))
-    .filter((r) => r.cnpj_raiz.length > 0);
+    .filter((r) => r._cnpj_raiz.length > 0);
 
-  console.log(`  Found ${retailers.length} retailers (manter=x)`);
+  console.log(`  Found ${rawRetailers.length} retailers (manter=x) resolving entity_uids...`);
+  const retailers = [];
+  for (const r of rawRetailers) {
+    const entity_uid = await ensureLegalEntityUid(supabase, r._cnpj_raiz, { 
+      legalName: r.razao_social, displayName: r.nome_fantasia || r.razao_social 
+    });
+    const { _cnpj_raiz, ...cleanRow } = r;
+    retailers.push({ ...cleanRow, entity_uid });
+  }
+
   await batchInsert('retailers', retailers);
 
   // --- Import clean → retailer_locations ---
@@ -102,11 +112,11 @@ async function main() {
   const cleanSheet = workbook.Sheets['clean'];
   const cleanRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(cleanSheet);
 
-  const locations = cleanRows
+  const rawLocations = cleanRows
     .filter((row) => row['visible'] === 'x')
     .map((row) => ({
       cnpj: row['cnpj'] ? String(row['cnpj']) : null,
-      cnpj_raiz: String(row['cnpj_basico'] ?? ''),
+      _cnpj_raiz: String(row['cnpj_basico'] ?? ''),
       razao_social: row['razao social'] ? String(row['razao social']) : null,
       nome_fantasia: row['nome_fantasia'] ? String(row['nome_fantasia']) : null,
       logradouro: [row['tipo_logradouro'], row['logradouro']].filter(Boolean).join(' ') || null,
@@ -119,9 +129,18 @@ async function main() {
       latitude: parseLatLong(row['latitude']),
       longitude: parseLatLong(row['longitude']),
     }))
-    .filter((l) => l.cnpj_raiz.length > 0);
+    .filter((l) => l._cnpj_raiz.length > 0);
 
-  console.log(`  Found ${locations.length} locations (visible=x)`);
+  console.log(`  Found ${rawLocations.length} locations (visible=x) resolving entity_uids...`);
+  const locations = [];
+  for (const l of rawLocations) {
+    const entity_uid = await ensureLegalEntityUid(supabase, l._cnpj_raiz, {
+      legalName: l.razao_social || 'Unknown', displayName: l.nome_fantasia || l.razao_social || undefined
+    });
+    const { _cnpj_raiz, ...cleanRow } = l;
+    locations.push({ ...cleanRow, entity_uid });
+  }
+
   await batchInsert('retailer_locations', locations);
 
   console.log('\nDone!');

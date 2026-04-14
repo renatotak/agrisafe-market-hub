@@ -36,40 +36,50 @@ export async function GET(request: Request) {
       // Retailer links
       const { data: retailerLinks } = await supabase
         .from('retailer_industries')
-        .select('cnpj_raiz, relationship_type')
+        .select('retailer_entity_uid, relationship_type')
         .eq('industry_id', id)
         .limit(100)
 
       // Resolve retailer details
-      const cnpjs = (retailerLinks || []).map((r: any) => r.cnpj_raiz)
+      const uids = (retailerLinks || []).map((r: any) => r.retailer_entity_uid).filter(Boolean)
       let retailerDetails: Record<string, any> = {}
-      if (cnpjs.length > 0) {
+      if (uids.length > 0) {
         const { data: retData } = await supabase
           .from('retailers')
-          .select('cnpj_raiz, razao_social, nome_fantasia, consolidacao, grupo_acesso, classificacao')
-          .in('cnpj_raiz', cnpjs)
+          .select('entity_uid, razao_social, nome_fantasia, consolidacao, grupo_acesso, classificacao')
+          .in('entity_uid', uids)
         for (const ret of retData || []) {
-          retailerDetails[ret.cnpj_raiz] = ret
+          retailerDetails[ret.entity_uid] = ret
         }
       }
+      
       let ufCoverage: string[] = []
-      if (cnpjs.length > 0) {
-        const { data: locs } = await supabase
-          .from('retailer_locations')
-          .select('uf')
-          .in('cnpj_raiz', cnpjs.slice(0, 200))
-          .not('uf', 'is', null)
+      if (uids.length > 0) {
+        // Map uids to tax_ids to lookup in retailer_locations (which still uses cnpj_raiz)
+        const { data: entities } = await supabase
+          .from('legal_entities')
+          .select('tax_id')
+          .in('entity_uid', uids.slice(0, 200))
+        
+        const taxIds = (entities || []).map(e => e.tax_id).filter(Boolean)
+        if (taxIds.length > 0) {
+          const { data: locs } = await supabase
+            .from('retailer_locations')
+            .select('uf')
+            .in('cnpj_raiz', taxIds)
+            .not('uf', 'is', null)
 
-        ufCoverage = [...new Set((locs || []).map(l => l.uf).filter(Boolean))]
+          ufCoverage = [...new Set((locs || []).map(l => l.uf).filter(Boolean))]
+        }
       }
 
       return NextResponse.json({
         industry,
         products: products || [],
         retailers: (retailerLinks || []).map((r: any) => ({
-          cnpj_raiz: r.cnpj_raiz,
+          entity_uid: r.retailer_entity_uid,
           relationship_type: r.relationship_type,
-          ...(retailerDetails[r.cnpj_raiz] || {}),
+          ...(retailerDetails[r.retailer_entity_uid] || {}),
         })),
         stats: {
           product_count: products?.length || 0,

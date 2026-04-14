@@ -16,12 +16,11 @@ const EDITABLE_FIELDS = new Set([
 
 export async function PATCH(req: NextRequest) {
   const body = await req.json();
-  const cnpjRaiz = body.cnpj_raiz?.replace(/\D/g, "");
   const entityUid = body.entity_uid;
   const updates = body.updates as Record<string, string | null>;
 
-  if ((!cnpjRaiz && !entityUid) || !updates || typeof updates !== "object") {
-    return NextResponse.json({ error: "cnpj_raiz or entity_uid + updates required" }, { status: 400 });
+  if (!entityUid || !updates || typeof updates !== "object") {
+    return NextResponse.json({ error: "entity_uid + updates required" }, { status: 400 });
   }
 
   // Filter to only allowed editable fields
@@ -36,10 +35,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "No editable fields provided" }, { status: 400 });
   }
 
-  let query = supabaseAdmin.from("retailers").update(safeUpdates);
-  if (entityUid) query = query.eq("entity_uid", entityUid);
-  else query = query.eq("cnpj_raiz", cnpjRaiz);
-  const { error } = await query;
+  const { error } = await supabaseAdmin.from("retailers").update(safeUpdates).eq("entity_uid", entityUid);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
@@ -47,10 +43,10 @@ export async function PATCH(req: NextRequest) {
   await logActivity(supabaseAdmin, {
     action: "update",
     target_table: "retailers",
-    target_id: cnpjRaiz,
+    target_id: entityUid,
     source: "manual:retailer_edit",
     source_kind: "manual",
-    summary: `Revenda ${cnpjRaiz}: campos atualizados — ${Object.keys(safeUpdates).join(", ")}`,
+    summary: `Revenda ${entityUid}: campos atualizados — ${Object.keys(safeUpdates).join(", ")}`,
     metadata: { fields: Object.keys(safeUpdates), values: safeUpdates },
     confidentiality: "agrisafe_confidential",
   });

@@ -420,6 +420,15 @@ export const translations = {
       extUsage3: "O artigo aparece em Notícias Agro com badge 'Reading Room'.",
       extOpenFolder: "Abrir pasta da extensão",
       extReadDocs: "Ler README completo",
+      // AI Model selector (Settings)
+      aiModelTitle: "Modelo de IA (Geração)",
+      aiModelSubtitle: "Modelo usado para resumos, análises, briefing diário e chat. Embeddings usam sempre gemini-embedding-001.",
+      aiModelProvider: "Provedor",
+      aiModelVertexAi: "Vertex AI (dados protegidos)",
+      aiModelGeminiApi: "Gemini API (fallback)",
+      aiModelCurrent: "Modelo ativo",
+      aiModelSaved: "Salvo!",
+      aiModelError: "Erro ao salvar",
     },
   },
   en: {
@@ -841,6 +850,15 @@ export const translations = {
       extUsage3: "The article shows up in Agro News with the 'Reading Room' badge.",
       extOpenFolder: "Open extension folder",
       extReadDocs: "Read full README",
+      // AI Model selector (Settings)
+      aiModelTitle: "AI Model (Generation)",
+      aiModelSubtitle: "Model used for summaries, analysis, daily briefing and chat. Embeddings always use gemini-embedding-001.",
+      aiModelProvider: "Provider",
+      aiModelVertexAi: "Vertex AI (data protected)",
+      aiModelGeminiApi: "Gemini API (fallback)",
+      aiModelCurrent: "Active model",
+      aiModelSaved: "Saved!",
+      aiModelError: "Error saving",
     },
   },
 } as const;

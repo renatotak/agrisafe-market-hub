@@ -1,15 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Lang, t } from "@/lib/i18n";
 import {
   Download, BarChart3, TestTube, Radar, Newspaper, Calendar, Store,
   PenTool, BookOpen, Scale, Database, Brain, LayoutDashboard,
   Shield, Server, Workflow, ArrowRight, Puzzle, Copy, Check, FileText,
-  Folder, Settings as SettingsIcon, Play,
+  Folder, Settings as SettingsIcon, Play, Cpu, Loader2,
 } from "lucide-react";
 import { AnalysisLensesEditor } from "@/components/AnalysisLensesEditor";
 import { ActivityLogPanel } from "@/components/ActivityLogPanel";
+import { OneNoteImportWizard } from "@/components/OneNoteImportWizard";
 
 const EXTENSION_FOLDER_PATH = "chrome-extensions/reading-room";
 const CHROME_EXTENSIONS_URL = "chrome://extensions";
@@ -63,6 +64,117 @@ function CopyableCode({ text, label }: { text: string; label?: string }) {
     </div>
   );
 }
+
+// ─── AI Model Selector ────────────────────────────────────────────────
+
+function AiModelSelector({ lang }: { lang: Lang }) {
+  const tr = t(lang).settings;
+  const [current, setCurrent] = useState<string>("");
+  const [available, setAvailable] = useState<{ id: string; label: string; description: string }[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [flash, setFlash] = useState<"saved" | "error" | null>(null);
+  const [provider, setProvider] = useState<"vertexai" | "gemini_api" | "none">("none");
+
+  useEffect(() => {
+    fetch("/api/settings/ai-model")
+      .then((r) => r.json())
+      .then((d) => {
+        setCurrent(d.current);
+        setAvailable(d.available || []);
+        setProvider(d.provider || "none");
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleChange = async (model: string) => {
+    setSaving(true);
+    setFlash(null);
+    try {
+      const res = await fetch("/api/settings/ai-model", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model }),
+      });
+      if (res.ok) {
+        setCurrent(model);
+        setFlash("saved");
+      } else {
+        setFlash("error");
+      }
+    } catch {
+      setFlash("error");
+    }
+    setSaving(false);
+    setTimeout(() => setFlash(null), 2000);
+  };
+
+  return (
+    <div className="bg-white rounded-lg border border-neutral-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-6">
+      <div className="flex items-center gap-2.5 mb-1">
+        <div className="w-9 h-9 rounded-md bg-brand-primary/10 flex items-center justify-center">
+          <Cpu size={18} className="text-brand-primary" />
+        </div>
+        <div>
+          <h3 className="text-[17px] font-bold text-neutral-900">{tr.aiModelTitle}</h3>
+          <p className="text-[12px] text-neutral-500 mt-0.5">{tr.aiModelSubtitle}</p>
+        </div>
+      </div>
+
+      {/* Provider badge */}
+      <div className="flex items-center gap-2 mt-4 mb-5">
+        <span className="text-[11px] font-bold text-neutral-500 uppercase tracking-wider">{tr.aiModelProvider}:</span>
+        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold ${
+          provider === "vertexai"
+            ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+            : "bg-amber-50 text-amber-700 border border-amber-200"
+        }`}>
+          <span className={`w-1.5 h-1.5 rounded-full ${provider === "vertexai" ? "bg-emerald-500" : "bg-amber-500"}`} />
+          {provider === "vertexai" ? tr.aiModelVertexAi : tr.aiModelGeminiApi}
+        </span>
+      </div>
+
+      {/* Model cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {available.map((m) => {
+          const isActive = m.id === current;
+          return (
+            <button
+              key={m.id}
+              onClick={() => !isActive && handleChange(m.id)}
+              disabled={saving}
+              className={`text-left rounded-lg border-2 p-4 transition-all ${
+                isActive
+                  ? "border-brand-primary bg-brand-primary/5"
+                  : "border-neutral-200 hover:border-brand-primary/40 hover:bg-neutral-50"
+              } ${saving ? "opacity-60 cursor-wait" : "cursor-pointer"}`}
+            >
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[13px] font-bold text-neutral-900">{m.label}</span>
+                {isActive && (
+                  <span className="flex items-center gap-1 text-[10px] font-bold text-brand-primary">
+                    {saving ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />}
+                    {tr.aiModelCurrent}
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-neutral-500 leading-relaxed">{m.description}</p>
+              <p className="text-[10px] font-mono text-neutral-400 mt-2">{m.id}</p>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Flash feedback */}
+      {flash && (
+        <div className={`mt-3 text-[12px] font-semibold ${flash === "saved" ? "text-emerald-600" : "text-red-600"}`}>
+          {flash === "saved" ? tr.aiModelSaved : tr.aiModelError}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Main Settings ────────────────────────────────────────────────────
 
 export function Settings({ lang }: { lang: Lang }) {
   const tr = t(lang).settings;
@@ -143,11 +255,17 @@ export function Settings({ lang }: { lang: Lang }) {
         </div>
       </div>
 
+      {/* AI Model Selector */}
+      <AiModelSelector lang={lang} />
+
       {/* Editable Analysis Lenses (Phase 24B) */}
       <AnalysisLensesEditor lang={lang} />
 
       {/* Activity Log (Phase 24G2) */}
       <ActivityLogPanel lang={lang} />
+
+      {/* OneNote Import Wizard */}
+      <OneNoteImportWizard lang={lang} />
 
       {/* Reading Room Chrome extension install guide (Phase 22 follow-up) */}
       <div className="bg-white rounded-lg border border-neutral-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-6">

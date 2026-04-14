@@ -185,13 +185,12 @@ export function RetailersDirectory({ lang }: { lang: Lang }) {
     if (grupoFilter) query = query.eq("grupo_acesso", grupoFilter);
     if (classificacaoFilter) query = query.eq("classificacao", classificacaoFilter);
 
-    // UF filter requires joining with locations — use a subquery approach
-    // For simplicity, if UF filter is active, fetch cnpj_raiz from locations first
+    // UF filter requires joining with locations
     if (ufFilter) {
-      const { data: ufCnpjs } = await supabase.from("retailer_locations").select("cnpj_raiz").eq("uf", ufFilter);
-      if (ufCnpjs?.length) {
-        const cnpjs = [...new Set(ufCnpjs.map((r: any) => r.cnpj_raiz))];
-        query = query.in("cnpj_raiz", cnpjs.slice(0, 1000)); // Supabase limit
+      const { data: ufLocations } = await supabase.from("retailer_locations").select("entity_uid").eq("uf", ufFilter).not("entity_uid", "is", null);
+      if (ufLocations?.length) {
+        const uids = [...new Set(ufLocations.map((r: any) => r.entity_uid))];
+        query = query.in("entity_uid", uids.slice(0, 1000)); // Supabase limit
       }
     }
 
@@ -205,7 +204,7 @@ export function RetailersDirectory({ lang }: { lang: Lang }) {
     setMapLoading(true);
     let query = supabase
       .from("retailer_locations")
-      .select("id, cnpj, nome_fantasia, razao_social, logradouro, numero, bairro, municipio, uf, cep, latitude, longitude, geo_precision")
+      .select("id, entity_uid, cnpj, nome_fantasia, razao_social, logradouro, numero, bairro, municipio, uf, cep, latitude, longitude, geo_precision")
       .not("latitude", "is", null)
       .not("longitude", "is", null)
       .limit(MAP_LIMIT);
@@ -220,14 +219,14 @@ export function RetailersDirectory({ lang }: { lang: Lang }) {
     setMapLoading(false);
   }, [ufFilter, search]);
 
-  const fetchLocations = async (key: string, cnpjRaiz: string) => {
+  const fetchLocations = async (key: string, entityUid: string) => {
     if (locations[key]) return;
-    const { data } = await supabase.from("retailer_locations").select("*").eq("cnpj_raiz", cnpjRaiz).order("uf");
+    const { data } = await supabase.from("retailer_locations").select("*").eq("entity_uid", entityUid).order("uf");
     if (data) setLocations(prev => ({ ...prev, [key]: data }));
   };
 
-  const toggleExpand = (key: string, cnpjRaiz: string) => {
-    if (expandedId === key) { setExpandedId(null); } else { setExpandedId(key); fetchLocations(key, cnpjRaiz); }
+  const toggleExpand = (key: string, entityUid: string) => {
+    if (expandedId === key) { setExpandedId(null); } else { setExpandedId(key); fetchLocations(key, entityUid); }
   };
 
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
@@ -342,7 +341,7 @@ export function RetailersDirectory({ lang }: { lang: Lang }) {
                     const rKey = r.entity_uid || r.cnpj_raiz;
                     return (
                       <RetailerRow key={rKey} retailer={r} lang={lang} expanded={expandedId === rKey}
-                        onToggle={() => toggleExpand(rKey, r.cnpj_raiz)} locations={locations[rKey]}
+                        onToggle={() => toggleExpand(rKey, r.entity_uid || r.cnpj_raiz)} locations={locations[rKey]}
                         onRetailerUpdate={(id, field, value) => {
                           setRetailers(prev => prev.map(ret => (ret.entity_uid || ret.cnpj_raiz) === id ? { ...ret, [field]: value } : ret));
                         }} />
@@ -611,7 +610,7 @@ function RetailerRow({ retailer: r, lang, expanded, onToggle, locations, onRetai
     await fetch("/api/retailers/update", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cnpj_raiz: r.cnpj_raiz, entity_uid: r.entity_uid, updates: { [field]: value } }),
+      body: JSON.stringify({ entity_uid: r.entity_uid, updates: { [field]: value } }),
     });
     onRetailerUpdate?.(entityKey, field, value);
   };

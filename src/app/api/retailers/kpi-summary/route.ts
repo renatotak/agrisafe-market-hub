@@ -40,18 +40,19 @@ export async function GET() {
 
     // ── 2. Cities (municípios) ──────────────────────────────────
     // Count distinct (municipio, uf) pairs across retailer_locations and
-    // surface the top 5 by # of locations. We pull (cnpj_raiz, municipio,
+    // surface the top 5 by # of locations. We pull (entity_uid, municipio,
     // uf) so we can also collapse to "channels per city" rather than
     // "branches per city" — a single retailer with many branches in the
     // same city should count once.
     const { data: locRows } = await supabase
       .from('retailer_locations')
-      .select('cnpj_raiz, municipio, uf')
+      .select('entity_uid, municipio, uf')
       .not('municipio', 'is', null)
       .not('uf', 'is', null)
+      .not('entity_uid', 'is', null)
       .limit(50000); // hard cap; we only have ~30k locations
 
-    // Channels per city (dedup on cnpj_raiz so each retailer counts once
+    // Channels per city (dedup on entity_uid so each retailer counts once
     // per city, not once per branch).
     const cityChannelMap = new Map<string, { municipio: string; uf: string; channels: Set<string> }>();
     for (const row of locRows || []) {
@@ -60,7 +61,7 @@ export async function GET() {
       if (!cityChannelMap.has(key)) {
         cityChannelMap.set(key, { municipio: r.municipio, uf: r.uf, channels: new Set() });
       }
-      cityChannelMap.get(key)!.channels.add(r.cnpj_raiz);
+      cityChannelMap.get(key)!.channels.add(r.entity_uid);
     }
 
     const cityCount = cityChannelMap.size;
