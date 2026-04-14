@@ -148,6 +148,60 @@ function PlaybookTab({ lang, tr }: { lang: Lang; tr: any }) {
               </tr>
             </thead>
             <tbody className="text-neutral-700">
+              <tr className="border-b border-neutral-100 bg-brand-surface/30">
+                <td className="py-2 pr-4"><span className="px-1.5 py-0.5 rounded bg-brand-primary text-white text-[10px] font-bold">GET</span></td>
+                <td className="py-2 pr-4 font-mono text-[11px] font-bold">/api/app-campo/events</td>
+                <td className="py-2">
+                  {lang === "pt"
+                    ? "Eventos. Sem state → próximos 30 dias Brasil. Com state=UF → todos futuros no estado."
+                    : "Events. No state → next 30 days Brazil. With state=UF → all future in that state."}
+                </td>
+              </tr>
+              <tr className="border-b border-neutral-100 bg-brand-surface/30">
+                <td className="py-2 pr-4"><span className="px-1.5 py-0.5 rounded bg-brand-primary text-white text-[10px] font-bold">GET</span></td>
+                <td className="py-2 pr-4 font-mono text-[11px] font-bold">/api/app-campo/meetings</td>
+                <td className="py-2">
+                  {lang === "pt"
+                    ? "Reuniões agendadas (público + publicáveis). Filtra por entity_uid, state, janela de datas."
+                    : "Scheduled meetings (public + publishable tier). Filter by entity_uid, state, date window."}
+                </td>
+              </tr>
+              <tr className="border-b border-neutral-100 bg-brand-surface/30">
+                <td className="py-2 pr-4"><span className="px-1.5 py-0.5 rounded bg-brand-primary text-white text-[10px] font-bold">GET</span></td>
+                <td className="py-2 pr-4 font-mono text-[11px] font-bold">/api/app-campo/leads</td>
+                <td className="py-2">
+                  {lang === "pt"
+                    ? "Pipeline de leads do rep (estágio, valor estimado, próximos passos)."
+                    : "Rep's lead pipeline (stage, estimated value, next actions)."}
+                </td>
+              </tr>
+              <tr className="border-b border-neutral-100 bg-brand-surface/30">
+                <td className="py-2 pr-4"><span className="px-1.5 py-0.5 rounded bg-brand-primary text-white text-[10px] font-bold">GET</span></td>
+                <td className="py-2 pr-4 font-mono text-[11px] font-bold">/api/app-campo/digest</td>
+                <td className="py-2">
+                  {lang === "pt"
+                    ? "Briefing diário + contadores (eventos da semana, leads abertos, reuniões 7d)."
+                    : "Daily briefing + counters (events this week, open leads, last 7d meetings)."}
+                </td>
+              </tr>
+              <tr className="border-b border-neutral-100 bg-purple-50/40">
+                <td className="py-2 pr-4"><span className="px-1.5 py-0.5 rounded bg-purple-600 text-white text-[10px] font-bold">GET</span></td>
+                <td className="py-2 pr-4 font-mono text-[11px] font-bold">/api/chat/threads</td>
+                <td className="py-2">
+                  {lang === "pt"
+                    ? "Lista threads de chat. POST cria/upserts thread principal por entidade. Premium gating via entity_features.has_chat."
+                    : "List chat threads. POST creates/upserts main thread per entity. Premium gated by entity_features.has_chat."}
+                </td>
+              </tr>
+              <tr className="border-b border-neutral-100 bg-purple-50/40">
+                <td className="py-2 pr-4"><span className="px-1.5 py-0.5 rounded bg-purple-600 text-white text-[10px] font-bold">GET / POST</span></td>
+                <td className="py-2 pr-4 font-mono text-[11px] font-bold">/api/chat/messages</td>
+                <td className="py-2">
+                  {lang === "pt"
+                    ? "Histórico (GET) + envio (POST). POST ?action=ack body={kind:'delivered'|'read'} marca status. Realtime publica INSERT/UPDATE."
+                    : "History (GET) + send (POST). POST ?action=ack body={kind:'delivered'|'read'} flips status. Realtime broadcasts INSERT/UPDATE."}
+                </td>
+              </tr>
               <tr className="border-b border-neutral-100">
                 <td className="py-2 pr-4"><span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 text-[10px] font-bold">GET</span></td>
                 <td className="py-2 pr-4 font-mono text-[11px]">/api/events-db</td>
@@ -163,10 +217,10 @@ function PlaybookTab({ lang, tr }: { lang: Lang; tr: any }) {
         </div>
       </div>
 
-      {/* Params */}
+      {/* Params — app-campo/events */}
       <div>
         <h4 className="text-[14px] font-bold text-neutral-900 mb-2">
-          {lang === "pt" ? "Parâmetros (events-db)" : "Parameters (events-db)"}
+          {lang === "pt" ? "Parâmetros (app-campo/events)" : "Parameters (app-campo/events)"}
         </h4>
         <div className="overflow-x-auto">
           <table className="w-full text-[12px]">
@@ -179,14 +233,28 @@ function PlaybookTab({ lang, tr }: { lang: Lang; tr: any }) {
             </thead>
             <tbody className="text-neutral-700">
               <tr className="border-b border-neutral-100">
-                <td className="py-1.5 pr-4 font-mono text-[11px]">source</td>
+                <td className="py-1.5 pr-4 font-mono text-[11px]">state</td>
                 <td className="py-1.5 pr-4 text-neutral-400">—</td>
-                <td className="py-1.5">{lang === "pt" ? "Filtrar por fonte: AgroAgenda, AgroAdvance, Manual" : "Filter by source: AgroAgenda, AgroAdvance, Manual"}</td>
+                <td className="py-1.5">
+                  {lang === "pt"
+                    ? "UF (ex: MT). Se ausente → próximos 30 dias Brasil. Se presente → todos os eventos futuros naquele estado."
+                    : "UF (e.g. MT). Absent → next 30 days Brazil-wide. Present → all future events in that state."}
+                </td>
+              </tr>
+              <tr className="border-b border-neutral-100">
+                <td className="py-1.5 pr-4 font-mono text-[11px]">days</td>
+                <td className="py-1.5 pr-4 text-neutral-400">30</td>
+                <td className="py-1.5">{lang === "pt" ? "Janela nacional em dias (max 180, ignorado se state presente)" : "National window in days (max 180, ignored if state is set)"}</td>
               </tr>
               <tr className="border-b border-neutral-100">
                 <td className="py-1.5 pr-4 font-mono text-[11px]">limit</td>
-                <td className="py-1.5 pr-4 text-neutral-400">500</td>
-                <td className="py-1.5">{lang === "pt" ? "Máximo de eventos retornados (max 1000)" : "Max events returned (max 1000)"}</td>
+                <td className="py-1.5 pr-4 text-neutral-400">100</td>
+                <td className="py-1.5">{lang === "pt" ? "Máximo de eventos (max 500)" : "Max events (max 500)"}</td>
+              </tr>
+              <tr className="border-b border-neutral-100">
+                <td className="py-1.5 pr-4 font-mono text-[11px]">include_past</td>
+                <td className="py-1.5 pr-4 text-neutral-400">false</td>
+                <td className="py-1.5">{lang === "pt" ? "true para incluir eventos passados" : "true to include past events"}</td>
               </tr>
             </tbody>
           </table>
@@ -206,10 +274,16 @@ function PlaybookTab({ lang, tr }: { lang: Lang; tr: any }) {
       <div>
         <h4 className="text-[14px] font-bold text-neutral-900 mb-2">{tr.appCampoExamplesTitle}</h4>
         <div className="space-y-2">
-          <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider">curl</p>
-          <CopyableCode text={`curl -H "x-api-key: YOUR_KEY" ${baseUrl}/api/events-db`} />
+          <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider">
+            {lang === "pt" ? "curl — próximos 30 dias (Brasil)" : "curl — next 30 days (Brazil)"}
+          </p>
+          <CopyableCode text={`curl -H "x-api-key: YOUR_KEY" "${baseUrl}/api/app-campo/events"`} />
+          <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider mt-3">
+            {lang === "pt" ? "curl — todos eventos futuros em MT" : "curl — all future events in MT"}
+          </p>
+          <CopyableCode text={`curl -H "x-api-key: YOUR_KEY" "${baseUrl}/api/app-campo/events?state=MT"`} />
           <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider mt-3">JavaScript (fetch)</p>
-          <CopyableCode text={`fetch("${baseUrl}/api/events-db", { headers: { "x-api-key": "YOUR_KEY" } }).then(r => r.json())`} />
+          <CopyableCode text={`fetch("${baseUrl}/api/app-campo/events?state=MT", { headers: { "x-api-key": "YOUR_KEY" } }).then(r => r.json())`} />
         </div>
         <p className="text-[11px] text-neutral-400 mt-3 flex items-center gap-1">
           <AlertTriangle size={11} />

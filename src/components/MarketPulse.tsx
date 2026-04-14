@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { CommodityMap } from "@/components/CommodityMap";
 import { NACotacoesWidget } from "@/components/NACotacoesWidget";
+import { FuturesCurve } from "@/components/FuturesCurve";
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   CartesianGrid, Cell, LineChart, Line,
@@ -52,6 +53,9 @@ interface CultureMeta {
   intlMarket: string;
   intlUnit: string;       // CME/ICE original unit
   brUnit: string;         // BR physical unit
+  /** When true, /api/prices-na/regional has no spot feed for this commodity —
+   *  the headline card falls back to the futures curve front-month. */
+  noSpot?: boolean;
 }
 
 const CULTURES: CultureMeta[] = [
@@ -61,6 +65,8 @@ const CULTURES: CultureMeta[] = [
   { slug: "boi-gordo",  label: "Boi Gordo", en: "Cattle",  color: "#8B4513", region: "BR (B3)",    tvSymbol: "BMFBOVESPA:BGI1!", intlMarket: "B3 — São Paulo",    intlUnit: "R$/@",       brUnit: "R$/@"       },
   { slug: "trigo",      label: "Trigo",     en: "Wheat",   color: "#DAA520", region: "BR (RS/PR)", tvSymbol: "CBOT_MINI:ZW1!", intlMarket: "CBOT — Chicago",       intlUnit: "US¢/bushel", brUnit: "R$/sc 60kg" },
   { slug: "algodao",    label: "Algodão",   en: "Cotton",  color: "#7FA02B", region: "BR (IMEA)",  tvSymbol: "ICEUS:CT1!",     intlMarket: "ICE US — New York",    intlUnit: "US¢/lb",     brUnit: "R$/@"       },
+  { slug: "etanol",     label: "Etanol",    en: "Ethanol", color: "#009688", region: "BR (B3)",    tvSymbol: "BMFBOVESPA:ETH1!", intlMarket: "B3 — São Paulo",    intlUnit: "R$/m³",      brUnit: "R$/m³",      noSpot: true },
+  { slug: "acucar",     label: "Açúcar",    en: "Sugar",   color: "#2196F3", region: "BR (CEPEA)", tvSymbol: "ICEUS:SB1!",       intlMarket: "ICE US — New York",  intlUnit: "US¢/lb",     brUnit: "R$/sc 50kg", noSpot: true },
 ];
 
 const REGIONS = [
@@ -124,6 +130,9 @@ interface LiveCultureSummary {
 async function fetchCultureSummary(slug: string): Promise<LiveCultureSummary | null> {
   const meta = CULTURES.find((c) => c.slug === slug);
   if (!meta) return null;
+  // Skip the spot fetch entirely for cultures that don't have a /api/prices-na/regional
+  // feed (etanol/açúcar) — the FuturesCurve panel still renders, just no headline card.
+  if (meta.noSpot) return null;
   try {
     const res = await fetch(`/api/prices-na/regional?commodity=${slug}`);
     const json = await res.json();
@@ -533,51 +542,74 @@ function CultureAnalysis({
             </div>
           </div>
         </div>
+      ) : culture.noSpot ? (
+        <div className="bg-white rounded-lg border border-neutral-200 p-5">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="w-3 h-3 rounded-full" style={{ backgroundColor: culture.color }} />
+            <h3 className="text-[16px] font-bold text-neutral-900">
+              {lang === "pt" ? culture.label : culture.en}
+            </h3>
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 uppercase">
+              {lang === "pt" ? "Apenas futuros" : "Futures only"}
+            </span>
+          </div>
+          <p className="text-[12px] text-neutral-500 mt-1.5">
+            {lang === "pt"
+              ? <>O preço de mercado físico para <b>{culture.label}</b> não é coberto pela Notícias Agrícolas regional. Veja a <b>Curva de Futuros</b> abaixo para os preços negociados em {culture.intlMarket}.</>
+              : <>Spot price for <b>{culture.en}</b> is not covered by Notícias Agrícolas regional. See the <b>Futures Curve</b> below for prices traded on {culture.intlMarket}.</>}
+          </p>
+        </div>
       ) : (
         <div className="bg-white rounded-lg border border-neutral-200 p-8 flex items-center justify-center">
           <Loader2 size={20} className="animate-spin text-neutral-400" />
         </div>
       )}
 
-      {/* Regional Map + International Chart side by side */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Regional map */}
-        <div className="bg-white rounded-lg border border-neutral-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
-          <div className="px-4 py-3 border-b border-neutral-200 bg-neutral-50 flex items-center gap-2">
-            <MapPin size={14} className="text-brand-primary" />
-            <h4 className="text-[12px] font-bold text-neutral-700 uppercase tracking-wider">
-              {lang === "pt" ? "Preços por Região (BR)" : "Prices by Region (BR)"}
-            </h4>
-            {summary?.closingDate && <span className="text-[10px] text-neutral-400 ml-auto">{summary.closingDate}</span>}
+      {/* Regional Map + International Chart — only for cultures with regional spot coverage.
+          For noSpot cultures (etanol, açúcar) the FuturesCurve panel below is the main view. */}
+      {!culture.noSpot && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Regional map */}
+          <div className="bg-white rounded-lg border border-neutral-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
+            <div className="px-4 py-3 border-b border-neutral-200 bg-neutral-50 flex items-center gap-2">
+              <MapPin size={14} className="text-brand-primary" />
+              <h4 className="text-[12px] font-bold text-neutral-700 uppercase tracking-wider">
+                {lang === "pt" ? "Preços por Região (BR)" : "Prices by Region (BR)"}
+              </h4>
+              {summary?.closingDate && <span className="text-[10px] text-neutral-400 ml-auto">{summary.closingDate}</span>}
+            </div>
+            <div className="h-[400px]">
+              <CommodityMap lang={lang} slug={activeCulture} />
+            </div>
           </div>
-          <div className="h-[400px]">
-            <CommodityMap lang={lang} slug={activeCulture} />
-          </div>
-        </div>
 
-        {/* International futures chart — fetched from Yahoo Finance via /api/intl-futures */}
-        <div className="bg-white rounded-lg border border-neutral-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
-          <div className="px-4 py-3 border-b border-neutral-200 bg-neutral-50 flex items-center gap-2">
-            <Globe size={14} className="text-blue-600" />
-            <h4 className="text-[12px] font-bold text-neutral-700 uppercase tracking-wider">
-              {lang === "pt" ? "Mercado Internacional" : "International Market"}
-            </h4>
-            <span className="text-[10px] text-neutral-500 ml-auto">{culture.intlMarket}</span>
-          </div>
-          <div className="h-[400px]">
-            <IntlFuturesChart slug={activeCulture} lang={lang} />
+          {/* International front-month historical chart — fetched from Yahoo Finance via /api/intl-futures */}
+          <div className="bg-white rounded-lg border border-neutral-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
+            <div className="px-4 py-3 border-b border-neutral-200 bg-neutral-50 flex items-center gap-2">
+              <Globe size={14} className="text-blue-600" />
+              <h4 className="text-[12px] font-bold text-neutral-700 uppercase tracking-wider">
+                {lang === "pt" ? "Mercado Internacional" : "International Market"}
+              </h4>
+              <span className="text-[10px] text-neutral-500 ml-auto">{culture.intlMarket}</span>
+            </div>
+            <div className="h-[400px]">
+              <IntlFuturesChart slug={activeCulture} lang={lang} />
+            </div>
           </div>
         </div>
-      </div>
+      )}
+
+      {/* Futures forward curve — multi-month timeline (B3 ETH / NY11 SB or CME via Yahoo) */}
+      <FuturesCurve slug={activeCulture} lang={lang} />
 
       {/* Logistics & Infrastructure — horizontal range chart */}
       {summary && summary.count >= 2 ? (
         <LogisticsSpreadChart summary={summary} lang={lang} />
-      ) : (
+      ) : !culture.noSpot ? (
         <div className="bg-white rounded-lg border border-neutral-200 p-8 text-center text-[12px] text-neutral-500">
           {lang === "pt" ? "Dados regionais insuficientes para análise logística." : "Insufficient regional data for logistics analysis."}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

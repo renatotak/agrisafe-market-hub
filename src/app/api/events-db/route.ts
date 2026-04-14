@@ -105,12 +105,14 @@ export async function GET(request: Request) {
 
     // Phase 29 — optional API key tracking (non-blocking, backwards-compatible)
     const keyMeta = await verifyApiKey(supabase, request).catch(() => null)
+    const includeHidden = url.searchParams.get('include_hidden') === 'true'
     let query = supabase
       .from('events')
-      .select('id, name, date, end_date, location, type, description_pt, description_en, website, source_name, source_url, organizer_cnpj, latitude, longitude, enriched_at, enrichment_summary')
+      .select('id, name, date, end_date, location, type, description_pt, description_en, website, source_name, source_url, organizer_cnpj, latitude, longitude, enriched_at, enrichment_summary, hidden, hidden_reason')
       .order('date', { ascending: true })
       .limit(limit)
 
+    if (!includeHidden) query = query.eq('hidden', false)
     if (sourceFilter) query = query.eq('source_name', sourceFilter)
 
     const { data, error } = await query

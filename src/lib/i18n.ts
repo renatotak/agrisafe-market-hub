@@ -18,6 +18,7 @@ export const translations = {
       retailers: "Diretório de Canais",
       industries: "Diretório de Indústrias",
       finance: "Inteligência Financeira",
+      meetings: "Log de Reuniões",
     },
     dataSources: {
       title: "Fontes de Dados",
@@ -482,6 +483,7 @@ export const translations = {
       retailers: "Channels Directory",
       industries: "Industries Directory",
       finance: "Financial Intelligence",
+      meetings: "Meetings Log",
     },
     dataSources: {
       title: "Data Sources",

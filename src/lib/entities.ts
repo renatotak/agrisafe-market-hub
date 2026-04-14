@@ -27,35 +27,31 @@ export async function ensureLegalEntityUid(
 
   if (existing?.entity_uid) return existing.entity_uid;
 
-  // Insert minimal row. ON CONFLICT is handled by the partial unique index
-  // on tax_id — a race between two callers just means one of them loses
-  // and re-reads. .upsert() with ignoreDuplicates gives us that behavior.
+  // Plain INSERT — the unique index on tax_id is partial
+  // (`WHERE tax_id IS NOT NULL`), so PostgREST's `.upsert(onConflict:'tax_id')`
+  // can't target it. Race handling: if INSERT raises unique-violation
+  // (Postgres 23505), the other caller already inserted; just re-read.
   const { data: inserted, error } = await supabaseAdmin
     .from("legal_entities")
-    .upsert(
-      {
-        tax_id: taxId,
-        tax_id_type: "cnpj",
-        legal_name: opts?.legalName ?? null,
-        display_name: opts?.displayName ?? opts?.legalName ?? null,
-        confidentiality: "public",
-      },
-      { onConflict: "tax_id", ignoreDuplicates: true },
-    )
+    .insert({
+      tax_id: taxId,
+      tax_id_type: "cnpj",
+      legal_name: opts?.legalName ?? null,
+      display_name: opts?.displayName ?? opts?.legalName ?? null,
+      confidentiality: "public",
+    })
     .select("entity_uid")
     .maybeSingle();
 
   if (inserted?.entity_uid) return inserted.entity_uid;
 
-  // Upsert with ignoreDuplicates returns null on conflict — re-read.
-  if (!error) {
-    const { data: reread } = await supabaseAdmin
-      .from("legal_entities")
-      .select("entity_uid")
-      .eq("tax_id", taxId)
-      .maybeSingle();
-    return reread?.entity_uid ?? null;
-  }
+  // Race or any other error → try re-read; if that also fails, give up.
+  const { data: reread } = await supabaseAdmin
+    .from("legal_entities")
+    .select("entity_uid")
+    .eq("tax_id", taxId)
+    .maybeSingle();
+  if (reread?.entity_uid) return reread.entity_uid;
 
   console.error("[ensureLegalEntityUid] failed for tax_id=%s:", taxId, error);
   return null;

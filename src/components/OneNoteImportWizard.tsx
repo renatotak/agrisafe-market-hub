@@ -3,7 +3,7 @@
 import { useState } from "react";
 import {
   FileText, Loader2, Check, AlertTriangle, X, Search,
-  ChevronDown, ChevronRight, Upload, Users, Calendar, Target,
+  ChevronDown, ChevronRight, Upload, Users, Calendar, Target, Plus,
 } from "lucide-react";
 import type { Lang } from "@/lib/i18n";
 import { t } from "@/lib/i18n";
@@ -330,6 +330,7 @@ function MatchRow({ match, lang, onUpdate }: { match: CompanyMatch; lang: Lang; 
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<{ entity_uid: string; display_name: string }[]>([]);
   const [searching, setSearching] = useState(false);
+  const [addCnpjOpen, setAddCnpjOpen] = useState(false);
 
   const handleSearch = async (q: string) => {
     setSearchQuery(q);
@@ -377,7 +378,7 @@ function MatchRow({ match, lang, onUpdate }: { match: CompanyMatch; lang: Lang; 
             </select>
           </div>
         ) : (
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 flex-wrap">
             <input
               type="text"
               value={searchQuery}
@@ -399,6 +400,15 @@ function MatchRow({ match, lang, onUpdate }: { match: CompanyMatch; lang: Lang; 
                 ))}
               </div>
             )}
+            <button
+              type="button"
+              onClick={() => setAddCnpjOpen(true)}
+              className="text-[10px] inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded hover:bg-emerald-100"
+              title={lang === "pt" ? "Adicionar por CNPJ" : "Add by CNPJ"}
+            >
+              <Plus size={10} />
+              {lang === "pt" ? "CNPJ" : "CNPJ"}
+            </button>
           </div>
         )}
       </div>
@@ -409,6 +419,200 @@ function MatchRow({ match, lang, onUpdate }: { match: CompanyMatch; lang: Lang; 
           <X size={12} />
         </button>
       )}
+
+      {addCnpjOpen && (
+        <AddCnpjModal
+          lang={lang}
+          rawName={match.rawName}
+          onClose={() => setAddCnpjOpen(false)}
+          onSuccess={(entityUid, displayName) => {
+            onUpdate(match.rawName, entityUid);
+            setAddCnpjOpen(false);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Add CNPJ modal ───────────────────────────────────────────────────
+
+function AddCnpjModal({
+  lang, rawName, onClose, onSuccess,
+}: {
+  lang: Lang;
+  rawName: string;
+  onClose: () => void;
+  onSuccess: (entityUid: string, displayName: string) => void;
+}) {
+  const [cnpj, setCnpj] = useState("");
+  const [roleType, setRoleType] = useState<"retailer" | "industry">("retailer");
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [result, setResult] = useState<{ entity_uid: string; display_name: string; legal_name: string | null; uf: string | null; brasilapi_hit: boolean } | null>(null);
+
+  const formatCnpj = (v: string) => {
+    const d = v.replace(/\D/g, "").slice(0, 14);
+    if (d.length <= 8) return d;
+    if (d.length <= 12) return `${d.slice(0, 8)}/${d.slice(8)}`;
+    return `${d.slice(0, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
+  };
+
+  const handleSubmit = async () => {
+    const digits = cnpj.replace(/\D/g, "");
+    if (digits.length < 8) {
+      setErr(lang === "pt" ? "CNPJ deve ter pelo menos 8 dígitos" : "CNPJ must have at least 8 digits");
+      return;
+    }
+    setLoading(true);
+    setErr(null);
+    try {
+      const res = await fetch("/api/crm/entity-from-cnpj", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cnpj: digits, role_type: roleType, raw_name: rawName }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      setResult(data);
+    } catch (e: any) {
+      setErr(e.message);
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[300] flex items-center justify-center bg-black/40 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-lg shadow-xl max-w-md w-full"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-5 py-3 border-b border-neutral-200">
+          <h3 className="text-[15px] font-bold text-neutral-900">
+            {lang === "pt" ? "Adicionar por CNPJ" : "Add by CNPJ"}
+          </h3>
+          <button onClick={onClose} className="p-1 rounded hover:bg-neutral-100 text-neutral-500">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          <div>
+            <p className="text-[11px] uppercase font-bold text-neutral-500 mb-1">
+              {lang === "pt" ? "Nome no arquivo" : "Raw name"}
+            </p>
+            <p className="text-[13px] font-medium text-neutral-900 bg-neutral-50 border border-neutral-200 rounded px-2 py-1.5">
+              {rawName}
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-[11px] uppercase font-bold text-neutral-500 mb-1">
+              CNPJ <span className="text-neutral-400 font-normal normal-case">({lang === "pt" ? "8 a 14 dígitos" : "8 to 14 digits"})</span>
+            </label>
+            <input
+              type="text"
+              value={cnpj}
+              onChange={(e) => setCnpj(formatCnpj(e.target.value))}
+              placeholder="12345678/0001-90"
+              className="w-full text-[13px] font-mono border border-neutral-300 rounded px-3 py-2 focus:outline-none focus:border-brand-primary"
+              disabled={loading || !!result}
+              autoFocus
+            />
+          </div>
+
+          <div>
+            <label className="block text-[11px] uppercase font-bold text-neutral-500 mb-1">
+              {lang === "pt" ? "Tipo" : "Role"}
+            </label>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setRoleType("retailer")}
+                disabled={loading || !!result}
+                className={`flex-1 text-[12px] font-medium px-3 py-2 rounded border ${
+                  roleType === "retailer"
+                    ? "bg-brand-primary text-white border-brand-primary"
+                    : "bg-white text-neutral-700 border-neutral-300 hover:border-neutral-400"
+                }`}
+              >
+                {lang === "pt" ? "Revenda / Canal" : "Retailer"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setRoleType("industry")}
+                disabled={loading || !!result}
+                className={`flex-1 text-[12px] font-medium px-3 py-2 rounded border ${
+                  roleType === "industry"
+                    ? "bg-brand-primary text-white border-brand-primary"
+                    : "bg-white text-neutral-700 border-neutral-300 hover:border-neutral-400"
+                }`}
+              >
+                {lang === "pt" ? "Indústria" : "Industry"}
+              </button>
+            </div>
+          </div>
+
+          {err && (
+            <div className="p-2.5 bg-red-50 border border-red-200 rounded text-[12px] text-red-700 flex items-center gap-2">
+              <AlertTriangle size={13} /> {err}
+            </div>
+          )}
+
+          {result && (
+            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded">
+              <div className="flex items-center gap-2 mb-1">
+                <Check size={14} className="text-emerald-600" />
+                <p className="text-[12px] font-bold text-emerald-900">
+                  {lang === "pt" ? "Entidade criada" : "Entity created"}
+                </p>
+              </div>
+              <p className="text-[13px] font-semibold text-neutral-900">{result.display_name}</p>
+              {result.legal_name && result.legal_name !== result.display_name && (
+                <p className="text-[11px] text-neutral-600 mt-0.5">{result.legal_name}</p>
+              )}
+              <div className="flex items-center gap-2 mt-1.5 text-[10px] text-neutral-500">
+                {result.uf && <span className="px-1.5 py-0.5 bg-white border border-neutral-200 rounded">{result.uf}</span>}
+                <span className="px-1.5 py-0.5 bg-white border border-neutral-200 rounded">
+                  {result.brasilapi_hit ? (lang === "pt" ? "BrasilAPI ✓" : "BrasilAPI ✓") : (lang === "pt" ? "sem BrasilAPI" : "no BrasilAPI")}
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="px-5 py-3 border-t border-neutral-200 flex items-center justify-end gap-2">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-[12px] font-medium text-neutral-700 hover:bg-neutral-100 rounded"
+          >
+            {result ? (lang === "pt" ? "Fechar" : "Close") : (lang === "pt" ? "Cancelar" : "Cancel")}
+          </button>
+          {!result ? (
+            <button
+              onClick={handleSubmit}
+              disabled={loading || cnpj.replace(/\D/g, "").length < 8}
+              className="px-4 py-2 bg-brand-primary text-white text-[12px] font-bold rounded hover:bg-brand-dark disabled:opacity-50 flex items-center gap-1.5"
+            >
+              {loading ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+              {loading
+                ? (lang === "pt" ? "Consultando..." : "Looking up...")
+                : (lang === "pt" ? "Criar e Vincular" : "Create & Link")}
+            </button>
+          ) : (
+            <button
+              onClick={() => onSuccess(result.entity_uid, result.display_name)}
+              className="px-4 py-2 bg-brand-primary text-white text-[12px] font-bold rounded hover:bg-brand-dark flex items-center gap-1.5"
+            >
+              <Check size={13} />
+              {lang === "pt" ? "Vincular" : "Link"}
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

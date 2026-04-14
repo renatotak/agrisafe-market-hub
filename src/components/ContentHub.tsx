@@ -1,13 +1,23 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Lang, t } from "@/lib/i18n";
 import { publishedArticles, campaigns } from "@/data/published-articles";
 import type { PublishedArticle } from "@/data/published-articles";
 import {
   ExternalLink, Linkedin, Instagram, Globe, Calendar as CalendarIcon,
-  Plus, FileText, Image, ChevronDown, Filter, Search,
+  Plus, FileText, Image, ChevronDown, Filter, Search, Link2, Loader2, Check, X, Edit3,
 } from "lucide-react";
+
+interface ArticleLink {
+  article_id: string;
+  url: string;
+  channel: string | null;
+  og_title: string | null;
+  og_description: string | null;
+  og_image: string | null;
+  og_fetched_at: string | null;
+}
 
 type Tab = "published" | "pipeline" | "calendar";
 
@@ -29,6 +39,23 @@ export function ContentHub({ lang }: { lang: Lang }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [campaignFilter, setCampaignFilter] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  // Per-article public URLs (LinkedIn etc.) — fetched once on mount.
+  const [linksByArticle, setLinksByArticle] = useState<Record<string, ArticleLink>>({});
+  const [linksLoading, setLinksLoading] = useState(true);
+  const refreshLinks = async () => {
+    try {
+      const r = await fetch("/api/content-hub/article-link");
+      const d = await r.json();
+      const map: Record<string, ArticleLink> = {};
+      for (const l of (d.links || []) as ArticleLink[]) map[l.article_id] = l;
+      setLinksByArticle(map);
+    } finally {
+      setLinksLoading(false);
+    }
+  };
+  useEffect(() => { refreshLinks(); }, []);
+  const articlesWithLink = Object.keys(linksByArticle).length;
 
   // Stats
   const published = publishedArticles.filter((a) => a.status === "published");
@@ -114,6 +141,21 @@ export function ContentHub({ lang }: { lang: Lang }) {
         </div>
       </div>
 
+      {/* Public-link coverage banner */}
+      {!linksLoading && published.length > 0 && articlesWithLink < published.length && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2 text-[12px] text-amber-800">
+          <Link2 size={14} className="mt-0.5 shrink-0" />
+          <div className="flex-1">
+            <p>
+              <b>{articlesWithLink}/{published.length}</b>{" "}
+              {lang === "pt"
+                ? "artigos publicados têm URL pública vinculada. Expanda um artigo abaixo para colar o link do LinkedIn — capa e título serão buscados automaticamente."
+                : "published articles have a public URL linked. Expand any article below to paste its LinkedIn URL — cover image + title are auto-fetched."}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Tabs */}
       <div className="flex items-center gap-2 border-b border-neutral-200">
         {([
@@ -179,6 +221,19 @@ export function ContentHub({ lang }: { lang: Lang }) {
 
                     {/* Status + assets */}
                     <div className="flex items-center gap-2 flex-shrink-0">
+                      {linksByArticle[article.id]?.url && (
+                        <a
+                          href={linksByArticle[article.id].url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          title={lang === "pt" ? "Abrir publicação" : "Open published post"}
+                          className="inline-flex items-center gap-0.5 text-[10px] font-bold text-[#0A66C2] hover:underline"
+                        >
+                          <Link2 size={11} />
+                          {lang === "pt" ? "Link" : "Link"}
+                        </a>
+                      )}
                       {article.hasImage && <Image size={13} className="text-neutral-300" />}
                       {article.hasDoc && <FileText size={13} className="text-neutral-300" />}
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${STATUS_STYLE[article.status]}`}>
@@ -192,6 +247,24 @@ export function ContentHub({ lang }: { lang: Lang }) {
 
                   {isOpen && (
                     <div className="px-5 pb-4 pt-0 border-t border-neutral-100 bg-neutral-50">
+                      {/* Public URL editor — first thing the user sees in the expanded panel */}
+                      <ArticleLinkEditor
+                        articleId={article.id}
+                        articleTitle={article.title}
+                        currentLink={linksByArticle[article.id] || null}
+                        lang={lang}
+                        onSaved={(link) => {
+                          setLinksByArticle((prev) => ({ ...prev, [article.id]: link }));
+                        }}
+                        onDeleted={() => {
+                          setLinksByArticle((prev) => {
+                            const next = { ...prev };
+                            delete next[article.id];
+                            return next;
+                          });
+                        }}
+                      />
+
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3">
                         {article.thesis && (
                           <div>
@@ -284,6 +357,180 @@ export function ContentHub({ lang }: { lang: Lang }) {
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── Per-article public-URL editor ─────────────────────────────────────
+
+function ArticleLinkEditor({
+  articleId, articleTitle, currentLink, lang, onSaved, onDeleted,
+}: {
+  articleId: string;
+  articleTitle: string;
+  currentLink: ArticleLink | null;
+  lang: Lang;
+  onSaved: (link: ArticleLink) => void;
+  onDeleted: () => void;
+}) {
+  const [editing, setEditing] = useState(!currentLink);
+  const [draft, setDraft] = useState(currentLink?.url || "");
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [titleMismatch, setTitleMismatch] = useState(false);
+
+  // Heuristic: warn if og:title looks unrelated to the catalog article title
+  // (substring or fuzzy overlap on first 20 chars). Helps catch wrong-pasted
+  // URLs without blocking the save.
+  useEffect(() => {
+    if (!currentLink?.og_title) { setTitleMismatch(false); return; }
+    const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9 ]/g, "");
+    const a = norm(articleTitle).split(/\s+/).filter(Boolean);
+    const b = norm(currentLink.og_title);
+    const overlap = a.filter((w) => w.length >= 4 && b.includes(w)).length;
+    setTitleMismatch(a.length > 0 && overlap === 0);
+  }, [currentLink?.og_title, articleTitle]);
+
+  const save = async () => {
+    const url = draft.trim();
+    if (!url) { setErr(lang === "pt" ? "Cole uma URL" : "Paste a URL"); return; }
+    setSaving(true); setErr(null);
+    try {
+      const r = await fetch("/api/content-hub/article-link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ article_id: articleId, url }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+      onSaved(d.link as ArticleLink);
+      setEditing(false);
+    } catch (e: any) {
+      setErr(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const remove = async () => {
+    if (!confirm(lang === "pt" ? "Remover o link público deste artigo?" : "Remove the public link for this article?")) return;
+    setSaving(true);
+    try {
+      await fetch(`/api/content-hub/article-link?article_id=${encodeURIComponent(articleId)}`, { method: "DELETE" });
+      onDeleted();
+      setDraft("");
+      setEditing(true);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="mt-3 mb-1 rounded-md border border-neutral-200 bg-white overflow-hidden">
+      <div className="flex items-center gap-2 px-3 py-1.5 bg-neutral-50 border-b border-neutral-100">
+        <Link2 size={11} className="text-[#0A66C2]" />
+        <p className="text-[10px] font-bold text-neutral-700 uppercase tracking-wider">
+          {lang === "pt" ? "URL pública" : "Public URL"}
+        </p>
+        {currentLink?.channel && (
+          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#0A66C2] text-white uppercase">
+            {currentLink.channel}
+          </span>
+        )}
+      </div>
+
+      {/* Display + actions */}
+      {currentLink && !editing ? (
+        <div className="p-3 flex flex-col sm:flex-row gap-3">
+          {currentLink.og_image && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={currentLink.og_image}
+              alt={currentLink.og_title || ""}
+              className="w-32 h-20 object-cover rounded border border-neutral-200 flex-shrink-0"
+            />
+          )}
+          <div className="min-w-0 flex-1">
+            {currentLink.og_title && (
+              <p className="text-[12px] font-bold text-neutral-900 truncate">{currentLink.og_title}</p>
+            )}
+            {currentLink.og_description && (
+              <p className="text-[11px] text-neutral-600 mt-0.5 line-clamp-2">{currentLink.og_description}</p>
+            )}
+            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+              <a
+                href={currentLink.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#0A66C2] hover:underline truncate max-w-[280px]"
+              >
+                <ExternalLink size={11} />
+                {currentLink.url.replace(/^https?:\/\//, "").slice(0, 60)}{currentLink.url.length > 67 ? "…" : ""}
+              </a>
+              <button
+                onClick={() => { setDraft(currentLink.url); setEditing(true); }}
+                className="text-[10px] text-neutral-500 hover:text-neutral-900 inline-flex items-center gap-0.5"
+              >
+                <Edit3 size={10} /> {lang === "pt" ? "Editar" : "Edit"}
+              </button>
+              <button
+                onClick={remove}
+                disabled={saving}
+                className="text-[10px] text-neutral-400 hover:text-red-600 inline-flex items-center gap-0.5 disabled:opacity-50"
+              >
+                <X size={10} /> {lang === "pt" ? "Remover" : "Remove"}
+              </button>
+            </div>
+            {titleMismatch && (
+              <p className="text-[10px] text-amber-700 mt-1.5 inline-flex items-center gap-1">
+                ⚠ {lang === "pt"
+                  ? `O título da publicação ("${currentLink.og_title?.slice(0, 50)}…") não parece corresponder a "${articleTitle}". Verifique se vinculou à publicação certa.`
+                  : `The post title ("${currentLink.og_title?.slice(0, 50)}…") doesn't seem to match "${articleTitle}". Confirm you linked the right post.`}
+              </p>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="p-3 space-y-2">
+          <input
+            type="url"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") { setEditing(false); setDraft(currentLink?.url || ""); setErr(null); } }}
+            placeholder="https://www.linkedin.com/posts/agrisafefin_..."
+            className="w-full text-[12px] font-mono border border-neutral-300 rounded px-2 py-1.5 focus:outline-none focus:border-[#0A66C2]"
+            autoFocus
+          />
+          {err && (
+            <p className="text-[10px] text-red-700">{err}</p>
+          )}
+          <div className="flex items-center gap-2 justify-end">
+            {currentLink && (
+              <button
+                onClick={() => { setEditing(false); setDraft(currentLink.url); setErr(null); }}
+                className="text-[11px] text-neutral-500 hover:text-neutral-900"
+              >
+                {lang === "pt" ? "Cancelar" : "Cancel"}
+              </button>
+            )}
+            <button
+              onClick={save}
+              disabled={saving || !draft.trim()}
+              className="inline-flex items-center gap-1 text-[11px] font-bold text-white bg-[#0A66C2] hover:bg-[#084d92] rounded px-2.5 py-1 disabled:opacity-50"
+            >
+              {saving ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
+              {saving
+                ? (lang === "pt" ? "Salvando..." : "Saving...")
+                : (lang === "pt" ? "Salvar e buscar capa" : "Save & fetch cover")}
+            </button>
+          </div>
+          <p className="text-[10px] text-neutral-400">
+            {lang === "pt"
+              ? "Cole a URL pública (LinkedIn, Instagram, blog). Capa, título e descrição serão buscados automaticamente."
+              : "Paste the public URL (LinkedIn, Instagram, blog). Cover, title, and description are auto-fetched."}
+          </p>
+        </div>
+      )}
     </div>
   );
 }

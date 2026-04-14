@@ -22,6 +22,7 @@ const supabaseAdmin = createClient(
 )
 
 const EDITABLE_FIELDS = [
+  "entity_uid",
   "meeting_date",
   "meeting_type",
   "attendees",
@@ -31,6 +32,8 @@ const EDITABLE_FIELDS = [
   "outcome",
   "source",
   "external_id",
+  "metadata",
+  "confidentiality",
 ] as const
 
 function pickEditable(body: any): Record<string, any> {
@@ -103,6 +106,29 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "no editable fields in body" }, { status: 400 })
   }
 
+  // Metadata is jsonb — merge incoming keys with existing so a PATCH
+  // that only sets `mood` doesn't blow away `competitor_tech` from an
+  // earlier OneNote import. Caller can force replace by passing
+  // `metadata_replace: true`.
+  let prevEntityUid: string | null = null
+  if (updates.metadata && typeof updates.metadata === "object" && !body.metadata_replace) {
+    const { data: existing } = await supabaseAdmin
+      .from("meetings")
+      .select("metadata, entity_uid")
+      .eq("id", id)
+      .maybeSingle()
+    const prev = (existing?.metadata && typeof existing.metadata === "object") ? existing.metadata : {}
+    updates.metadata = { ...prev, ...updates.metadata }
+    prevEntityUid = existing?.entity_uid || null
+  } else if (updates.entity_uid) {
+    const { data: existing } = await supabaseAdmin
+      .from("meetings")
+      .select("entity_uid")
+      .eq("id", id)
+      .maybeSingle()
+    prevEntityUid = existing?.entity_uid || null
+  }
+
   const { data, error } = await supabaseAdmin
     .from("meetings")
     .update(updates)
@@ -113,15 +139,24 @@ export async function PATCH(req: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   if (!data) return NextResponse.json({ error: "not found" }, { status: 404 })
 
+  const reassigned = prevEntityUid && updates.entity_uid && prevEntityUid !== updates.entity_uid
   await logActivity(supabaseAdmin, {
     action: "update",
     target_table: "meetings",
     target_id: id,
     source: "manual:crm_meeting",
     source_kind: "manual",
-    summary: `Reunião ${data.meeting_date || id}: ${Object.keys(updates).join(", ")}`.slice(0, 200),
+    summary: (reassigned
+      ? `Reunião ${data.meeting_date || id} reatribuída (${prevEntityUid?.slice(0, 8)}… → ${String(updates.entity_uid).slice(0, 8)}…)`
+      : `Reunião ${data.meeting_date || id}: ${Object.keys(updates).join(", ")}`
+    ).slice(0, 200),
     confidentiality: "agrisafe_confidential",
-    metadata: { entity_uid: data.entity_uid, fields: Object.keys(updates) },
+    metadata: {
+      entity_uid: data.entity_uid,
+      prev_entity_uid: prevEntityUid,
+      reassigned: !!reassigned,
+      fields: Object.keys(updates),
+    },
   })
 
   return NextResponse.json({ meeting: data })

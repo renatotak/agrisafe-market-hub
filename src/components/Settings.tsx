@@ -12,6 +12,7 @@ import { AnalysisLensesEditor } from "@/components/AnalysisLensesEditor";
 import { ActivityLogPanel } from "@/components/ActivityLogPanel";
 import { OneNoteImportWizard } from "@/components/OneNoteImportWizard";
 import { AppCampoPanel } from "@/components/AppCampoPanel";
+import { IndustryDedupePanel } from "@/components/IndustryDedupePanel";
 import { CopyableCode } from "@/components/ui/CopyableCode";
 
 const EXTENSION_FOLDER_PATH = "chrome-extensions/reading-room";
@@ -242,6 +243,9 @@ export function Settings({ lang }: { lang: Lang }) {
 
       {/* OneNote Import Wizard */}
       <OneNoteImportWizard lang={lang} />
+
+      {/* Industry duplicate cleanup */}
+      <IndustryDedupePanel lang={lang} />
 
       {/* App Campo API Integration (Phase 29) */}
       <AppCampoPanel lang={lang} />

@@ -21,8 +21,12 @@
 import { useEffect, useState } from "react";
 import { Lang } from "@/lib/i18n";
 import {
-  Users, CalendarDays, Target, Plus, Loader2, Trash2, Save, X, Lock, ChevronDown, ChevronUp,
+  Users, CalendarDays, Target, Plus, Loader2, Trash2, Save, X, Lock, ChevronDown, ChevronUp, Edit3,
 } from "lucide-react";
+import { MeetingFormModal, type MeetingRecord } from "@/components/MeetingFormModal";
+import { SimilarTargetsSection } from "@/components/SimilarTargetsSection";
+import { ChatInbox } from "@/components/ChatInbox";
+import { supabase } from "@/lib/supabase";
 
 interface KeyPerson {
   id: string;
@@ -40,6 +44,7 @@ interface KeyPerson {
 
 interface Meeting {
   id: string;
+  entity_uid: string;
   meeting_date: string;
   meeting_type: string;
   attendees: string[] | null;
@@ -47,7 +52,20 @@ interface Meeting {
   summary: string | null;
   next_steps: string | null;
   outcome: string;
+  source?: string;
+  confidentiality?: string;
+  metadata?: {
+    competitor_tech?: string[];
+    service_interest?: string[];
+    financial_info?: string | null;
+    mood?: string | null;
+    plans?: string | null;
+  } | null;
 }
+
+const MOOD_EMOJI: Record<string, string> = {
+  excited: "🔥", positive: "🙂", neutral: "😐", cautious: "🤔", negative: "☹️",
+};
 
 interface Lead {
   id: string;
@@ -133,10 +151,77 @@ export function EntityCrmPanel({
 
       {open && (
         <div className="p-4 space-y-5">
+          <ChatSection entityUid={entityUid} lang={lang} />
           <KeyPersonsSection entityUid={entityUid} lang={lang} />
           <MeetingsSection entityUid={entityUid} lang={lang} />
           <LeadsSection entityUid={entityUid} lang={lang} />
+          <SimilarTargetsSection entityUid={entityUid} lang={lang} />
         </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Chat section ───────────────────────────────────────────────────────────
+
+function ChatSection({ entityUid, lang }: { entityUid: string; lang: Lang }) {
+  const [hasChat, setHasChat] = useState<boolean | null>(null);
+  const [toggling, setToggling] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from("entity_features")
+        .select("has_chat")
+        .eq("entity_uid", entityUid)
+        .maybeSingle();
+      setHasChat(!!data?.has_chat);
+    })();
+  }, [entityUid]);
+
+  const toggle = async () => {
+    setToggling(true);
+    const next = !hasChat;
+    await supabase
+      .from("entity_features")
+      .upsert({ entity_uid: entityUid, has_chat: next }, { onConflict: "entity_uid" });
+    setHasChat(next);
+    setToggling(false);
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] font-bold text-neutral-700 uppercase tracking-wider">
+            {lang === "pt" ? "Chat App Campo" : "App Campo Chat"}
+          </span>
+          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 uppercase">
+            {lang === "pt" ? "premium" : "premium"}
+          </span>
+        </div>
+        {hasChat !== null && (
+          <button
+            onClick={toggle}
+            disabled={toggling}
+            className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
+              hasChat
+                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                : "bg-neutral-50 text-neutral-600 border-neutral-200 hover:bg-neutral-100"
+            }`}
+          >
+            {hasChat
+              ? (lang === "pt" ? "Ativo — desativar" : "Active — disable")
+              : (lang === "pt" ? "Ativar chat premium" : "Enable premium chat")}
+          </button>
+        )}
+      </div>
+      {hasChat === null ? (
+        <div className="text-[11px] text-neutral-400 italic py-2">
+          {lang === "pt" ? "Carregando..." : "Loading..."}
+        </div>
+      ) : (
+        <ChatInbox entityUid={entityUid} lang={lang} premiumEnabled={hasChat} />
       )}
     </div>
   );
@@ -283,15 +368,9 @@ function KeyPersonsSection({ entityUid, lang }: { entityUid: string; lang: Lang 
 function MeetingsSection({ entityUid, lang }: { entityUid: string; lang: Lang }) {
   const [rows, setRows] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(false);
-  const [showForm, setShowForm] = useState(false);
-
-  const today = new Date().toISOString().slice(0, 10);
-  const [date, setDate] = useState(today);
-  const [type, setType] = useState("comercial");
-  const [summary, setSummary] = useState("");
-  const [nextSteps, setNextSteps] = useState("");
-  const [outcome, setOutcome] = useState("pending");
-  const [saving, setSaving] = useState(false);
+  const [showAll, setShowAll] = useState(false);
+  const [modalMode, setModalMode] = useState<"closed" | "create" | "edit">("closed");
+  const [editing, setEditing] = useState<Meeting | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -306,34 +385,27 @@ function MeetingsSection({ entityUid, lang }: { entityUid: string; lang: Lang })
 
   useEffect(() => { load(); }, [entityUid]);
 
-  const submit = async () => {
-    setSaving(true);
-    try {
-      await fetch("/api/crm/meetings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          entity_uid: entityUid,
-          meeting_date: date,
-          meeting_type: type,
-          summary: summary || null,
-          next_steps: nextSteps || null,
-          outcome,
-        }),
-      });
-      setSummary(""); setNextSteps(""); setOutcome("pending"); setType("comercial");
-      setShowForm(false);
-      await load();
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const remove = async (id: string) => {
     if (!confirm(lang === "pt" ? "Remover reunião?" : "Remove meeting?")) return;
     await fetch(`/api/crm/meetings?id=${id}`, { method: "DELETE" });
     await load();
   };
+
+  const visible = showAll ? rows : rows.slice(0, 5);
+  const toRecord = (m: Meeting): MeetingRecord => ({
+    id: m.id,
+    entity_uid: m.entity_uid || entityUid,
+    meeting_date: m.meeting_date,
+    meeting_type: m.meeting_type,
+    attendees: m.attendees,
+    agenda: m.agenda,
+    summary: m.summary,
+    next_steps: m.next_steps,
+    outcome: m.outcome,
+    source: m.source,
+    confidentiality: m.confidentiality,
+    metadata: m.metadata || null,
+  });
 
   return (
     <div>
@@ -341,42 +413,9 @@ function MeetingsSection({ entityUid, lang }: { entityUid: string; lang: Lang })
         icon={<CalendarDays size={13} className="text-purple-600" />}
         title={lang === "pt" ? "Reuniões" : "Meetings"}
         count={rows.length}
-        onAdd={() => setShowForm(!showForm)}
+        onAdd={() => { setEditing(null); setModalMode("create"); }}
         addLabel={lang === "pt" ? "Registrar" : "Log"}
       />
-
-      {showForm && (
-        <div className="mb-3 p-3 border border-purple-200 rounded-md bg-purple-50/40 space-y-2">
-          <div className="grid grid-cols-3 gap-2">
-            <CrmInput type="date" value={date} onChange={setDate} />
-            <CrmSelect
-              value={type}
-              onChange={setType}
-              options={Object.entries(MEETING_TYPE_LABELS).map(([k, v]) => ({ value: k, label: lang === "pt" ? v.pt : v.en }))}
-            />
-            <CrmSelect
-              value={outcome}
-              onChange={setOutcome}
-              options={Object.entries(OUTCOME_LABELS).map(([k, v]) => ({ value: k, label: lang === "pt" ? v.pt : v.en }))}
-            />
-          </div>
-          <CrmTextarea value={summary} onChange={setSummary} placeholder={lang === "pt" ? "Resumo da reunião" : "Meeting summary"} rows={2} />
-          <CrmTextarea value={nextSteps} onChange={setNextSteps} placeholder={lang === "pt" ? "Próximos passos" : "Next steps"} rows={2} />
-          <div className="flex justify-end gap-2">
-            <button onClick={() => setShowForm(false)} className="px-2.5 py-1 text-[11px] text-neutral-500 hover:text-neutral-700">
-              {lang === "pt" ? "Cancelar" : "Cancel"}
-            </button>
-            <button
-              onClick={submit}
-              disabled={saving}
-              className="flex items-center gap-1 px-3 py-1 rounded text-[11px] font-bold bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-40"
-            >
-              {saving ? <Loader2 size={11} className="animate-spin" /> : <Save size={11} />}
-              {lang === "pt" ? "Salvar" : "Save"}
-            </button>
-          </div>
-        </div>
-      )}
 
       {loading ? (
         <SectionLoader />
@@ -384,9 +423,12 @@ function MeetingsSection({ entityUid, lang }: { entityUid: string; lang: Lang })
         <SectionEmpty text={lang === "pt" ? "Nenhuma reunião registrada" : "No meetings logged"} />
       ) : (
         <div className="space-y-1.5">
-          {rows.slice(0, 5).map((m) => {
+          {visible.map((m) => {
             const outcomeInfo = OUTCOME_LABELS[m.outcome] || OUTCOME_LABELS.pending;
             const typeInfo = MEETING_TYPE_LABELS[m.meeting_type] || MEETING_TYPE_LABELS.outro;
+            const meta = m.metadata || {};
+            const tech = meta.competitor_tech || [];
+            const service = meta.service_interest || [];
             return (
               <div key={m.id} className="px-3 py-2 border border-neutral-200 rounded-md bg-white text-[12px]">
                 <div className="flex items-start justify-between gap-2 mb-1">
@@ -398,11 +440,35 @@ function MeetingsSection({ entityUid, lang }: { entityUid: string; lang: Lang })
                     <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase ${outcomeInfo.color}`}>
                       {lang === "pt" ? outcomeInfo.pt : outcomeInfo.en}
                     </span>
+                    {meta.mood && (
+                      <span className="text-[13px]" title={meta.mood}>{MOOD_EMOJI[meta.mood] || ""}</span>
+                    )}
+                    {m.source === "onenote_import" && (
+                      <span className="text-[9px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded uppercase">
+                        OneNote
+                      </span>
+                    )}
                   </div>
-                  <button onClick={() => remove(m.id)} className="text-neutral-300 hover:text-red-500 transition-colors shrink-0">
-                    <Trash2 size={12} />
-                  </button>
+                  <div className="flex items-center gap-0.5 shrink-0">
+                    <button
+                      onClick={() => { setEditing(m); setModalMode("edit"); }}
+                      className="text-neutral-300 hover:text-neutral-900 transition-colors"
+                      title={lang === "pt" ? "Editar" : "Edit"}
+                    >
+                      <Edit3 size={12} />
+                    </button>
+                    <button
+                      onClick={() => remove(m.id)}
+                      className="text-neutral-300 hover:text-red-500 transition-colors"
+                      title={lang === "pt" ? "Remover" : "Remove"}
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
                 </div>
+                {m.agenda && (
+                  <p className="text-[11px] font-semibold text-neutral-800 mb-0.5">{m.agenda}</p>
+                )}
                 {m.summary && <p className="text-[11px] text-neutral-700 leading-relaxed line-clamp-2">{m.summary}</p>}
                 {m.next_steps && (
                   <p className="text-[11px] text-neutral-500 mt-1">
@@ -410,10 +476,44 @@ function MeetingsSection({ entityUid, lang }: { entityUid: string; lang: Lang })
                     {m.next_steps}
                   </p>
                 )}
+                {(tech.length > 0 || service.length > 0) && (
+                  <div className="flex flex-wrap gap-1 mt-1.5">
+                    {tech.map((t) => (
+                      <span key={"t-" + t} className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200">
+                        {t}
+                      </span>
+                    ))}
+                    {service.map((s) => (
+                      <span key={"s-" + s} className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200">
+                        {s}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             );
           })}
+          {rows.length > 5 && (
+            <button
+              onClick={() => setShowAll(!showAll)}
+              className="text-[10px] font-semibold text-purple-600 hover:text-purple-800 px-3 py-1"
+            >
+              {showAll
+                ? (lang === "pt" ? "Mostrar menos" : "Show less")
+                : (lang === "pt" ? `+ ${rows.length - 5} reuniões` : `+ ${rows.length - 5} meetings`)}
+            </button>
+          )}
         </div>
+      )}
+
+      {modalMode !== "closed" && (
+        <MeetingFormModal
+          lang={lang}
+          entityUid={entityUid}
+          meeting={editing ? toRecord(editing) : null}
+          onClose={() => setModalMode("closed")}
+          onSaved={() => { setModalMode("closed"); load(); }}
+        />
       )}
     </div>
   );

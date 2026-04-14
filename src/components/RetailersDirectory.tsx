@@ -51,7 +51,8 @@ function computeCnpjDv(base12: string): string {
 }
 
 /** Build full 14-digit CNPJ for the matriz from the 8-digit root. */
-function buildMatrizCnpj(cnpjRaiz: string): string {
+function buildMatrizCnpj(cnpjRaiz: string | null | undefined): string {
+  if (!cnpjRaiz) return "";
   const base12 = cnpjRaiz.padStart(8, "0") + "0001";
   return base12 + computeCnpjDv(base12);
 }
@@ -175,27 +176,73 @@ export function RetailersDirectory({ lang }: { lang: Lang }) {
 
   const fetchRetailers = async () => {
     setLoading(true);
+    // retailers.cnpj_raiz was dropped — resolve it via legal_entities.tax_id
+    // through the entity_uid FK embed.
     let query = supabase
       .from("retailers")
-      .select("*", { count: "exact" })
+      .select("*, legal_entities(tax_id)", { count: "exact" })
       .order(sortField, { ascending: sortDir === "asc", nullsFirst: false })
       .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
 
-    if (search.trim()) query = query.or(`razao_social.ilike.%${search.trim()}%,nome_fantasia.ilike.%${search.trim()}%,cnpj_raiz.ilike.%${search.trim()}%,entity_uid.ilike.%${search.trim()}%`);
+    if (search.trim()) {
+      const q = search.trim();
+      const digits = q.replace(/\D/g, "");
+      // If the query is mostly digits, resolve entity_uids by tax_id first
+      // so the retailer query can filter by .in("entity_uid", ...).
+      const orParts = [
+        `razao_social.ilike.%${q}%`,
+        `nome_fantasia.ilike.%${q}%`,
+        `entity_uid.ilike.%${q}%`,
+      ];
+      if (digits.length >= 4) {
+        const { data: byTax } = await supabase
+          .from("legal_entities")
+          .select("entity_uid")
+          .ilike("tax_id", `%${digits.slice(0, 8)}%`)
+          .limit(500);
+        const uids = (byTax || []).map((r: any) => r.entity_uid).filter(Boolean);
+        if (uids.length) {
+          query = query.or(`${orParts.join(",")},entity_uid.in.(${uids.join(",")})`);
+        } else {
+          query = query.or(orParts.join(","));
+        }
+      } else {
+        query = query.or(orParts.join(","));
+      }
+    }
     if (grupoFilter) query = query.eq("grupo_acesso", grupoFilter);
     if (classificacaoFilter) query = query.eq("classificacao", classificacaoFilter);
 
-    // UF filter requires joining with locations
+    // UF filter requires joining with locations. retailer_locations keys
+    // on cnpj_raiz (no entity_uid column), so resolve UF → cnpj_raiz list
+    // → entity_uid list through legal_entities.tax_id.
     if (ufFilter) {
-      const { data: ufLocations } = await supabase.from("retailer_locations").select("entity_uid").eq("uf", ufFilter).not("entity_uid", "is", null);
-      if (ufLocations?.length) {
-        const uids = [...new Set(ufLocations.map((r: any) => r.entity_uid))];
-        query = query.in("entity_uid", uids.slice(0, 1000)); // Supabase limit
+      const { data: ufLocations } = await supabase
+        .from("retailer_locations")
+        .select("cnpj_raiz")
+        .eq("uf", ufFilter)
+        .not("cnpj_raiz", "is", null);
+      const taxIds = [...new Set((ufLocations || []).map((r: any) => r.cnpj_raiz))].slice(0, 2000);
+      if (taxIds.length) {
+        const { data: ufEntities } = await supabase
+          .from("legal_entities")
+          .select("entity_uid")
+          .in("tax_id", taxIds);
+        const uids = [...new Set((ufEntities || []).map((e: any) => e.entity_uid))].filter(Boolean);
+        if (uids.length) query = query.in("entity_uid", uids.slice(0, 1000));
       }
     }
 
     const { data, count } = await query;
-    if (data) setRetailers(data);
+    if (data) {
+      // Flatten embedded legal_entities.tax_id into cnpj_raiz for
+      // downstream display/CNPJ-construction code.
+      const flat = (data as any[]).map((r) => ({
+        ...r,
+        cnpj_raiz: r.legal_entities?.tax_id || "",
+      }));
+      setRetailers(flat);
+    }
     if (count != null) setTotalCount(count);
     setLoading(false);
   };
@@ -204,7 +251,7 @@ export function RetailersDirectory({ lang }: { lang: Lang }) {
     setMapLoading(true);
     let query = supabase
       .from("retailer_locations")
-      .select("id, entity_uid, cnpj, nome_fantasia, razao_social, logradouro, numero, bairro, municipio, uf, cep, latitude, longitude, geo_precision")
+      .select("id, cnpj_raiz, cnpj, nome_fantasia, razao_social, logradouro, numero, bairro, municipio, uf, cep, latitude, longitude, geo_precision")
       .not("latitude", "is", null)
       .not("longitude", "is", null)
       .limit(MAP_LIMIT);
@@ -219,14 +266,15 @@ export function RetailersDirectory({ lang }: { lang: Lang }) {
     setMapLoading(false);
   }, [ufFilter, search]);
 
-  const fetchLocations = async (key: string, entityUid: string) => {
+  const fetchLocations = async (key: string, cnpjRaiz: string) => {
     if (locations[key]) return;
-    const { data } = await supabase.from("retailer_locations").select("*").eq("entity_uid", entityUid).order("uf");
+    if (!cnpjRaiz) return;
+    const { data } = await supabase.from("retailer_locations").select("*").eq("cnpj_raiz", cnpjRaiz).order("uf");
     if (data) setLocations(prev => ({ ...prev, [key]: data }));
   };
 
-  const toggleExpand = (key: string, entityUid: string) => {
-    if (expandedId === key) { setExpandedId(null); } else { setExpandedId(key); fetchLocations(key, entityUid); }
+  const toggleExpand = (key: string, cnpjRaiz: string) => {
+    if (expandedId === key) { setExpandedId(null); } else { setExpandedId(key); fetchLocations(key, cnpjRaiz); }
   };
 
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
@@ -341,7 +389,7 @@ export function RetailersDirectory({ lang }: { lang: Lang }) {
                     const rKey = r.entity_uid || r.cnpj_raiz;
                     return (
                       <RetailerRow key={rKey} retailer={r} lang={lang} expanded={expandedId === rKey}
-                        onToggle={() => toggleExpand(rKey, r.entity_uid || r.cnpj_raiz)} locations={locations[rKey]}
+                        onToggle={() => toggleExpand(rKey, r.cnpj_raiz)} locations={locations[rKey]}
                         onRetailerUpdate={(id, field, value) => {
                           setRetailers(prev => prev.map(ret => (ret.entity_uid || ret.cnpj_raiz) === id ? { ...ret, [field]: value } : ret));
                         }} />

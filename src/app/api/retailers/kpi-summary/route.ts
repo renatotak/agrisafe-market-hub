@@ -44,15 +44,18 @@ export async function GET() {
     // uf) so we can also collapse to "channels per city" rather than
     // "branches per city" — a single retailer with many branches in the
     // same city should count once.
+    // retailer_locations has cnpj_raiz (not entity_uid) — the location
+    // table still keys on the legacy 8-digit CNPJ root. That's enough for
+    // the "channels per city" dedup since cnpj_raiz is 1:1 with retailers.
     const { data: locRows } = await supabase
       .from('retailer_locations')
-      .select('entity_uid, municipio, uf')
+      .select('cnpj_raiz, municipio, uf')
       .not('municipio', 'is', null)
       .not('uf', 'is', null)
-      .not('entity_uid', 'is', null)
+      .not('cnpj_raiz', 'is', null)
       .limit(50000); // hard cap; we only have ~30k locations
 
-    // Channels per city (dedup on entity_uid so each retailer counts once
+    // Channels per city (dedup on cnpj_raiz so each retailer counts once
     // per city, not once per branch).
     const cityChannelMap = new Map<string, { municipio: string; uf: string; channels: Set<string> }>();
     for (const row of locRows || []) {
@@ -61,7 +64,7 @@ export async function GET() {
       if (!cityChannelMap.has(key)) {
         cityChannelMap.set(key, { municipio: r.municipio, uf: r.uf, channels: new Set() });
       }
-      cityChannelMap.get(key)!.channels.add(r.entity_uid);
+      cityChannelMap.get(key)!.channels.add(r.cnpj_raiz);
     }
 
     const cityCount = cityChannelMap.size;

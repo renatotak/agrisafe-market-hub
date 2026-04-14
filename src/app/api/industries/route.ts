@@ -101,7 +101,7 @@ export async function GET(request: Request) {
       await Promise.all([
         supabase
           .from('industries')
-          .select('id, name, name_display, segment, headquarters_country, website')
+          .select('id, name, name_display, segment, headquarters_country, website, entity_uid')
           .order('name'),
         supabase.from('industry_products').select('industry_id'),
         supabase.from('retailer_industries').select('industry_id'),
@@ -123,45 +123,81 @@ export async function GET(request: Request) {
       retMap[r.industry_id] = (retMap[r.industry_id] || 0) + 1
     }
 
-    // Curated cards (rich segment + hq country, clickable for drill-down)
-    const curatedItems = (curated || []).map((ind: any) => ({
-      id: ind.id,
-      kind: 'curated' as const,
-      name: ind.name,
-      name_display: ind.name_display,
-      segment: ind.segment || [],
-      headquarters_country: ind.headquarters_country,
-      website: ind.website,
-      product_count: prodMap[ind.id] || 0,
-      retailer_count: retMap[ind.id] || 0,
-    }))
+    // Build entity_uid → imported-row lookup so we can hand RF metadata
+    // to the curated row when the two are linked (mig 061 + backfill).
+    const importedByEntityUid = new Map<string, any>()
+    for (const er of imported || []) {
+      const le: any = (er as any).legal_entities || {}
+      if (le.entity_uid) importedByEntityUid.set(le.entity_uid, er)
+    }
 
-    // Imported cards (CNAE-derived segment, RF fields inline). The id is
-    // the entity_uid so the UI can route drill-down through a future
-    // entity-aware profile endpoint.
-    const importedItems = (imported || []).map((er: any) => {
-      const m = er.metadata || {}
-      const le = er.legal_entities || {}
+    // Track which entity_uids have been claimed by a curated card so we
+    // don't render a second "imported" card for the same actor.
+    const consumedEntityUids = new Set<string>()
+
+    // Curated cards (rich brand-profile, clickable for drill-down). When
+    // linked to a legal_entity via entity_uid, we hydrate the card with
+    // RF metadata (CNPJ, CNAE, porte, etc.) so the user gets a single
+    // unified view.
+    const curatedItems = (curated || []).map((ind: any) => {
+      const linked = ind.entity_uid ? importedByEntityUid.get(ind.entity_uid) : null
+      if (linked) consumedEntityUids.add(ind.entity_uid)
+      const m = linked?.metadata || {}
+      const le = linked?.legal_entities || {}
       return {
-        id: er.entity_uid,
-        kind: 'imported' as const,
-        name: le.display_name || le.legal_name || '—',
-        name_display: le.display_name || le.legal_name || '—',
-        segment: cnaeToSegment(m.cnae_fiscal_descricao || ''),
-        headquarters_country: null,
-        website: null,
-        product_count: 0,
-        retailer_count: 0,
-        cnpj: le.tax_id,
-        cnae: m.cnae_fiscal,
-        cnae_descricao: m.cnae_fiscal_descricao,
+        id: ind.id,                 // keep the slug so drill-down still works
+        entity_uid: ind.entity_uid || null,
+        kind: 'curated' as const,
+        name: ind.name,
+        name_display: ind.name_display,
+        segment: (ind.segment && ind.segment.length > 0)
+          ? ind.segment
+          : cnaeToSegment(m.cnae_fiscal_descricao || ''),
+        headquarters_country: ind.headquarters_country,
+        website: ind.website,
+        product_count: prodMap[ind.id] || 0,
+        retailer_count: retMap[ind.id] || 0,
+        // Pulled in from the linked legal_entity (when present)
+        cnpj: le.tax_id || null,
+        cnae: m.cnae_fiscal || null,
+        cnae_descricao: m.cnae_fiscal_descricao || null,
         capital_social: m.capital_social ?? null,
-        porte: m.porte,
+        porte: m.porte || null,
         inpev: m.inpev === true,
         cnpj_filiais: m.cnpj_filiais ?? 0,
-        natureza_juridica: m.natureza_juridica,
+        natureza_juridica: m.natureza_juridica || null,
       }
     })
+
+    // Imported cards — only those NOT already represented by a curated
+    // row. The id is the entity_uid so the UI can route drill-down
+    // through a future entity-aware profile endpoint.
+    const importedItems = (imported || [])
+      .filter((er: any) => !consumedEntityUids.has(((er as any).legal_entities || {}).entity_uid))
+      .map((er: any) => {
+        const m = er.metadata || {}
+        const le = er.legal_entities || {}
+        return {
+          id: er.entity_uid,
+          entity_uid: er.entity_uid,
+          kind: 'imported' as const,
+          name: le.display_name || le.legal_name || '—',
+          name_display: le.display_name || le.legal_name || '—',
+          segment: cnaeToSegment(m.cnae_fiscal_descricao || ''),
+          headquarters_country: null,
+          website: null,
+          product_count: 0,
+          retailer_count: 0,
+          cnpj: le.tax_id,
+          cnae: m.cnae_fiscal,
+          cnae_descricao: m.cnae_fiscal_descricao,
+          capital_social: m.capital_social ?? null,
+          porte: m.porte,
+          inpev: m.inpev === true,
+          cnpj_filiais: m.cnpj_filiais ?? 0,
+          natureza_juridica: m.natureza_juridica,
+        }
+      })
 
     return NextResponse.json({
       industries: [...curatedItems, ...importedItems],

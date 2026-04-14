@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { Lang, t } from "@/lib/i18n";
-import { MapPin, ExternalLink, CalendarDays, Loader2, RefreshCw, LayoutList, Calendar, Search, ArrowUpDown, Globe, Monitor, Sparkles, BookOpen, Database } from "lucide-react";
+import { MapPin, ExternalLink, CalendarDays, Loader2, RefreshCw, LayoutList, Calendar, Search, ArrowUpDown, Globe, Monitor, Sparkles, BookOpen, Database, Edit3, EyeOff } from "lucide-react";
+import { EventFormModal, type EventEditRecord } from "@/components/EventFormModal";
 
 interface AgroEvent {
   id: string;
@@ -52,6 +53,18 @@ function getTypeColor(tipo: string): string {
   return typeColors[tipo] || "#5B7A2F";
 }
 
+/** Pretty label (from events-db) → DB enum value used in `events.type`. */
+function mapTipoToDbType(tipo: string): string {
+  switch (tipo) {
+    case "Feiras Agro": return "fair";
+    case "Congressos":  return "conference";
+    case "Workshop":    return "workshop";
+    case "Webinar":     return "webinar";
+    case "Fóruns":      return "summit";
+    default:            return "other";
+  }
+}
+
 type ViewMode = "cards" | "list" | "calendar";
 
 export function EventTracker({ lang }: { lang: Lang }) {
@@ -72,6 +85,23 @@ export function EventTracker({ lang }: { lang: Lang }) {
   // Phase 23 — enrich state
   const [enrichingId, setEnrichingId] = useState<string | null>(null);
   const [enrichToast, setEnrichToast] = useState<string | null>(null);
+  // Edit modal state
+  const [editingEvent, setEditingEvent] = useState<EventEditRecord | null>(null);
+  const openEdit = (ev: AgroEvent) => {
+    setEditingEvent({
+      id: ev.id,
+      name: ev.nome,
+      date: ev.dataInicio,
+      end_date: ev.dataFim || null,
+      location: [ev.cidade, ev.estado].filter(Boolean).join(", ") || null,
+      type: mapTipoToDbType(ev.tipo),
+      website: ev.website || null,
+      description_pt: ev.description_pt || null,
+      source_name: ev.source_name || null,
+      latitude: ev.latitude ?? null,
+      longitude: ev.longitude ?? null,
+    });
+  };
 
   const fetchEvents = async () => {
     setLoading(true);
@@ -362,6 +392,14 @@ export function EventTracker({ lang }: { lang: Lang }) {
                 {lang === "pt" ? "Site" : "Site"}
               </a>
             )}
+            <button
+              onClick={(e) => { e.stopPropagation(); openEdit(ev); }}
+              title={lang === "pt" ? "Editar evento" : "Edit event"}
+              className="ml-auto flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded text-amber-700 bg-amber-50 border border-amber-200 hover:bg-amber-100 transition-colors"
+            >
+              <Edit3 size={10} />
+              {lang === "pt" ? "Editar" : "Edit"}
+            </button>
           </div>
         </div>
       </div>
@@ -533,6 +571,7 @@ export function EventTracker({ lang }: { lang: Lang }) {
                   <th className="px-5 py-3">{tr.events.location}</th>
                   <th className="px-5 py-3">{tr.events.type}</th>
                   <th className="px-5 py-3 text-right">Formato</th>
+                  <th className="px-3 py-3 w-10"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-200">
@@ -560,6 +599,15 @@ export function EventTracker({ lang }: { lang: Lang }) {
                       </span>
                     </td>
                     <td className="px-5 py-3 text-right text-[11px] text-neutral-500">{ev.formato}</td>
+                    <td className="px-3 py-3 text-right">
+                      <button
+                        onClick={() => openEdit(ev)}
+                        title={lang === "pt" ? "Editar evento" : "Edit event"}
+                        className="p-1.5 rounded hover:bg-amber-50 text-neutral-400 hover:text-amber-700"
+                      >
+                        <Edit3 size={13} />
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -581,6 +629,15 @@ export function EventTracker({ lang }: { lang: Lang }) {
           ? Object.keys(sourceCounts).join(" · ")
           : "—"}
       </p>
+
+      {editingEvent && (
+        <EventFormModal
+          lang={lang}
+          event={editingEvent}
+          onClose={() => setEditingEvent(null)}
+          onSaved={() => { setEditingEvent(null); fetchEvents(); }}
+        />
+      )}
     </div>
   );
 }

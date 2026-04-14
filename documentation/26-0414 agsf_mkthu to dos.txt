@@ -1,0 +1,46 @@
+Painel:
+ - Indicator of Dados -> showing 5 out of 9  alerts; I do not understand what represents 5 or 9; the 2 scrapers with malfunction, when revised only show 1m which is for FAOSTAT, and I checked manually and it is working
+ - For briefing do dia -> create an agent in Lentes de Análise (under Configurações) who is an expert in analysing all news, add knowledge to memory, and summarize what is really important, especially highlighting what this project monitors: agribusiness industries and ag input retailers, recuperacoes judiciais in agribusiness companies, commodity market prices
+
+Pulso do Mercado:
+ - Create a panel for ag input prices, especially for imported fertilizers
+
+Inteligencia de Insumos:
+ - None of the tabs are working properly
+ - Focus attention on users journey:
+	- Most important fertilizers and chemical defensives for each monitored culture
+	- For the list of products, show alternatives
+	- Another view for list of products will be the main industries that have commercial product (see files in local files/Kynetec folder)
+
+Eventos Agro:
+ - I added information in Summit Brazil Super Foods 2026, like city and state, and also geolocation, check if it is visible in map in Painel
+
+Diretorio de Canais:
+ - Check if data in indicators are updated, especially "Em Recuperação Judicial"
+
+Diretorio de Industrias:
+ - Chat App Campo is not to create a chat with sales rep of each industry; Chat is going to be for this project's users, to find information, and add UX and journey knowledge for products improvements
+ - Check if all Inpev members are listed according to raw data
+
+Log de Reunioes -> revise again: many companies were incorrectly listed (like Biocaz, named as Biocontrol) due to lack of visibility of app by the time it was uploaded (when uploaded, app was only targeting ag input retailers, but there are other companies like industries, tradings, and financial institutions)
+
+New chapter: financial institutions; where all FIDCs, FIAGROS, banks, cooperative banks (Sicredi, Sicoob, Ailos, etc) will be listed
+	- This chapter will feed news (and be feeded by news also), it will check in Banco Central for agribusiness clients active inventory of credits, and other relevant data for this project -> objective: show to our users that there are more institutions that can provide capital than they know
+
+Central de Conteudo:
+ - I published an article yesterday on linkedin and need more insights and new ideas for the next following weeks
+ - What is in pipeline was published already, I need a button to provide new suggestions based on news and insights from news and knowledge base
+
+Marco Regulatório:
+ - It seems this chapter is not updated
+ - Below indicators, it will be nice to have a wrap up of what is being changed by new laws and rules
+
+Recuperação Judicial:
+ - Many companies are missing, according to Serasa information (chec file in C:\Users\renat\.gemini\antigravity\projects\0 gh_agrisafe\agsf-mkthub\local files\Serasa)
+ - It seems that the value of the recuperacao judicial amount of debt is wrong. It needs revision, and explicitly mention source
+ - No card has details, although they are collapsible cards
+
+Base de Conhecimento -> AgriSafe Oracle:
+ - It seems that this is trhe chat I need, as a persistent chat in app (button in the bottom right of the app). It shoud use Vertex to provide all information needed
+
+Base de Conhecimento -> Cobertura do Conhecimento: this chart does not add value to user. Instead, merge Busca Semantica and mapa de conexoes tabs (and if AgriSafe Oracle will be the persistent chat, there is no need to have tabs anymore)
