@@ -134,14 +134,23 @@ export function RetailersDirectory({ lang }: { lang: Lang }) {
   // KPI stats — kept for the header subtitle ("X canais mapeados em Y estados")
   const [stats, setStats] = useState({ total: 0, distribuidores: 0, cooperativas: 0, estados: 0 });
 
+  // Phase 1d — Curation filter chips
+  const [curatedUids, setCuratedUids] = useState<Set<string>>(new Set());
+  const [clientUids, setClientUids] = useState<Set<string>>(new Set());
+  const [leadUids, setLeadUids] = useState<Set<string>>(new Set());
+  const [curationLoaded, setCurationLoaded] = useState(false);
+  const [filterCurated, setFilterCurated] = useState(false);
+  const [filterClient, setFilterClient] = useState(false);
+  const [filterLead, setFilterLead] = useState(false);
+
   // Server-side sort. Defaults to razao_social ASC (matches the old hardcoded order).
   type SortField = "razao_social" | "grupo_acesso" | "classificacao" | "faixa_faturamento" | "porte_name";
   const [sortField, setSortField] = useState<SortField>("razao_social");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
-  useEffect(() => { fetchRetailers(); fetchFilterOptions(); fetchStats(); }, []);
-  useEffect(() => { setPage(0); }, [search, ufFilter, grupoFilter, classificacaoFilter, sortField, sortDir]);
-  useEffect(() => { fetchRetailers(); }, [page, search, ufFilter, grupoFilter, classificacaoFilter, sortField, sortDir]);
+  useEffect(() => { fetchRetailers(); fetchFilterOptions(); fetchStats(); fetchCurationSets(); }, []);
+  useEffect(() => { setPage(0); }, [search, ufFilter, grupoFilter, classificacaoFilter, sortField, sortDir, filterCurated, filterClient, filterLead]);
+  useEffect(() => { fetchRetailers(); }, [page, search, ufFilter, grupoFilter, classificacaoFilter, sortField, sortDir, filterCurated, filterClient, filterLead, curationLoaded]);
 
   const toggleSort = (field: SortField) => {
     if (sortField === field) {
@@ -160,6 +169,27 @@ export function RetailersDirectory({ lang }: { lang: Lang }) {
     const { data: ufData } = await supabase.from("retailer_locations").select("uf").not("uf", "is", null);
     const estados = ufData ? new Set(ufData.map((r: any) => r.uf)).size : 0;
     setStats({ total: total || 0, distribuidores: dist || 0, cooperativas: coop || 0, estados });
+  };
+
+  // Phase 1d — fetch entity_uid sets for curation filters
+  const fetchCurationSets = async () => {
+    const [notesRes, rolesRes, leadsRes, meetingsRes] = await Promise.all([
+      // is_user_curated: entities with company_notes entries
+      supabase.from("company_notes").select("entity_uid"),
+      // is_client: entities with role_type='client' in entity_roles
+      supabase.from("entity_roles").select("entity_uid").eq("role_type", "client"),
+      // is_lead: entities with rows in the leads table
+      supabase.from("leads").select("entity_uid"),
+      // is_user_curated (also): entities with onenote-imported meetings
+      supabase.from("meetings").select("entity_uid").eq("source", "onenote_import"),
+    ]);
+    const curated = new Set<string>();
+    for (const r of notesRes.data || []) if (r.entity_uid) curated.add(r.entity_uid);
+    for (const r of meetingsRes.data || []) if (r.entity_uid) curated.add(r.entity_uid);
+    setCuratedUids(curated);
+    setClientUids(new Set((rolesRes.data || []).map((r: any) => r.entity_uid).filter(Boolean)));
+    setLeadUids(new Set((leadsRes.data || []).map((r: any) => r.entity_uid).filter(Boolean)));
+    setCurationLoaded(true);
   };
 
   const fetchFilterOptions = async () => {
@@ -233,6 +263,29 @@ export function RetailersDirectory({ lang }: { lang: Lang }) {
       }
     }
 
+    // Phase 1d — curation chip filters: intersect active sets → .in("entity_uid", ...)
+    if (curationLoaded && (filterCurated || filterClient || filterLead)) {
+      // Collect UIDs matching ALL active filters (intersection)
+      const sets: Set<string>[] = [];
+      if (filterCurated) sets.push(curatedUids);
+      if (filterClient) sets.push(clientUids);
+      if (filterLead) sets.push(leadUids);
+      // Union first set, then intersect with remaining
+      let merged = new Set(sets[0]);
+      for (let i = 1; i < sets.length; i++) {
+        merged = new Set([...merged].filter(uid => sets[i].has(uid)));
+      }
+      const curationUids = [...merged].slice(0, 1000);
+      if (curationUids.length === 0) {
+        // No matches — short-circuit
+        setRetailers([]);
+        setTotalCount(0);
+        setLoading(false);
+        return;
+      }
+      query = query.in("entity_uid", curationUids);
+    }
+
     const { data, count } = await query;
     if (data) {
       // Flatten embedded legal_entities.tax_id into cnpj_raiz for
@@ -278,7 +331,7 @@ export function RetailersDirectory({ lang }: { lang: Lang }) {
   };
 
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
-  const hasActiveFilters = ufFilter || grupoFilter || classificacaoFilter || search;
+  const hasActiveFilters = ufFilter || grupoFilter || classificacaoFilter || search || filterCurated || filterClient || filterLead;
 
   return (
     <div>
@@ -323,7 +376,7 @@ export function RetailersDirectory({ lang }: { lang: Lang }) {
             className={`flex items-center gap-2 px-4 py-2.5 rounded-md text-[14px] font-medium transition-all border ${hasActiveFilters ? "bg-brand-surface border-brand-light text-brand-primary" : "bg-neutral-50 border-neutral-200 text-neutral-600 hover:bg-neutral-100"}`}>
             <Filter size={16} />
             {lang === "pt" ? "Filtros" : "Filters"}
-            {hasActiveFilters && <span className="w-5 h-5 rounded-full bg-brand-primary text-white text-[10px] flex items-center justify-center font-bold">{[ufFilter, grupoFilter, classificacaoFilter].filter(Boolean).length}</span>}
+            {hasActiveFilters && <span className="w-5 h-5 rounded-full bg-brand-primary text-white text-[10px] flex items-center justify-center font-bold">{[ufFilter, grupoFilter, classificacaoFilter, filterCurated, filterClient, filterLead].filter(Boolean).length}</span>}
           </button>
         </div>
 
@@ -357,11 +410,41 @@ export function RetailersDirectory({ lang }: { lang: Lang }) {
               </select>
             </div>
             {hasActiveFilters && (
-              <button onClick={() => { setUfFilter(""); setGrupoFilter(""); setClassificacaoFilter(""); setSearch(""); }}
+              <button onClick={() => { setUfFilter(""); setGrupoFilter(""); setClassificacaoFilter(""); setSearch(""); setFilterCurated(false); setFilterClient(false); setFilterLead(false); }}
                 className="flex items-center gap-1 text-[12px] text-error hover:text-error-dark font-medium">
                 <X size={14} />{lang === "pt" ? "Limpar filtros" : "Clear filters"}
               </button>
             )}
+            {/* Phase 1d — Curation chip toggles */}
+            <div className="col-span-full flex flex-wrap items-center gap-2 pt-2 border-t border-neutral-100">
+              <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mr-1">
+                {lang === "pt" ? "Curadoria" : "Curation"}
+              </span>
+              <CurationChip
+                active={filterCurated}
+                onClick={() => setFilterCurated(!filterCurated)}
+                label={lang === "pt" ? "Curado" : "Curated"}
+                count={curatedUids.size}
+                color="bg-brand-surface text-brand-primary border-brand-light"
+                icon={<Pencil size={11} />}
+              />
+              <CurationChip
+                active={filterClient}
+                onClick={() => setFilterClient(!filterClient)}
+                label={lang === "pt" ? "Cliente" : "Client"}
+                count={clientUids.size}
+                color="bg-success-light text-success-dark border-green-200"
+                icon={<CheckCircle2 size={11} />}
+              />
+              <CurationChip
+                active={filterLead}
+                onClick={() => setFilterLead(!filterLead)}
+                label="Lead"
+                count={leadUids.size}
+                color="bg-warning-light text-warning-dark border-orange-200"
+                icon={<Briefcase size={11} />}
+              />
+            </div>
           </div>
         )}
       </div>
@@ -456,6 +539,30 @@ function SortHeader({
         <Icon size={11} className={active ? "" : "opacity-40"} />
       </button>
     </th>
+  );
+}
+
+// ─── Curation Chip (Phase 1d) ───────────────────────────────────────────────
+
+function CurationChip({ active, onClick, label, count, color, icon }: {
+  active: boolean; onClick: () => void; label: string; count: number;
+  color: string; icon: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-all ${
+        active ? color : "bg-white text-neutral-400 border-neutral-200 hover:border-neutral-300"
+      }`}
+    >
+      {icon}
+      {label}
+      {count > 0 && (
+        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${active ? "bg-white/40" : "bg-neutral-100"}`}>
+          {count}
+        </span>
+      )}
+    </button>
   );
 }
 
