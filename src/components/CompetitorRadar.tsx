@@ -631,6 +631,7 @@ function CompetitorModal({ lang, competitor, onClose, onSaved }: {
     const payload: Record<string, unknown> = {
       name: form.name.trim(),
       vertical: form.vertical.trim() || null,
+      segment: form.vertical.trim() || "N/A",
       country: form.country.trim() || null,
       website: form.website.trim() || null,
       tax_id: form.tax_id.replace(/\D/g, "").slice(0, 14) || null,
