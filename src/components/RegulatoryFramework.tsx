@@ -9,7 +9,7 @@ import { MockBadge } from "@/components/ui/MockBadge";
 import {
   ExternalLink, AlertTriangle, Calendar, BookOpen,
   ChevronDown, ChevronUp, Search, Clock, BarChart3, Filter,
-  Upload, List, X, Loader2, Plus, Database, Globe, Building2,
+  Upload, List, X, Loader2, Plus, Database, Globe, Building2, FileText,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
@@ -272,6 +272,43 @@ export function RegulatoryFramework({ lang }: { lang: Lang }) {
           <p className="text-[24px] font-bold text-neutral-900 mt-1">{uniqueAreas}</p>
         </div>
       </div>
+
+      {/* Phase 29 — Regulatory Change Summary */}
+      {norms.length > 0 && (
+        <div className="mb-6 bg-white rounded-lg border border-neutral-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5">
+          <h3 className="text-[14px] font-bold text-neutral-900 mb-3 flex items-center gap-2">
+            <FileText size={15} className="text-brand-primary" />
+            {lang === "pt" ? "Resumo de Mudanças Regulatórias" : "Regulatory Change Summary"}
+          </h3>
+          <div className="space-y-2">
+            {norms.slice(0, 5).map((norm) => (
+              <div key={norm.id} className="flex items-start gap-3 py-2 border-b border-neutral-100 last:border-0">
+                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0 mt-0.5 ${BODY_STYLES[norm.body]?.color || "bg-neutral-600 text-white"}`}>
+                  {norm.body}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[12px] font-semibold text-neutral-900 leading-snug">{norm.title}</p>
+                  {norm.summary && (
+                    <p className="text-[11px] text-neutral-500 mt-0.5 line-clamp-2">{norm.summary}</p>
+                  )}
+                  {norm.affected_areas && norm.affected_areas.length > 0 && (
+                    <div className="flex items-center gap-1 mt-1 flex-wrap">
+                      {norm.affected_areas.slice(0, 4).map((area: string) => (
+                        <span key={area} className="text-[9px] font-bold px-1 py-0.5 rounded bg-neutral-100 text-neutral-600">
+                          {AREA_LABELS[area]?.[lang === "pt" ? "pt" : "en"] || area}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <span className="text-[10px] text-neutral-400 shrink-0">
+                  {norm.published_at ? new Date(norm.published_at).toLocaleDateString(lang === "pt" ? "pt-BR" : "en-US", { day: "numeric", month: "short" }) : ""}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Impact Alerts */}
       {highImpact.length > 0 && (
