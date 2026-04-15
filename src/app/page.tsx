@@ -117,7 +117,7 @@ import { ExecutiveBriefingWidget } from "@/components/ExecutiveBriefingWidget";
 function DashboardOverview({ lang, setActiveModule }: { lang: Lang; setActiveModule: (m: Module) => void }) {
   // Live KPI state
   const [kpis, setKpis] = useState({
-    newsCount: 0, eventsCount: 0, rjCount: 0, retailersCount: 0,
+    newsCount: 0, eventsCount: 0, rjCount: 0, retailersCount: 0, industriesCount: 0,
     sourcesHealthy: 0, sourcesTotal: 0, sourcesErrored: 0,
     topMover: null as { name: string; change: number; unit: string; isPercent: boolean } | null,
     scrapersBroken: 0, scrapersDegraded: 0, scrapersHealthy: 0,
@@ -144,6 +144,10 @@ function DashboardOverview({ lang, setActiveModule }: { lang: Lang; setActiveMod
     // Retailers count
     supabase.from("retailers").select("*", { count: "exact", head: true })
       .then(({ count }) => setKpis(prev => ({ ...prev, retailersCount: count || 0 })));
+
+    // Industries count
+    supabase.from("industries").select("*", { count: "exact", head: true })
+      .then(({ count }) => setKpis(prev => ({ ...prev, industriesCount: count || 0 })));
 
     // Source health: total from data_sources, healthy from recent sync_logs
     supabase.from("data_sources").select("*", { count: "exact", head: true }).eq("active", true)
@@ -214,7 +218,7 @@ function DashboardOverview({ lang, setActiveModule }: { lang: Lang; setActiveMod
     <div className="space-y-6">
 
       {/* Compact KPI Strip — all live data */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-9 gap-2">
         <button onClick={() => handleKpiClick("market")} className="rounded-lg px-3 py-2.5 bg-white border border-neutral-200 text-left hover:border-brand-primary transition-colors group">
           <p className="text-[9px] font-semibold text-neutral-400 uppercase">{lang === "pt" ? "Mercado" : "Market"}</p>
           {kpis.topMover ? (
@@ -257,6 +261,12 @@ function DashboardOverview({ lang, setActiveModule }: { lang: Lang; setActiveMod
             {kpis.retailersCount > 1000 ? `${(kpis.retailersCount / 1000).toFixed(0)}k+` : kpis.retailersCount}
           </p>
           <p className="text-[10px] text-neutral-400">{lang === "pt" ? "canais" : "channels"}</p>
+        </button>
+
+        <button onClick={() => handleKpiClick("industries")} className="rounded-lg px-3 py-2.5 bg-white border border-neutral-200 text-left hover:border-brand-primary transition-colors">
+          <p className="text-[9px] font-semibold text-neutral-400 uppercase">{lang === "pt" ? "Indústrias" : "Industries"}</p>
+          <p className="text-[20px] font-bold text-neutral-900 leading-tight mt-0.5">{kpis.industriesCount}</p>
+          <p className="text-[10px] text-neutral-400">{lang === "pt" ? "cadastradas" : "registered"}</p>
         </button>
 
         <button

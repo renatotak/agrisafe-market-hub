@@ -7,7 +7,7 @@ import {
   X, ChevronRight, BarChart3, Newspaper, Calendar,
   Scale, Store, Database, PenTool, TrendingUp, TrendingDown,
   AlertTriangle, CheckCircle2, Loader2, ExternalLink, ShieldAlert,
-  RefreshCw, FileCode, Circle,
+  RefreshCw, FileCode, Circle, Factory,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
@@ -244,6 +244,16 @@ export function ChapterModal({ isOpen, onClose, chapter, lang, onCTA }: ChapterM
             .map(([state, count]) => ({ state, count }));
           setData(sorted);
         }
+      } else if (mod === "industries") {
+        // Industries: recently updated (last 30d)
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+        const { data: industries } = await supabase
+          .from("industries")
+          .select("name, segment, updated_at")
+          .gte("updated_at", thirtyDaysAgo)
+          .order("updated_at", { ascending: false })
+          .limit(5);
+        setData(industries || []);
       } else if (mod === "dataSources") {
         // Phase 1c — fetch real scraper health to show ALL broken/stale rows
         const res = await fetch("/api/scraper-health");
@@ -283,6 +293,7 @@ export function ChapterModal({ isOpen, onClose, chapter, lang, onCTA }: ChapterM
       events: "events",
       recuperacao: "recuperacao",
       retailers: "retailers",
+      industries: "industries",
       dataSources: "dataSources",
       contentHub: "contentHub",
     };
@@ -297,6 +308,7 @@ export function ChapterModal({ isOpen, onClose, chapter, lang, onCTA }: ChapterM
       case "events": return <Calendar className="text-brand-primary" size={24} />;
       case "recuperacao": return <Scale className="text-error" size={24} />;
       case "retailers": return <Store className="text-brand-primary" size={24} />;
+      case "industries": return <Factory className="text-brand-primary" size={24} />;
       case "dataSources": return <Database className="text-neutral-900" size={24} />;
       case "contentHub": return <PenTool className="text-brand-primary" size={24} />;
       case "riskSignals": return <ShieldAlert className="text-error" size={24} />;
@@ -455,6 +467,21 @@ export function ChapterModal({ isOpen, onClose, chapter, lang, onCTA }: ChapterM
                     <span className="text-[13px] font-semibold text-neutral-800">{lang === "pt" ? "Revendas & Canais" : "Retailers & Channels"}</span>
                   </div>
                   <span className="text-[13px] font-bold text-neutral-900">{it.count}</span>
+                </div>
+              ))}
+
+              {chapter === "industries" && data.map((it, i) => (
+                <div key={i} className="p-3 rounded-xl border border-neutral-100 bg-neutral-50/30">
+                  <div className="flex justify-between items-start mb-1 gap-2">
+                    <span className="text-[13px] font-bold text-neutral-900 line-clamp-1 flex-1">{it.name}</span>
+                    {it.segment && (
+                      <span className="text-[10px] font-bold bg-brand-primary/10 text-brand-primary px-1.5 py-0.5 rounded uppercase shrink-0">{it.segment}</span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-neutral-500">
+                    {lang === "pt" ? "Atualizado" : "Updated"}{" "}
+                    {it.updated_at ? new Date(it.updated_at).toLocaleDateString(lang === "pt" ? "pt-BR" : "en-US") : "—"}
+                  </p>
                 </div>
               ))}
 
