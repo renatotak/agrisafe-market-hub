@@ -6,7 +6,8 @@ import { Module } from "@/components/Sidebar";
 import {
   X, ChevronRight, BarChart3, Newspaper, Calendar,
   Scale, Store, Database, PenTool, TrendingUp, TrendingDown,
-  AlertTriangle, CheckCircle2, Loader2, ExternalLink, ShieldAlert
+  AlertTriangle, CheckCircle2, Loader2, ExternalLink, ShieldAlert,
+  RefreshCw, FileCode, Circle,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
@@ -16,6 +17,112 @@ import { supabase } from "@/lib/supabase";
 // it's NOT in the Sidebar so the Module type from Sidebar.tsx stays
 // untouched. The CTA "Ver Módulo Completo" maps it to "retailers".
 export type ChapterTarget = Module | "riskSignals";
+
+// ─── Phase 1c — Scraper action row with Reprocessar button ───────────────────
+
+function ScraperActionRow({ scraper, lang }: { scraper: any; lang: Lang }) {
+  const tr = t(lang);
+  const [reprocessing, setReprocessing] = useState(false);
+  const [result, setResult] = useState<"idle" | "success" | "error">("idle");
+
+  const isBroken = scraper.status === "broken";
+  const cronRoute = `/api/cron/${scraper.scraper_id}`;
+  const scraperFile = `src/jobs/${scraper.scraper_id}.ts`;
+
+  const handleReprocess = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setReprocessing(true);
+    setResult("idle");
+    try {
+      const res = await fetch(cronRoute, { method: "GET" });
+      setResult(res.ok ? "success" : "error");
+    } catch {
+      setResult("error");
+    } finally {
+      setReprocessing(false);
+    }
+  };
+
+  const fmtRelative = (iso: string | null): string => {
+    if (!iso) return lang === "pt" ? "nunca" : "never";
+    const ms = Date.now() - new Date(iso).getTime();
+    const min = Math.floor(ms / 60000);
+    if (min < 1) return lang === "pt" ? "agora" : "just now";
+    if (min < 60) return lang === "pt" ? `há ${min}min` : `${min}min ago`;
+    const hr = Math.floor(min / 60);
+    if (hr < 24) return lang === "pt" ? `há ${hr}h` : `${hr}h ago`;
+    const d = Math.floor(hr / 24);
+    return lang === "pt" ? `há ${d}d` : `${d}d ago`;
+  };
+
+  return (
+    <div className={`p-3 rounded-xl border ${isBroken ? "border-error/20 bg-error/5" : "border-amber-200 bg-amber-50/50"}`}>
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <Circle
+            size={8}
+            fill={isBroken ? "#F44336" : "#E8722A"}
+            className={isBroken ? "text-red-500 shrink-0" : "text-amber-500 shrink-0"}
+          />
+          <div className="min-w-0">
+            <p className="text-[13px] font-bold text-neutral-900 leading-tight truncate">{scraper.name}</p>
+            <p className="text-[10px] text-neutral-500 font-mono">{scraper.scraper_id}</p>
+          </div>
+        </div>
+        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase shrink-0 ${
+          isBroken ? "bg-error/10 text-error" : "bg-amber-100 text-amber-700"
+        }`}>
+          {isBroken ? (lang === "pt" ? "Quebrado" : "Broken") : (lang === "pt" ? "Degradado" : "Stale")}
+        </span>
+      </div>
+
+      {/* Last success + failure info */}
+      <div className="flex items-center gap-3 text-[10px] text-neutral-500 mb-2">
+        <span>{lang === "pt" ? "Último sucesso:" : "Last success:"} <b>{fmtRelative(scraper.last_success_at)}</b></span>
+        {scraper.consecutive_failures > 0 && (
+          <span className="text-error font-bold">
+            {scraper.consecutive_failures} {lang === "pt" ? "falhas consecutivas" : "consecutive failures"}
+          </span>
+        )}
+      </div>
+
+      {/* Error message from last run */}
+      {scraper.last_run?.error_message && (
+        <p className="text-[10px] text-red-600 bg-red-50 rounded px-2 py-1 mb-2 line-clamp-2 font-mono">
+          {scraper.last_run.error_message}
+        </p>
+      )}
+
+      {/* Action row */}
+      <div className="flex items-center gap-2">
+        <button
+          onClick={handleReprocess}
+          disabled={reprocessing}
+          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-colors ${
+            result === "success"
+              ? "bg-emerald-100 text-emerald-700 border border-emerald-200"
+              : result === "error"
+              ? "bg-red-100 text-red-700 border border-red-200"
+              : "bg-brand-primary text-white hover:bg-brand-primary/90"
+          } disabled:opacity-50`}
+        >
+          <RefreshCw size={11} className={reprocessing ? "animate-spin" : ""} />
+          {reprocessing
+            ? tr.dataSources.reprocessing
+            : result === "success"
+            ? tr.dataSources.reprocessSuccess
+            : result === "error"
+            ? tr.dataSources.reprocessError
+            : tr.dataSources.reprocess}
+        </button>
+        <span className="flex items-center gap-1 text-[10px] text-neutral-400" title={scraperFile}>
+          <FileCode size={10} />
+          {scraperFile}
+        </span>
+      </div>
+    </div>
+  );
+}
 
 interface ChapterModalProps {
   isOpen: boolean;
@@ -135,15 +242,14 @@ export function ChapterModal({ isOpen, onClose, chapter, lang, onCTA }: ChapterM
           setData(sorted);
         }
       } else if (mod === "dataSources") {
-        const { data: logs } = await supabase
-          .from("sync_logs")
-          .select("source, status, started_at")
-          .order("started_at", { ascending: false })
-          .limit(100);
-        if (logs) {
-          const latest = new Map<string, any>();
-          logs.forEach(l => { if (!latest.has(l.source)) latest.set(l.source, l); });
-          setData([...latest.values()].filter(l => l.status === "error").slice(0, 5));
+        // Phase 1c — fetch real scraper health to show ALL broken/stale rows
+        const res = await fetch("/api/scraper-health");
+        const json = await res.json();
+        if (json.success && json.scrapers) {
+          const unhealthy = (json.scrapers as any[]).filter(
+            (s: any) => s.status === "broken" || s.status === "degraded"
+          );
+          setData(unhealthy);
         }
       } else if (mod === "contentHub") {
         const { data: articles } = await supabase
@@ -350,19 +456,13 @@ export function ChapterModal({ isOpen, onClose, chapter, lang, onCTA }: ChapterM
               ))}
 
               {chapter === "dataSources" && data.length > 0 && data.map((it, i) => (
-                <div key={i} className="flex items-center justify-between p-3 rounded-xl border border-error/10 bg-error/5">
-                  <div className="flex items-center gap-3">
-                    <AlertTriangle size={16} className="text-error" />
-                    <span className="text-[13px] font-semibold text-neutral-900">{it.source}</span>
-                  </div>
-                  <span className="text-[11px] font-bold text-error uppercase">{lang === "pt" ? "Erro na Sincronização" : "Sync Error"}</span>
-                </div>
+                <ScraperActionRow key={i} scraper={it} lang={lang} />
               ))}
               {chapter === "dataSources" && data.length === 0 && (
                  <div className="flex flex-col items-center justify-center py-6 text-center">
                     <CheckCircle2 size={32} className="text-success mb-2" />
-                    <p className="text-[13px] font-semibold text-neutral-900">{lang === "pt" ? "Todas as fontes operacionais" : "All sources operational"}</p>
-                    <p className="text-[11px] text-neutral-500 mt-1">{lang === "pt" ? "Nenhum erro de sincronização detectado" : "No sync errors detected"}</p>
+                    <p className="text-[13px] font-semibold text-neutral-900">{tr.dataSources.allScrapersHealthy}</p>
+                    <p className="text-[11px] text-neutral-500 mt-1">{tr.dataSources.noIssuesDetected}</p>
                  </div>
               )}
 

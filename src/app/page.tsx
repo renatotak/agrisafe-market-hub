@@ -119,7 +119,7 @@ function DashboardOverview({ lang, setActiveModule }: { lang: Lang; setActiveMod
   const [kpis, setKpis] = useState({
     newsCount: 0, eventsCount: 0, rjCount: 0, retailersCount: 0,
     sourcesHealthy: 0, sourcesTotal: 0, sourcesErrored: 0, topMover: null as { name: string; change: number } | null,
-    scrapersBroken: 0, scrapersDegraded: 0,
+    scrapersBroken: 0, scrapersDegraded: 0, scrapersHealthy: 0,
   });
 
   // Fetch live KPIs from Supabase + APIs
@@ -169,6 +169,7 @@ function DashboardOverview({ lang, setActiveModule }: { lang: Lang; setActiveMod
           ...prev,
           scrapersBroken: json.summary.broken || 0,
           scrapersDegraded: json.summary.degraded || 0,
+          scrapersHealthy: json.summary.healthy || 0,
         }));
       }
     }).catch(() => {});
@@ -265,32 +266,36 @@ function DashboardOverview({ lang, setActiveModule }: { lang: Lang; setActiveMod
               ? "bg-warning border border-warning hover:bg-warning"
               : "bg-neutral-900 hover:bg-black"
           }`}
+          title={lang === "pt"
+            ? `Scrapers: ${kpis.scrapersHealthy} saudáveis, ${kpis.scrapersBroken} quebrados, ${kpis.scrapersDegraded} degradados`
+            : `Scrapers: ${kpis.scrapersHealthy} healthy, ${kpis.scrapersBroken} broken, ${kpis.scrapersDegraded} stale`}
         >
           <p className="text-[9px] font-semibold text-neutral-500 uppercase flex items-center gap-1">
-            {lang === "pt" ? "Dados" : "Data"}
+            {lang === "pt" ? "Scrapers" : "Scrapers"}
             {kpis.scrapersBroken > 0 && (
               <AlertTriangle size={10} className="text-white" />
             )}
           </p>
-          <p className="text-[20px] font-bold text-white leading-tight mt-0.5">
-            {kpis.sourcesTotal}
+          <p className="text-[13px] font-bold text-white leading-tight mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+            <span className="flex items-center gap-1">
+              <Circle size={6} fill="#2E7D32" className="text-emerald-400" />
+              {kpis.scrapersHealthy}
+            </span>
+            <span className="text-neutral-400">&middot;</span>
+            <span className={`flex items-center gap-1 ${kpis.scrapersBroken > 0 ? "text-white" : ""}`}>
+              <Circle size={6} fill="#F44336" className="text-red-400" />
+              {kpis.scrapersBroken}
+            </span>
+            <span className="text-neutral-400">&middot;</span>
+            <span className={`flex items-center gap-1 ${kpis.scrapersDegraded > 0 ? "text-white" : ""}`}>
+              <Circle size={6} fill="#E8722A" className="text-amber-400" />
+              {kpis.scrapersDegraded}
+            </span>
           </p>
-          <p className="text-[10px] text-neutral-300">
-            {kpis.scrapersBroken > 0
-              ? lang === "pt"
-                ? `${kpis.scrapersBroken} scraper(s) quebrado(s)`
-                : `${kpis.scrapersBroken} scraper(s) broken`
-              : kpis.sourcesErrored > 0
-              ? lang === "pt"
-                ? `${kpis.sourcesErrored} com erro recente`
-                : `${kpis.sourcesErrored} recent errors`
-              : kpis.scrapersDegraded > 0
-              ? lang === "pt"
-                ? `${kpis.scrapersDegraded} degradado(s)`
-                : `${kpis.scrapersDegraded} degraded`
-              : lang === "pt"
-              ? "fontes ativas"
-              : "active sources"}
+          <p className="text-[9px] text-neutral-400 mt-0.5">
+            {lang === "pt"
+              ? `${t(lang).dataSources.scrapersActive} · ${t(lang).dataSources.scrapersBroken} · ${t(lang).dataSources.scrapersStale}`
+              : `${t(lang).dataSources.scrapersActive} · ${t(lang).dataSources.scrapersBroken} · ${t(lang).dataSources.scrapersStale}`}
           </p>
         </button>
 
