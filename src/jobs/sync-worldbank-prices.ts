@@ -33,11 +33,11 @@ const COMMODITY_COLUMNS: { col: number; slug: string; expectedNamePrefix: string
 // These use fuzzy prefix matching, so minor WB label changes won't break the scraper.
 // If a column is missing or drifted, the scraper logs a warning but continues.
 const FERTILIZER_COLUMNS: { col: number; slug: string; expectedNamePrefix: string; expectedUnit: string }[] = [
+  { col: 55, slug: 'fosfato_rocha', expectedNamePrefix: 'Phosphate rock',          expectedUnit: '$/mt' },
   { col: 56, slug: 'dap',           expectedNamePrefix: 'DAP',                     expectedUnit: '$/mt' },
   { col: 57, slug: 'tsp',           expectedNamePrefix: 'TSP',                     expectedUnit: '$/mt' },
   { col: 58, slug: 'ureia',         expectedNamePrefix: 'Urea',                    expectedUnit: '$/mt' },
   { col: 59, slug: 'cloreto_potassio', expectedNamePrefix: 'Potassium chloride', expectedUnit: '$/mt' },
-  { col: 60, slug: 'fosfato_rocha', expectedNamePrefix: 'Phosphate rock',          expectedUnit: '$/mt' },
 ]
 
 const RECENT_YEARS = 15
