@@ -12,17 +12,21 @@
 |------|-------------|
 | 5-entity model | ~9,818 legal_entities · 9,609 roles · 143 mentions |
 | Diretório de Canais | 9,328 retailers · 24,275 locations (geocoded) · CRM panel + Street View |
-| Diretório de Indústrias | 274 industries · 1,699 establishments (geocoded) · CRM panel + Street View |
-| Marco Regulatório | 16 norms with CNAE classification · "X empresas afetadas" badge |
-| Recuperação Judicial | 131 cases · manual CNPJ add with BrasilAPI + debt scrape |
-| Pulso de Mercado | BCB SGS + NA prices + Yahoo futures + FAOSTAT + WB Pink Sheet + CONAB + USDA PSD + MDIC |
+| Diretório de Indústrias | 274 industries · 1,699 establishments (geocoded) · CRM panel + Street View · industries chat → Oracle redirect (Phase 29) |
+| Instituições Financeiras | **NEW Phase 29** — migration 063, component, API route, sidebar entry, seed data (BB, BNDES, Sicredi, Sicoob, Ailos, Cresol, Rabobank, BTG) |
+| Marco Regulatório | 16 norms with CNAE classification · "X empresas afetadas" badge · **regulatory change summary section (Phase 29)** |
+| Recuperação Judicial | 131 cases · manual CNPJ add · **expandable detail cards (Phase 29)** |
+| Pulso de Mercado | BCB SGS + NA prices + Yahoo futures + FAOSTAT + WB Pink Sheet + CONAB + USDA PSD + MDIC · **Preços de Insumos tab (Phase 29)** — DAP, TSP, Urea, KCl, Phosphate Rock from WB |
 | Inteligência de Insumos | Oracle UX · 800 AGROFIT products · manufacturer FK linked |
 | Notícias Agro | 203 articles · 5 RSS feeds · Reading Room Chrome extension |
-| Eventos Agro | AgroAgenda + AgroAdvance unified · per-event AI enrichment |
-| Executive Briefing | Daily 08:00 Gemini summary + price anomaly detection (rolling 2-sigma) |
+| Eventos Agro | AgroAgenda + AgroAdvance unified · per-event AI enrichment · **App Campo API keys + access logs (Phase 29)** |
+| Central de Conteúdo | Article pipeline + link tracking · **"Sugerir Artigos" button (Phase 29)** |
+| Executive Briefing | Daily 08:00 Gemini summary + price anomaly detection (rolling 2-sigma) · **priority lens + entity mentions (Phase 29)** |
+| Base de Conhecimento | Merged search + mind map tabs · **persistent Oracle chat FAB (Phase 29)** |
+| App Campo API | **NEW Phase 29** — API key management (SHA-256), access logs, Settings panel with playbook + key manager + logs tabs |
 | Cron pipeline | 25 jobs on Mac mini via smart orchestrator (2 launchd agents) |
 | MCP server | 9 tools (stdio-based, `npm run mcp`) |
-| Data Ingestion | 176 sources (125 active) · Source CRUD UI · weekly healthcheck |
+| Data Ingestion | 176 sources (125 active) · Source CRUD UI · weekly healthcheck · **Dashboard KPI fixed (Phase 29)** |
 | Auth + deploy | Supabase Auth + SSR · Vercel webapp + Mac mini cron |
 
 ---
