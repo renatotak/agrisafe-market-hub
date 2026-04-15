@@ -44,6 +44,9 @@ export async function GET(req: NextRequest) {
   const url = new URL(req.url)
   const q = (url.searchParams.get("q") || "").trim()
   const k = Math.min(Math.max(parseInt(url.searchParams.get("k") || "10", 10), 1), 25)
+  const langParam = url.searchParams.get("lang") || "pt"
+  // Map i18n codes → BCP-47 tags expected by Discovery Engine summarySpec.
+  const languageCode = langParam === "en" ? "en" : "pt-BR"
 
   if (!q) {
     return NextResponse.json({ error: "q is required" }, { status: 400 })
@@ -102,6 +105,7 @@ export async function GET(req: NextRequest) {
             ignoreAdversarialQuery: true,
             ignoreNonSummarySeekingQuery: false,
             includeCitations: true,
+            languageCode,
           },
           extractiveContentSpec: {
             maxExtractiveAnswerCount: 2,

@@ -42,7 +42,7 @@ export function VertexSearchTestPanel({ lang }: { lang: Lang }) {
     setData(null);
     try {
       const res = await fetch(
-        `/api/knowledge/search-vx?q=${encodeURIComponent(q)}&k=10`,
+        `/api/knowledge/search-vx?q=${encodeURIComponent(q)}&k=10&lang=${lang}`,
       );
       const d = await res.json();
       setData(d);
