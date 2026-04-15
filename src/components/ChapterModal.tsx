@@ -169,9 +169,12 @@ export function ChapterModal({ isOpen, onClose, chapter, lang, onCTA }: ChapterM
           json.data.forEach((c: any) => {
             (c.items || []).forEach((it: any) => {
               if (it.variation) {
+                const isPercent = it.variation.includes("%");
                 allItems.push({
                   name: `${c.commodity} (${it.label})`,
                   price: it.price,
+                  unit: c.unit || "",
+                  isPercent,
                   change: parseFloat(it.variation.replace(",", ".").replace("%", "")),
                 });
               }
@@ -344,7 +347,7 @@ export function ChapterModal({ isOpen, onClose, chapter, lang, onCTA }: ChapterM
                   <div className="text-right">
                     <p className="text-[13px] font-bold text-neutral-900">{it.price}</p>
                     <p className={`text-[11px] font-bold ${it.change >= 0 ? "text-success-dark" : "text-error"}`}>
-                      {it.change > 0 ? "+" : ""}{it.change.toFixed(1)}%
+                      {it.change > 0 ? "+" : ""}{it.change.toFixed(1)}{it.isPercent ? "%" : ` ${it.unit}`}
                     </p>
                   </div>
                 </div>

@@ -118,7 +118,8 @@ function DashboardOverview({ lang, setActiveModule }: { lang: Lang; setActiveMod
   // Live KPI state
   const [kpis, setKpis] = useState({
     newsCount: 0, eventsCount: 0, rjCount: 0, retailersCount: 0,
-    sourcesHealthy: 0, sourcesTotal: 0, sourcesErrored: 0, topMover: null as { name: string; change: number } | null,
+    sourcesHealthy: 0, sourcesTotal: 0, sourcesErrored: 0,
+    topMover: null as { name: string; change: number; unit: string; isPercent: boolean } | null,
     scrapersBroken: 0, scrapersDegraded: 0, scrapersHealthy: 0,
   });
 
@@ -177,13 +178,14 @@ function DashboardOverview({ lang, setActiveModule }: { lang: Lang; setActiveMod
     // Top mover from live prices
     fetch("/api/prices-na").then(r => r.json()).then(json => {
       if (json.success && json.data?.length > 0) {
-        let best = { name: "", change: 0 };
+        let best = { name: "", change: 0, unit: "", isPercent: true };
         for (const c of json.data as any[]) {
           for (const it of c.items || []) {
             if (it.variation) {
+              const varIsPercent = it.variation.includes("%");
               const val = parseFloat(it.variation.replace(",", ".").replace("%", ""));
               if (!isNaN(val) && Math.abs(val) > Math.abs(best.change)) {
-                best = { name: c.commodity, change: val };
+                best = { name: c.commodity, change: val, unit: c.unit || "", isPercent: varIsPercent };
               }
             }
           }
@@ -220,7 +222,7 @@ function DashboardOverview({ lang, setActiveModule }: { lang: Lang; setActiveMod
               <p className="text-[14px] font-bold text-neutral-900 leading-tight mt-0.5">{kpis.topMover.name}</p>
               <p className={`text-[11px] font-bold ${kpis.topMover.change >= 0 ? "text-success-dark" : "text-error"}`}>
                 {kpis.topMover.change >= 0 ? <TrendingUp size={11} className="inline mr-0.5" /> : <TrendingDown size={11} className="inline mr-0.5" />}
-                {kpis.topMover.change > 0 ? "+" : ""}{kpis.topMover.change.toFixed(1)}%
+                {kpis.topMover.change > 0 ? "+" : ""}{kpis.topMover.change.toFixed(1)}{kpis.topMover.isPercent ? "%" : ` ${kpis.topMover.unit}`}
               </p>
             </>
           ) : (
