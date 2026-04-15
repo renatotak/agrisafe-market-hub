@@ -7,6 +7,7 @@ import type { PublishedArticle } from "@/data/published-articles";
 import {
   ExternalLink, Linkedin, Instagram, Globe, Calendar as CalendarIcon,
   Plus, FileText, Image, ChevronDown, Filter, Search, Link2, Loader2, Check, X, Edit3,
+  Sparkles, Lightbulb,
 } from "lucide-react";
 
 interface ArticleLink {
@@ -56,6 +57,55 @@ export function ContentHub({ lang }: { lang: Lang }) {
   };
   useEffect(() => { refreshLinks(); }, []);
   const articlesWithLink = Object.keys(linksByArticle).length;
+
+  // Phase 29 — Article suggestions from recent news + regulations
+  const [suggestions, setSuggestions] = useState<{ title: string; source: string; angle: string }[]>([]);
+  const [suggestLoading, setSuggestLoading] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+
+  const fetchSuggestions = async () => {
+    setSuggestLoading(true);
+    setShowSuggestions(true);
+    try {
+      // Gather recent news + regulations as raw material for article ideas
+      const [newsRes, regsRes] = await Promise.all([
+        fetch("/api/activity?source_kind=cron&target_table=agro_news&limit=10"),
+        fetch("/api/activity?source_kind=cron&target_table=regulatory_norms&limit=5"),
+      ]);
+      const newsJson = await newsRes.json();
+      const regsJson = await regsRes.json();
+
+      const ideas: { title: string; source: string; angle: string }[] = [];
+
+      // Extract article ideas from recent news activity
+      for (const act of (newsJson.activities || []).slice(0, 5)) {
+        if (act.summary) {
+          ideas.push({
+            title: act.summary.slice(0, 120),
+            source: "agro_news",
+            angle: lang === "pt" ? "Análise de tendência baseada em notícias recentes" : "Trend analysis from recent news",
+          });
+        }
+      }
+
+      // Extract ideas from regulatory updates
+      for (const act of (regsJson.activities || []).slice(0, 3)) {
+        if (act.summary) {
+          ideas.push({
+            title: act.summary.slice(0, 120),
+            source: "regulatory_norms",
+            angle: lang === "pt" ? "Impacto regulatório para o agronegócio" : "Regulatory impact on agribusiness",
+          });
+        }
+      }
+
+      setSuggestions(ideas);
+    } catch {
+      setSuggestions([]);
+    } finally {
+      setSuggestLoading(false);
+    }
+  };
 
   // Stats
   const published = publishedArticles.filter((a) => a.status === "published");
@@ -114,12 +164,62 @@ export function ContentHub({ lang }: { lang: Lang }) {
           <h1 className="text-2xl font-bold text-neutral-900 mb-1">{tr.contentHub.title}</h1>
           <p className="text-[14px] text-neutral-500">{tr.contentHub.subtitle}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <span className="text-[11px] font-semibold text-neutral-500">
             {published.length} {lang === "pt" ? "publicados" : "published"} &middot; {scheduled.length} {lang === "pt" ? "agendados" : "scheduled"} &middot; {drafts.length} {lang === "pt" ? "rascunhos" : "drafts"}
           </span>
+          <button
+            onClick={fetchSuggestions}
+            disabled={suggestLoading}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-md text-[12px] font-bold bg-brand-primary text-white hover:bg-brand-primary/90 disabled:opacity-50 transition-colors"
+          >
+            {suggestLoading ? <Loader2 size={13} className="animate-spin" /> : <Lightbulb size={13} />}
+            {lang === "pt" ? "Sugerir Artigos" : "Suggest Articles"}
+          </button>
         </div>
       </div>
+
+      {/* Suggestions panel (Phase 29) */}
+      {showSuggestions && (
+        <div className="bg-amber-50 rounded-lg border border-amber-200 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Lightbulb size={15} className="text-amber-600" />
+              <h3 className="text-[14px] font-bold text-amber-900">
+                {lang === "pt" ? "Sugestões de Artigos" : "Article Suggestions"}
+              </h3>
+            </div>
+            <button onClick={() => setShowSuggestions(false)} className="text-amber-400 hover:text-amber-600">
+              <X size={14} />
+            </button>
+          </div>
+          {suggestLoading ? (
+            <div className="flex items-center gap-2 py-4 text-amber-600">
+              <Loader2 size={14} className="animate-spin" />
+              <span className="text-[12px]">{lang === "pt" ? "Analisando notícias e regulações recentes..." : "Analyzing recent news and regulations..."}</span>
+            </div>
+          ) : suggestions.length === 0 ? (
+            <p className="text-[12px] text-amber-700 py-2">
+              {lang === "pt" ? "Nenhuma sugestão encontrada. Tente novamente após novos dados serem ingeridos." : "No suggestions found. Try again after new data is ingested."}
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {suggestions.map((s, i) => (
+                <div key={i} className="flex items-start gap-3 bg-white rounded-md border border-amber-100 px-3 py-2.5">
+                  <Sparkles size={13} className="text-amber-500 mt-0.5 shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-[12px] font-bold text-neutral-900 leading-snug">{s.title}</p>
+                    <p className="text-[10px] text-neutral-500 mt-0.5">{s.angle}</p>
+                  </div>
+                  <span className="text-[9px] font-bold text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded uppercase shrink-0">
+                    {s.source.replace("_", " ")}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* KPI Strip */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { MockBadge } from "@/components/ui/MockBadge";
 import { Badge } from "@/components/ui/Badge";
 import {
-  Search, Newspaper, BookOpen, Lightbulb,
+  Search, Newspaper, BookOpen, Lightbulb, ChevronDown,
   BarChart3, Loader2, ExternalLink, Network, Sparkles,
 } from "lucide-react";
 import { KnowledgeMindMap } from "@/components/KnowledgeMindMap";
@@ -47,7 +47,8 @@ export function KnowledgeBase({ lang }: { lang: Lang }) {
   const [totalItems, setTotalItems] = useState(0);
   const [isMock, setIsMock] = useState(true);
   const [tierFilter, setTierFilter] = useState<number | null>(null);
-  const [activeTab, setActiveTab] = useState<"search" | "mindmap" | "oracle">("search");
+  const [activeTab, setActiveTab] = useState<"explore" | "oracle">("explore");
+  const [showMindMap, setShowMindMap] = useState(false);
 
   useEffect(() => {
     fetchStats();
@@ -139,16 +140,10 @@ export function KnowledgeBase({ lang }: { lang: Lang }) {
         {/* Tab Switcher */}
         <div className="flex items-center bg-white border border-neutral-200 rounded-lg p-0.5">
           <button
-            onClick={() => setActiveTab("search")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-[12px] font-semibold transition-colors ${activeTab === "search" ? "bg-brand-primary/10 text-brand-primary" : "text-neutral-500 hover:text-neutral-700"}`}
+            onClick={() => setActiveTab("explore")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-[12px] font-semibold transition-colors ${activeTab === "explore" ? "bg-brand-primary/10 text-brand-primary" : "text-neutral-500 hover:text-neutral-700"}`}
           >
-            <Search size={14} /> {lang === "pt" ? "Busca Semântica" : "Semantic Search"}
-          </button>
-          <button
-            onClick={() => setActiveTab("mindmap")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-[12px] font-semibold transition-colors ${activeTab === "mindmap" ? "bg-brand-primary/10 text-brand-primary" : "text-neutral-500 hover:text-neutral-700"}`}
-          >
-            <Network size={14} /> {lang === "pt" ? "Mapa de Conexões" : "Connection Map"}
+            <Search size={14} /> {lang === "pt" ? "Explorar Base" : "Explore Knowledge"}
           </button>
           <button
             onClick={() => setActiveTab("oracle")}
@@ -161,8 +156,6 @@ export function KnowledgeBase({ lang }: { lang: Lang }) {
 
       {activeTab === "oracle" ? (
         <OracleChat lang={lang} />
-      ) : activeTab === "mindmap" ? (
-        <KnowledgeMindMap lang={lang} />
       ) : (<>
 
       {/* Tier Cards */}
@@ -259,40 +252,25 @@ export function KnowledgeBase({ lang }: { lang: Lang }) {
       )}
 
       {/* Coverage Overview */}
-      <div className="bg-white rounded-lg border border-neutral-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5">
-        <h3 className="text-[14px] font-semibold text-neutral-900 mb-4">
-          {lang === "pt" ? "Cobertura do Conhecimento" : "Knowledge Coverage"}
-        </h3>
-        <div className="space-y-3">
-          {TIER_CONFIG.map((tc) => {
-            const stat = tierStats.find(s => s.tier === tc.tier);
-            const count = stat?.count || 0;
-            const pct = tierTotal > 0 ? Math.round((count / tierTotal) * 100) : 0;
-
-            return (
-              <div key={tc.tier} className="flex items-center gap-4">
-                <div className="w-24 text-[12px] font-medium text-neutral-700">
-                  T{tc.tier}: {lang === "pt" ? tc.labelPt : tc.labelEn}
-                </div>
-                <div className="flex-1 h-2 bg-neutral-100 rounded-full overflow-hidden">
-                  <div className="h-full rounded-full transition-all duration-500" style={{
-                    width: `${pct}%`,
-                    backgroundColor: tc.tier === 1 ? "#5B7A2F" : tc.tier === 2 ? "#2196F3" : tc.tier === 3 ? "#E8722A" : "#F44336",
-                  }} />
-                </div>
-                <span className="text-[12px] font-semibold text-neutral-600 w-16 text-right">{count} ({pct}%)</span>
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="mt-4 pt-4 border-t border-neutral-200 text-[11px] text-neutral-500">
-          <p>
-            {lang === "pt"
-              ? "Busca semântica via Google Gemini Embeddings + pgvector. Indexação automática pelo cron diário."
-              : "Semantic search powered by Google Gemini Embeddings + pgvector. Automatic indexing via daily cron."}
-          </p>
-        </div>
+      {/* Mind Map toggle (Phase 29 — merged from separate tab) */}
+      <div className="bg-white rounded-lg border border-neutral-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
+        <button
+          onClick={() => setShowMindMap(!showMindMap)}
+          className="w-full flex items-center justify-between px-5 py-3 text-left hover:bg-neutral-50 transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            <Network size={15} className="text-brand-primary" />
+            <span className="text-[13px] font-bold text-neutral-900">
+              {lang === "pt" ? "Mapa de Conexões" : "Connection Map"}
+            </span>
+          </div>
+          <ChevronDown size={14} className={`text-neutral-400 transition-transform ${showMindMap ? "rotate-180" : ""}`} />
+        </button>
+        {showMindMap && (
+          <div className="border-t border-neutral-200">
+            <KnowledgeMindMap lang={lang} />
+          </div>
+        )}
       </div>
       </>)}
     </div>

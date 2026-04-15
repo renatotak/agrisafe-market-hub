@@ -22,11 +22,12 @@ import { Sidebar, getModuleTitle } from "@/components/Sidebar";
 import {
   Database, BarChart3, TrendingUp, TrendingDown, PenTool,
   BookOpen, AlertTriangle, Zap, ChevronRight, Newspaper, Radar, Calendar,
-  Circle, ExternalLink, Loader2, Settings as SettingsIcon, X, Check,
+  Circle, ExternalLink, Loader2, Settings as SettingsIcon, X, Check, MessageCircle,
 } from "lucide-react";
 
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
+import { OracleChat } from "@/components/OracleChat";
 
 import type { Module } from "@/components/Sidebar";
 
@@ -34,6 +35,7 @@ export default function Home() {
   const [lang, setLang] = useState<Lang>("pt");
   const [activeModule, setActiveModule] = useState<Module>("dashboard");
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [oracleOpen, setOracleOpen] = useState(false);
   const router = useRouter();
 
   const handleLogout = async () => {
@@ -76,6 +78,30 @@ export default function Home() {
           {activeModule === "settings"     && <Settings lang={lang} />}
         </div>
       </main>
+
+      {/* Phase 29 — Persistent Oracle Chat FAB */}
+      {oracleOpen && (
+        <div className="fixed bottom-20 right-4 md:right-8 z-50 w-[380px] max-h-[70vh] bg-white rounded-xl border border-neutral-200 shadow-2xl overflow-hidden flex flex-col">
+          <div className="flex items-center justify-between px-4 py-2.5 bg-neutral-900 text-white shrink-0">
+            <span className="text-[13px] font-bold">AgriSafe Oracle</span>
+            <button onClick={() => setOracleOpen(false)} className="text-neutral-400 hover:text-white">
+              <X size={14} />
+            </button>
+          </div>
+          <div className="flex-1 overflow-hidden">
+            <OracleChat lang={lang} />
+          </div>
+        </div>
+      )}
+      <button
+        onClick={() => setOracleOpen(!oracleOpen)}
+        className={`fixed bottom-4 right-4 md:right-8 z-50 w-12 h-12 rounded-full shadow-lg flex items-center justify-center transition-all ${
+          oracleOpen ? "bg-neutral-700 hover:bg-neutral-800" : "bg-brand-primary hover:bg-brand-primary/90"
+        }`}
+        title="AgriSafe Oracle"
+      >
+        {oracleOpen ? <X size={20} className="text-white" /> : <MessageCircle size={20} className="text-white" />}
+      </button>
     </div>
   );
 }
