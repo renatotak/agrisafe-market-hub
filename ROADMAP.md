@@ -1,291 +1,130 @@
 # AgriSafe Market Hub — Roadmap
 
-> **Last updated:** 2026-04-14 (re-baselined from `documentation/26-0414 agsf_mkthu to dos.txt`)
+> **Last updated:** 2026-04-15 (re-baselined from [`documentation/26-0415 agsf_mkthu to dos.txt`](documentation/26-0415%20agsf_mkthu%20to%20dos.txt))
 > 4 verticals · 14 modules · 62 tables · 62 migrations · 25 cron jobs (smart orchestrator) · 9 MCP tools · 176 data sources
-> For full phase history, see git log. For env setup, see `.env.example`. For ops, see `launchd/README.md`.
+> For phase history, see git log. For setup, see `.env.example`. For ops, see [`launchd/README.md`](launchd/README.md). For hard rules, see [`CLAUDE.md`](CLAUDE.md).
 
 ---
 
-## What's Live
+## 1. What's Live
 
 | Area | Key Numbers |
 |------|-------------|
-| 5-entity model | ~9,818 legal_entities · 9,609 roles · 143 mentions |
-| Diretório de Canais | 9,328 retailers · 24,275 locations (geocoded) · CRM panel + Street View |
-| Diretório de Indústrias | 274 industries · 1,699 establishments (geocoded) · CRM panel + Street View · industries chat → Oracle redirect (Phase 29) |
-| Instituições Financeiras | **NEW Phase 29** — migration 063, component, API route, sidebar entry, seed data (BB, BNDES, Sicredi, Sicoob, Ailos, Cresol, Rabobank, BTG) |
-| Marco Regulatório | 16 norms with CNAE classification · "X empresas afetadas" badge · **regulatory change summary section (Phase 29)** |
-| Recuperação Judicial | 131 cases · manual CNPJ add · **expandable detail cards (Phase 29)** |
-| Pulso de Mercado | BCB SGS + NA prices + Yahoo futures + FAOSTAT + WB Pink Sheet + CONAB + USDA PSD + MDIC · **Preços de Insumos tab (Phase 29)** — DAP, TSP, Urea, KCl, Phosphate Rock from WB |
-| Inteligência de Insumos | Oracle UX · 800 AGROFIT products · manufacturer FK linked |
+| 5-entity model | 9,818 legal_entities · 9,609 roles · 143 mentions |
+| Diretório de Canais | 9,328 retailers · 24,275 geocoded locations · CRM panel + Street View |
+| Diretório de Indústrias | 274 industries · 1,699 geocoded establishments · industries chat → Oracle redirect |
+| Instituições Financeiras | mig 063 + seed (BB, BNDES, Sicredi, Sicoob, Ailos, Cresol, Rabobank, BTG); full chapter in **Phase 7** (SICOR eligibility · BACEN MCR · SCR inadimplência · CVM FIDC/FIAGRO inventory) |
+| Marco Regulatório | 16 norms · CNAE classification · "X empresas afetadas" badge · summary section |
+| Recuperação Judicial | 131 cases · manual CNPJ add · cards styled collapsible (detail render pending) |
+| Pulso de Mercado | BCB SGS · NA prices · Yahoo futures · FAOSTAT · WB Pink Sheet · CONAB · USDA PSD · MDIC · Preços de Insumos tab (DAP/TSP/Urea/KCl/Phosphate Rock from WB) |
+| Inteligência de Insumos | Oracle UX + 800 AGROFIT products; tabs currently broken (Phase 5 fixes) |
 | Notícias Agro | 203 articles · 5 RSS feeds · Reading Room Chrome extension |
-| Eventos Agro | AgroAgenda + AgroAdvance unified · per-event AI enrichment · **App Campo API keys + access logs (Phase 29)** |
-| Central de Conteúdo | Article pipeline + link tracking · **"Sugerir Artigos" button (Phase 29)** |
-| Executive Briefing | Daily 08:00 Gemini summary + price anomaly detection (rolling 2-sigma) · **priority lens + entity mentions (Phase 29)** |
-| Base de Conhecimento | Merged search + mind map tabs · **persistent Oracle chat FAB (Phase 29)** |
-| App Campo API | **NEW Phase 29** — API key management (SHA-256), access logs, Settings panel with playbook + key manager + logs tabs |
+| Eventos Agro | AgroAgenda + AgroAdvance unified · per-event AI enrichment |
+| Central de Conteúdo | Article pipeline + `published_article_links` · "Sugerir Artigos" button in UI |
+| Executive Briefing | Daily 08:00 Gemini summary · price anomaly detection (rolling 2-sigma) |
+| Base de Conhecimento | Merged search + mind map tabs · persistent Oracle chat FAB (shell only) |
+| App Campo API | API-key mgmt (SHA-256) · access logs · Settings panel (playbook + keys + logs) |
 | Cron pipeline | 25 jobs on Mac mini via smart orchestrator (2 launchd agents) |
 | MCP server | 9 tools (stdio-based, `npm run mcp`) |
-| Data Ingestion | 176 sources (125 active) · Source CRUD UI · weekly healthcheck · **Dashboard KPI fixed (Phase 29)** |
+| Data Ingestion | 176 sources (125 active) · Source CRUD UI · weekly healthcheck |
 | Auth + deploy | Supabase Auth + SSR · Vercel webapp + Mac mini cron |
 
 ---
 
-## New Features
+## 2. Guardrails (summary)
 
-### AgriSafe Oracle — Persistent In-App Assistant
-
-**Objective:** A floating chat button in the bottom-right of every page that opens the AgriSafe Oracle: a Vertex-AI-powered conversational layer over the entire knowledge base (news, entities, regulations, market data, financial institutions, meetings — tier-filtered). One assistant, always reachable, replaces the current "Cobertura do Conhecimento" / "Busca Semântica" / "Mapa de Conexões" tab triplet.
-
-**Why this beats a separate chat module:** the user shouldn't navigate to a module to ask a question — they should ask the question wherever they are, and the assistant should know which page they're on (entity context, current filter, active culture) to answer with that context already loaded.
-
-**Scope re-set (corrects an earlier ambiguity):**
-- The Oracle is the **internal AgriSafe team's** assistant for finding information AND for capturing **user-journey signals** the team can use to iterate the product (every prompt + outcome becomes a knowledge artifact for product improvement).
-- It is **NOT** a chat between AgriSafe HQ and external sales reps — that channel was deprecated. The chat infrastructure already built (`chat_threads`, `chat_messages`, `/api/chat/*`, Supabase Realtime wiring — mig 058) gets repurposed to hold Oracle conversation history per user.
-
-**Rollout:**
-1. **Persistent chat shell** — bottom-right floating button on every page (Dashboard, Diretórios, Pulso, etc.), expands to a side-drawer chat panel. Page context (active module, entity, filters) flows in as system-prompt metadata.
-2. **Vertex AI backend** — reuses `src/lib/gemini.ts` (`gemini-2.5-flash` for chat, `gemini-embedding-001` for retrieval). All calls through Vertex AI per Guardrail #2 (no Gemini API free tier).
-3. **Tier-aware retrieval** — RAG over `knowledge_items`, `entity_mentions`, `regulatory_norms`, `meetings`, future `financial_institutions` table. Already scaffolded via `match_knowledge_items` RPC + `confidentiality.ts` helpers.
-4. **Streaming responses** with citation chips that link back to the source module.
-5. **Knowledge tab consolidation** — delete `Cobertura do Conhecimento` (no signal value), merge `Busca Semântica` + `Mapa de Conexões` into a single "Knowledge Graph" tab so the Base de Conhecimento module isn't redundant with the Oracle drawer.
-6. **Conversation analytics** — capture every prompt + the answer the user accepted/dismissed in `chat_messages` with `sender_kind='bot'`. Weekly `sync-oracle-insights` cron clusters frequent unanswered questions → backlog of knowledge gaps to fill.
-
-**What exists:** `/api/knowledge/chat` (tier-aware), 9 MCP tools, chat schema (mig 058), Vertex AI client.
-**What's needed:** Floating-button shell component + side-drawer; page-context capture; streaming response handler; citation-chip renderer; tab consolidation; insights cron.
+Algorithms first, LLMs last. Vertex AI only (never Gemini free tier). Everything links to the 5-entity model (FK or `entity_mentions`). Public layer holds only public data; `confidentiality` enum gates the rest. Bilingual PT-BR/EN always; MockBadge on any mocked section. Full text in [`CLAUDE.md`](CLAUDE.md).
 
 ---
 
-### Financial Institutions Directory — FIDCs, FIAGROS, Banks, Cooperative Banks
+## 3. Roadmap — 6 phases
 
-**Objective:** A new module surfacing every institution that supplies capital to Brazilian agribusiness — FIDCs, FIAGROs, commercial banks, and cooperative banks (Sicredi, Sicoob, Ailos, Cresol, etc.) — with their active inventory of agribusiness credits from Banco Central, news mentions, and the entities they finance.
+Each phase lists concrete tracks. Phases marked **[parallel]** are safe to dispatch to multiple agents concurrently; **[sequential]** phases have internal ordering.
 
-**Value:** Most rural producers and retailers know 3–5 capital sources. There are dozens. Showing "outras instituições que financiam o seu setor / sua região" turns the Market Hub into a discovery surface for capital sourcing — an angle competitors don't cover.
+### Phase 1 — Dashboard bug pass  **[parallel · ≥3 agents]**
 
-**Data sources:**
-- **Banco Central séries** — agribusiness credit by institution (already partially ingested via `sync-bcb-rural`, needs aggregation by counterparty).
-- **CVM** — public FIDC and FIAGRO regulatory filings (already crawled via `sync-cvm-agro` for general norms, needs subset filter for agro funds).
-- **Cooperative bank registries** — Sicredi/Sicoob/Ailos/Cresol official lists, scraped via Cheerio.
-- **Two-way news flow** — financial-institution-tagged news (existing entity-matcher pipeline) + module triggers news-search for each new institution registered.
+Fixes Renato called out on 2026-04-15 for the Painel.
 
-**Schema:** new role-types in `entity_roles` (`fidc`, `fiagro`, `bank`, `cooperative_bank`) + a `financial_institution_profile` table for fund-specific fields (inception, AUM, callable, target_yield, concentration_limits). Anchored in the existing 5-entity model — every FI is a `legal_entity`.
+- **1a Unit/cacao KPI bug** — cacao NA widget renders "83 points" where a % is expected. Audit every commodity card in [src/app/page.tsx](src/app/page.tsx) and [`/api/prices-na`](src/app/api/prices-na/route.ts); add a `unit` field on every row (`%`, `pts`, `R$/saca`, `USD/t`) + format symmetrically so the next commodity that returns points doesn't silently break.
+- **1b Indústrias KPI indicator + modal** — Revendas indicator exists at [page.tsx:245–251](src/app/page.tsx#L245-L251); clone for industries and add an `industries` case in [ChapterModal.tsx:123–136](src/components/ChapterModal.tsx#L123-L136). Modal shows new edits / updates per industry (last 30d).
+- **1c Scrapers KPI rewrite** — current "5/9 alerts" reading is opaque, and the modal lists only 3 broken with no fix action. Rewrite the KPI as "N active · M broken · K stale" with tooltip; modal in [DataSources.tsx:1242–1366](src/components/DataSources.tsx#L1242-L1366) lists **all** broken/stale rows, each with a "Reprocessar" button (calls `/api/cron/sync-<name>` manually) and a link to the scraper file.
+- **1d Diretório de Canais curation filter** — add `is_user_curated` / `is_client` / `is_lead` chip toggles in [RetailersDirectory.tsx](src/components/RetailersDirectory.tsx); wire to existing `company_notes` + onenote-import flags so Renato can focus on companies this team has touched.
+- **1e Summit Brazil Super Foods 2026 map check** — confirm the manually-edited event now renders on the Painel map; close the carried-over 2026-04-14 item.
 
-**Rollout:**
-1. **Schema** — mig 063: `financial_institution_profile` + entity_roles enum extension.
-2. **Seed** — manual seed of top 30 banks/cooperative banks + scraping of CVM FIDC/FIAGRO list (~150 funds active in agro).
-3. **Module UI** — `FinancialInstitutionsDirectory.tsx` with filters (kind, region, AUM bracket, agro share), expandable per-FI panel showing news, BCB credit volume series, top counterparties.
-4. **Cross-references** — Diretório de Canais and de Indústrias gain a "Financiadores" tab in their expanded panels showing FIs that have lent to that entity.
+### Phase 2 — New ingestion sources  **[parallel · up to 5 agents]**
 
-**What exists:** entity_roles.role_type accepts new values via constraint update; `sync-bcb-rural` cron; news entity-matcher.
-**What's needed:** mig 063, scrapers, UI module, cross-reference views.
+- **2a MFrural weekly scraper** — `sync-mfrural-fertilizers` against `https://www.mfrural.com.br/produtos/1-11/fertilizantes`. Weekly Sunday 11:00. Targets DAP, MAP, KCl, Urea per-region. Writes to `macro_statistics` with `source_id='mfrural'`.
+- **2b USDA agtransport scraper** — `sync-usda-agtransport` against `agtransport.usda.gov/Fertilizer/Fertilizer-Prices-by-Region/8bgf-5mdv`. Weekly Sunday 11:30. Same schema.
+- **2c WB Pink Sheet tagging** — already in `sync-worldbank-prices`; confirm DAP/MAP/KCl/Urea rows are tagged and surfaced in the existing Pulso "Preços de Insumos" tab alongside the new MFrural/USDA series.
+- **2d AgRural event source** — add `agrural.com.br` via Settings → Ingestão → Adicionar Fonte; new `sync-events-agrural` Cheerio job → `events` table with inline name matcher.
+- **2e Serasa RJ backfill** — parse [local files/Serasa](local%20files/Serasa), match by CNPJ against `legal_entities`, insert missing rows. New column `debt_value_source` (mig 064 — enum `legal_rss` / `ddg_scrape` / `serasa` / `manual`) exposed as a chip on each RJ card.
 
----
+### Phase 3 — Painel map completeness  **[sequential after 1 and 2]**
 
-### Inteligência de Insumos — Rebuild + Per-Culture Journey + Kynetec
+- **3a Subsidiary markers** — read `cnpj_establishments` with `created_at > now() - interval '30 days'` and drop a marker on each new branch. Click → entity card.
+- **3b Entity-attached news markers** — read `entity_mentions(mention_type='news')` with a recency weight; cluster on zoom-out.
+- **3c Marker-type extension** — add `"subsidiary_new"` and `"news_attached"` to the `MarkerType` union at [DashboardMap.tsx:103–116](src/components/DashboardMap.tsx#L103-L116) plus the fetch/filter logic in the same file's effect block.
 
-**Objective:** Rebuild the Insumos chapter around the user's actual journey: "what do I need to buy for THIS culture, what alternatives exist, and which industries serve it." Today's tabs aren't loading correctly and the UX doesn't follow the buyer's path.
+### Phase 4 — AI-assisted input flows  **[parallel · 3 agents]**
 
-**Value:** A retailer planning soja season in MT needs a one-screen view of the canonical fertilizer + chemical defensive stack (and their alternatives + manufacturers). The current Oracle answers "what targets pest X on culture Y?" but doesn't surface the planning-time question "what's the standard package?".
+Each track turns a manual data-entry step into a paste-and-confirm flow. Vertex AI only; user always approves before save.
 
-**Rollout:**
-1. **Tabs audit + fix** — diagnose why the current AgInputIntelligence tabs aren't rendering (likely a data-fetch failure from one of the underlying endpoints). Restore baseline before adding features.
-2. **Per-culture canonical stack** — for each monitored culture (soja, milho, café, algodão, cana, trigo, boi-gordo, frango, suínos): the most-used fertilizer types (NPK, ureia, MAP, KCl, micronutrients) and chemical defensives (top 5 herbicidas, inseticidas, fungicidas) ranked by usage share. Sourced from CONAB cost-of-production reports + Kynetec data.
-3. **"Show alternatives" view per product** — already partially built via `v_oracle_brand_alternatives`. Re-surface as the primary action on every product card.
-4. **Industries → products view** — flip the dimension: pick an industry → see all their commercial products, by culture and by category. Source: Kynetec files in [`local files/Kynetec/`](local%20files/Kynetec/) (need to inspect format and build a parser).
+- **4a Competitor URL paste + AI categorize** — URL field in the Add-Competitor modal at [CompetitorRadar.tsx:254–260](src/components/CompetitorRadar.tsx#L254-L260); POST to the existing [enrich-web endpoint](src/app/api/competitors/enrich-web/route.ts) (today unwired); returns AI-extracted fields (name, segment, summary, hq_city, main_lines) that the user edits before save.
+- **4b Notícias Agro manual upload** — button in [AgroNews.tsx](src/components/AgroNews.tsx) mirroring the Reading-Room ingest flow; reuses `/api/reading-room/ingest` with a `source='manual_ui'` tag.
+- **4c News → Directory enrichment** — AI pass on each ingested article picks up entity mentions and proposes a directory update (Canal / Indústria / FI); surfaced as a confirmation modal in the news card. Writes to `entity_mentions` + the target directory only on user approval.
+- **4d Event URL paste + AI parse + location confirm** — paste-URL field in `EventFormModal`; new `/api/events/parse-url` (Cheerio + Vertex AI) extracts name/date/city/state/url/organizer; after save, open a location-confirm modal showing the pin on a mini-map so the user validates geocoding before it lands on the Painel map.
 
-**What exists:** `industry_products` (800 rows), `v_oracle_brand_alternatives`, `industries` table (linked to `legal_entities` via mig 061), AgInputIntelligence component, manufacturer_entity_uid migration (mig 050).
-**What's needed:** Tab-load fix; per-culture canonical-stack view (likely needs a curated `culture_canonical_inputs` table or SQL view); Kynetec parser + import script; industry-centric product browser.
+### Phase 5 — Inteligência de Insumos rebuild  **[sequential, anchored on Ivan's PDF]**
 
-**Follow-on (was the old "State-Level Product Coverage" item):** add state-secretaria sources for MT/MS/GO/PR/RS/SP/MG/BA so the Oracle can answer "approved in your state?" — a differentiator no competitor offers. Park until step 1–4 lands.
+Today's tabs don't render correctly and the UX doesn't match the buyer's journey. Rebuild around the canonical product list from [`local files/Industry products/management view ivan.pdf`](local%20files/Industry%20products/management%20view%20ivan.pdf).
 
----
+- **5a Extract canonical products from Ivan's PDF** → seed CSV with `culture, category, product_name, active_ingredient, purpose, industry_name` (e.g. CTVA = Corteva). Semi-automatic: `pdf-parse` extraction + human review.
+- **5b Data model** — new table `culture_canonical_inputs(culture, category, product_name, active_ingredient, purpose, industry_entity_uid, region, rank)` (mig 067). Links to `industries` + `industry_products`.
+- **5c Tab diagnosis + fix** — diagnose why AgInputIntelligence tabs aren't rendering (likely a failing upstream fetch). Restore baseline before layering new features.
+- **5d Greyed-out tab previews** — before a query runs, each tab shows a skeleton with the *expected* output shape and a tooltip "this query returns: ...", so users know what to expect.
+- **5e "Show alternatives" as primary action** — re-surface `v_oracle_brand_alternatives` as the default card action.
+- **5f Industry → products pivot** — pick an industry, see all commercial products grouped by culture × category. Powered by `industry_products` + the new canonical table.
+- **5g Mindmap view (polish)** — optional graph render over the canonical table (industry → product → molecule → purpose → culture). Gated behind 5a–5f.
 
-### Recuperação Judicial — Serasa Backfill + Debt Source Attribution + Card Details Bug
+### Phase 6 — Knowledge & content depth  **[parallel · 3 agents]**
 
-**Objective:** Three concrete fixes to make the RJ chapter trustworthy: catch the missing companies, validate the debt amounts, and make the cards actually expand.
+Carried forward from the 2026-04-14 plan; scope unchanged.
 
-**Issues observed:**
-- Many RJ companies present in Serasa's dataset ([`local files/Serasa`](local%20files/Serasa)) are missing from `recuperacao_judicial`.
-- Debt amounts look incorrect on several cards. The current pipeline has two debt sources — the `/api/rj-add` DDG-scrape and the legal-RSS feeds — and they sometimes disagree silently. Need to expose **which source produced the displayed value** and let the user pick.
-- Cards are styled as collapsible but no detail content renders when clicked.
+- **6a AgriSafe Oracle persistent shell** — floating FAB + side-drawer on every page; page-context capture (active module, entity, filters) into system-prompt metadata; citation chips; tab consolidation (delete `Cobertura do Conhecimento`, merge `Busca Semântica` + `Mapa de Conexões` into a single Knowledge Graph tab). Backend is the already-tier-aware `/api/knowledge/chat`. Weekly `sync-oracle-insights` clusters unanswered prompts into a knowledge-gap backlog.
+- **6b Central de Conteúdo suggestion engine** — `/api/content/suggest-topics` takes the last 14d of news + regulatory changes + RJ filings + price ruptures + entity-mention clusters, returns 5–10 ranked LinkedIn angles with thesis + sources. Preceded by a pipeline-status sweep that flips already-published items to `status='published'`.
+- **6c Briefing do Dia themed lens** — new `analysis_lenses` row `daily_themed_briefing`; `sync-daily-briefing` accepts `?lens=daily_themed_briefing`; prompt builder reads prior 7 days of briefings as anti-repetition memory.
+- **6d Marco Regulatório wrap-up + freshness** — on-demand freshness run of `sync-cvm-agro` / `sync-bcb-rural` / `sync-cnj-atos` / `sync-key-agro-laws`; new `regulatory_digests` table holds a weekly Vertex-AI digest "what changed for agribusiness industries / retailers / producers / FIs" with citations; UI panel under the Marco Regulatório indicators.
+- **6e RJ card detail + debt-source chip** — wire the row-click in `RecuperacaoJudicial.tsx` to actually render the detail payload (case, court, debt, mentions, related news); surface the `debt_value_source` chip from Phase 2e.
+- **6f Meeting reclassification panel** — Settings → "Reclassificar Importações"; walks every `legal_entity` with `role='retailer'` whose only source is `onenote_import` and lets the user reassign role (retailer / industry / cooperative / trading / financial_institution / other). Solves the Biocaz-as-Biocontrol class of errors.
 
-**Rollout:**
-1. **Serasa backfill** — read [`local files/Serasa`](local%20files/Serasa), match against `legal_entities` by CNPJ, insert missing rows. Auto-tag `source_name='Serasa'`.
-2. **Debt source provenance** — add `debt_value_source` enum to `recuperacao_judicial` (`legal_rss` / `ddg_scrape` / `serasa` / `manual`), surface the source as a chip on the card.
-3. **Card-expansion fix** — wire the `RecuperacaoJudicial.tsx` row-click to actually render the existing detail data (case number, court, debt, mentions, related news) instead of just toggling a chevron.
+### Phase 7 — Instituições Financeiras (FIs) deep build  **[parallel · 4 agents, merge at UI step]**
 
-**What exists:** `recuperacao_judicial` table, `/api/rj-add`, `/api/rj-scan`, RJ chapter UI, entity_uid matching.
-**What's needed:** Mig 064 (debt_value_source column), Serasa parser/seeder, UI card-detail wiring, source chip.
+Mig 063 + seed rows are in place (BB, BNDES, Sicredi, Sicoob, Ailos, Cresol, Rabobank, BTG). This phase turns it into a full chapter: eligible-IF registry, credit-risk series, fund inventory (FIDCs / FIAGROs from CVM), and a Marco Regulatório anchor for the MCR.
 
----
-
-### Marco Regulatório — Live Wrap-Up + Freshness Refresh
-
-**Objective:** Make the regulatory chapter feel alive. Today it shows 16 norms with `affected_cnaes`, but no synthesis of "what changed this week / month" — and several recent norms appear stale.
-
-**Rollout:**
-1. **Freshness audit** — run `sync-cvm-agro`, `sync-bcb-rural`, `sync-cnj-atos`, `sync-key-agro-laws` on demand and compare against external sources to confirm the chapter is current. If gaps, fix the scrapers.
-2. **Wrap-up panel below indicators** — a Vertex-AI-generated weekly digest that summarizes "what new laws/rules are changing for [agribusiness | retailers | rural producers | financial institutions]" with citation links to the underlying `regulatory_norms` rows. Cron writes to a new `regulatory_digests` table; UI surfaces the latest.
-3. **CNAE-aware filter chips** — already partly there. Verify they still work after the digest panel lands.
-
-**What exists:** `regulatory_norms` (16+ rows), `affected_cnaes` GIN index, `cnae-classifier.ts`, weekly cron coverage.
-**What's needed:** Freshness audit + scraper repairs; new digest cron + table + UI panel.
+- **7a SICOR eligible-IF import** — parse [`local files/financial institutions/sicor_lista_ifs.csv`](local%20files/financial%20institutions/sicor_lista_ifs.csv) (the BACEN SICOR list of institutions authorised to operate rural credit). For each row: resolve `entity_uid` via `ensureLegalEntityUid()` on the CNPJ, add `entity_roles` with `role_type` in `{bank, cooperative_bank, fidc, fiagro, development_bank}`, tag `is_sicor_eligible=true` in `financial_institution_profile`. One-shot seeder (`src/scripts/seed-sicor-ifs.js`) with `logActivity`; idempotent re-run.
+- **7b BACEN MCR ingestion → Marco Regulatório + Base de Conhecimento** — the Manual de Crédito Rural is the ground-truth rulebook for rural-credit FIs. New `sync-bacen-mcr` weekly Cheerio scraper against `https://www3.bcb.gov.br/mcr/` → writes each chapter/sub-chapter as a `regulatory_norms` row (agency=`BCB`, tag=`MCR`) **and** a `knowledge_items` row with Vertex embedding so the Oracle can quote MCR passages with citations. Add an `mcr_chapter` + `mcr_version` column on `regulatory_norms` (mig 068) so the UI can show "MCR 2-1 — Beneficiários" as a filter chip.
+- **7c SCR inadimplência series** — rebuild the BCB SCR chart (`bcb.gov.br/estabilidadefinanceira/scrdata`) on our side using the open dataset at `https://dadosabertos.bcb.gov.br/dataset/21082-inadimplencia-da-carteira-de-credito---total`. New `sync-bcb-scr-inadimplencia` daily job → `macro_statistics` rows with dimensions `uf`, `cnae`, `porte`, `modalidade`, `origem`, `indexador`, `cliente`, `submodalidade`, `segmento`. UI widget on the FI module shows a configurable multi-series chart (same filters as the BCB source) that updates daily vs. BCB's quarterly refresh cadence.
+- **7d CVM fund inventory (FIDCs + FIAGROs)** — walk `https://sistemas.cvm.gov.br/` fund listings to extract every active FIDC + FIAGRO with an agro mandate. For each fund capture `name, cnpj, inception_date, aum_brl, aum_asof, gp_name, gp_cnpj, website, status, target_yield, callable, concentration_limits, fund_type`. Persist on `financial_institution_profile` (extend the table if needed via mig 069) + `fund_holdings` (new) for the fund-of-funds structure. Source-tag `cvm_fidc_fiagro`. New `sync-cvm-funds` weekly Sunday 13:00.
+- **7e FI module UI** — [FinancialInstitutionsDirectory.tsx](src/components/FinancialInstitutionsDirectory.tsx) with filters (kind, region, AUM bracket, SICOR-eligible, fund_type) and an expandable per-FI panel showing: profile, GP, fund list, AUM history, SCR inadimplência series scoped to that FI where possible, MCR-citation chips, news mentions, BCB agro-credit volume, top counterparties.
+- **7f Cross-reference "Financiadores" tab** — on Diretório de Canais + Diretório de Indústrias expanded panels, a new tab listing FIs that have lent to that entity (pulled from `sync-bcb-rural` counterparty aggregation + `entity_mentions` where `mention_type='credit_relationship'`).
 
 ---
 
-### Pulso do Mercado — Ag Input Prices Panel
+## 4. Backlog (one-liners, lowest-priority)
 
-**Objective:** A new panel under Pulso de Mercado specifically for ag input prices, with priority on imported fertilizers (urea, MAP, KCl) — the highest-volatility line item on Brazilian agribusiness P&Ls.
-
-**Value:** Commodity prices are well covered (CEPEA, BCB, Yahoo Finance, futures curve from B3/CME). Input prices are missing — and they swing harder than commodity prices in the import-dependent fertilizer stack.
-
-**Data sources to evaluate:**
-- **MDIC ComexStat** — already ingested for export volumes; same source has import unit prices for 31 fertilizer HS codes (already partially in `sync-mdic-comexstat`, needs price-axis extraction).
-- **AgRural / AgroAdvance / private indexes** — verify which publish openly.
-- **CEPEA insumos** — limited but trustworthy.
-
-**What exists:** `macro_statistics` table, `sync-mdic-comexstat` cron, MarketPulse Pulso component.
-**What's needed:** Confirm MDIC unit-price fields, design "Input Prices" tab inside MarketPulse, add per-HS-code historical chart with a Brazilian-import-share badge.
+- Knowledge Agents — cron-driven LLM enrichment of `entity_mentions` beyond the algorithmic matcher.
+- Expansion Detection alerts — needs `CRAWLERS_DATABASE_URL`; diff on `cnpj_establishments` → daily themed briefing.
+- CRM RBAC + `client_confidential` 4th tier — tier filtering on `/api/crm/*` + role assignment UI.
+- App Campo push notifications (FCM/APNs) + Resend outreach worker + template editor + unsubscribe page.
+- Sentry · WCAG 2.1 · dark mode · Ctrl+K command palette · CSV/PDF export · institutional PDF briefing.
 
 ---
 
-### Central de Conteúdo — Idea Suggestion Engine + Pipeline Cleanup
+## 5. Reference
 
-**Objective:** Give Renato a "suggest next-week's articles" button that produces a ranked list of LinkedIn topics seeded from the week's most signal-rich news, regulatory changes, and market anomalies.
+### Cron pipeline (25 jobs · 2 launchd agents)
 
-**Value:** Renato publishes weekly. Today the topic is selected by hand from intuition. Surfacing 5-10 candidate angles per week — each with a 2-line thesis, the supporting source links (news + reg + entity_mentions + price ruptures), and an estimated audience-fit score — turns the Content Hub from a tracker into a generator.
-
-**Also:** the current "pipeline" tab still lists already-published items; needs a status sweep.
-
-**Rollout:**
-1. **Pipeline cleanup** — script to flip already-published items to `status='published'` based on the existence of a `published_article_links` row OR a published_at in the past.
-2. **Suggestion engine** — Vertex AI prompt that takes the last 14 days of signals (top news, RJ filings, regulatory changes, anomalies, entity_mentions clustered by CNAE) and returns 5-10 article ideas with thesis + sources + tags. Surface as a "Sugerir próximos temas" button on the Content Hub header. Save accepted suggestions as draft articles.
-3. **Auto-link to published URLs** — every accepted suggestion that gets published auto-creates the `published_article_links` row (just need to wire the publish action).
-
-**What exists:** Content Hub UI with `published_article_links` table (mig 062 — auto-fetches og:meta), executive briefing pipeline, daily signals from the orchestrator.
-**What's needed:** Pipeline-status reconciliation script; suggestion endpoint; UI button.
-
----
-
-### Briefing do Dia — Themed Lens
-
-**Objective:** A new analysis lens (configurable via Settings → Lentes de Análise) that produces a focused daily briefing strictly on the themes Market Hub monitors: agribusiness industries + ag input retailers, recuperações judiciais, commodity market prices.
-
-**Value:** The current `executive_briefings` mixes everything. A themed lens produces a tighter, more actionable summary — "what mattered today specifically for the AgriSafe playbook" — that becomes the canonical morning read.
-
-**Rollout:**
-1. New lens row in `analysis_lenses` (`id='daily_themed_briefing'`) with the focused prompt + system context (entities monitored, RJ portfolio scope, commodity watchlist).
-2. `sync-daily-briefing` accepts a `?lens=daily_themed_briefing` parameter and routes through the new lens.
-3. Briefing memory — the agent reads the prior 7 days of briefings as context so it doesn't repeat itself.
-
-**What exists:** `analysis_lenses` (mig 036), `executive_briefings` table (mig 047), `sync-daily-briefing` cron, `AnalysisLensesEditor` Settings panel.
-**What's needed:** Seed the new lens row; wire the parameter; add prior-briefing-as-memory in the prompt builder.
-
----
-
-### Meeting Intelligence — Reclassification + Industry/FI Coverage
-
-**Objective:** Re-pass the OneNote-imported meetings to fix the original misclassification: many companies were tagged as `retailer` because that was the only role the app modeled at the time. With industries / tradings / cooperatives / financial institutions now first-class, those rows need correct role assignment.
-
-**Concrete example:** "Biocaz" was imported as "Biocontrol" (a retailer slug guess) when it's actually an industry. The dedupe pipeline (mig 060–061) fixed the duplicate, but the role assignment still needs a re-pass.
-
-**Rollout:**
-1. **Reclassification pass** — script that walks every `legal_entity` with `role='retailer'` whose only source is `onenote_import` and re-prompts the user (via a panel) to confirm role: retailer / industry / cooperative / trading / financial_institution / other.
-2. **Re-import flow** — the OneNote Import Wizard gets a "re-import with current entity model" mode that re-runs the company matcher against the now-richer `legal_entities` set (post-AGROFIT bulk merge + Financial Institutions seeding) and surfaces newly-resolved matches.
-
-**What exists:** `meetings` (340+ rows from Davi's import), `key_persons`, `leads`, `OneNoteImportWizard.tsx`, `IndustryDedupePanel.tsx`, `entity_merge_log`.
-**What's needed:** Reclassification panel (Settings → Reclassificar Importações), re-import mode in the wizard.
-
----
-
-### App Campo Platform — Agenda Sync + Email/Newsletter Outreach
-
-**Objective:** App Campo (mobile field-sales surface) consumes Market Hub agenda data and is the destination for email + newsletter campaigns. **The persistent-chat track has been removed** — chat moved to AgriSafe Oracle, which is for internal users, not for B2B HQ↔rep messaging.
-
-**Rollout (2 tracks):**
-
-1. **Agenda sync (partially shipped).**
-   - ✓ `GET /api/app-campo/events` — next-30d nationwide OR all-future state-scoped (api-key gated).
-   - ✓ `GET /api/app-campo/meetings` — rep-scoped, tier-filtered.
-   - ✓ `GET /api/app-campo/leads` — rep's pipeline.
-   - ✓ `GET /api/app-campo/digest` — daily briefing excerpt + counters.
-   - TODO: push-notification hook (FCM/APNs) triggered by the orchestrator on new events/leads.
-
-2. **Broadcast outreach — email + newsletter (NOT WhatsApp).**
-   - Schema shipped (mig 059 — `campaign_sends`, `suppression_list`).
-   - `POST /api/outreach/queue` shipped — accepts recipients, dedupes against suppression list, queues sends.
-   - TODO: Resend integration + dispatch worker, template editor in Central de Conteúdo, webhook receiver for delivery/open events, unsubscribe page.
-
-**Removed:** the persistent-chat track (Supabase Realtime channel for HQ↔rep messaging). The chat schema (`chat_threads`, `chat_messages`) is reused as Oracle conversation history per user.
-
----
-
-### Knowledge Agents — Cron-Driven Entity Enrichment
-
-**Objective:** Deploy LLM agents on a schedule to scan ingested news, events, and regulatory changes, extract entity mentions, and enrich the knowledge base with structured insights.
-
-**Value:** The entity-matcher today catches explicit name mentions. LLM agents can infer indirect relationships ("nova regulamentacao de credito rural" → affects all entities with CNAE 0111-3) and write richer `entity_mentions` + `knowledge_items` rows. This deepens the RAG layer that powers the AgriSafe Oracle.
-
-**What exists:** `entity-matcher.ts` (algorithmic), `entity_mentions` table, `knowledge_items` with embeddings, daily briefing pipeline.
-**What's needed:** Agent prompts, scheduling via orchestrator, quality gate (human review queue for low-confidence extractions).
-
----
-
-### Expansion Detection — Companies Opening New Branches
-
-**Objective:** Automatically detect when agribusiness companies open new CNPJ establishments by monitoring Receita Federal data, alerting the commercial team to expansion opportunities.
-
-**Value:** A retailer opening a new branch in a new state is a sales signal. Today this information is discovered manually or months late. Automated detection would surface "Agrogalaxy abriu 3 filiais em MT este mes" in the daily themed briefing.
-
-**What exists:** `cnpj_establishments` table (1,699 cached), `backfill-cnpj-establishments.js` script, branch delta tracking in `retailer_intelligence`.
-**What's needed:** `CRAWLERS_DATABASE_URL` env var for the external RF crawlers DB, scheduled diff job, notification/alert UX.
-
----
-
-### CRM Access Control — Multi-User RBAC
-
-**Objective:** Move from the current single-user model (service-role key, UI-gated) to proper role-based access control where different team members see different tiers of CRM data.
-
-**Value:** As the team grows, the Head of Credit shouldn't see Marketing's lead pipeline notes, and external partners should only see `agrisafe_published` tier. The `confidentiality` enum and `visibleTiers()` helper already exist — this feature wires them into the CRM read endpoints.
-
-**What exists:** 3-tier confidentiality model (`public` / `agrisafe_published` / `agrisafe_confidential`), `resolveCallerTier()`, Supabase Auth + RLS.
-**What's needed:** Tier filtering on `/api/crm/*` read endpoints, role assignment UI in Settings, `client_confidential` fourth tier activation for partner-NDA workflows.
-
----
-
-### Events Map — Geocoding & Organizer Linking
-
-**Objective:** Plot all agro events on the Dashboard map and link event organizers to the 5-entity model.
-
-**Value:** The Dashboard map currently shows weather, news, and RJ markers but events without coordinates are invisible. Geocoding existing events and linking organizer CNPJs to `legal_entities` completes the integrated intelligence picture.
-
-**Open verification (from 2026-04-14 todos):** Renato manually edited Summit Brazil Super Foods 2026 with city + state + geolocation. **Confirm this event now renders on the Painel map** before closing this item.
-
-**What exists:** `events` table with lat/lng columns, 3-tier geocoder (`src/lib/geocode.ts`), `ensureLegalEntityUid()`, `EventFormModal` for manual edits.
-**What's needed:** Visual confirmation on the Painel map for the manually-edited event; backfill geocode pass for any remaining null-lat/lng rows; `organizer_cnpj` extraction in scrapers.
-
----
-
-### Platform Polish
-
-UX and operational improvements that make the platform production-grade. Low-risk fixes that make the rest of the system feel finished.
-
-- **Painel "Dados" indicator clarity** — current "5/9 alerts" reading is opaque (only 1 actual scraper failure — FAOSTAT — and that is recovering on next run). Rewrite as "X de Y scrapers OK · 1 com atenção" with a tooltip listing the at-attention scrapers and their last successful run.
-- **Diretório de Canais "Em Recuperação Judicial" KPI freshness** — verify the count matches `recuperacao_judicial` after the Serasa backfill lands.
-- **Sentry error monitoring** — catch runtime errors before users report them.
-- **WCAG 2.1 accessibility** — screen reader support, keyboard navigation, contrast ratios.
-- **Dark mode** — toggle in Settings for late-night analysis sessions.
-- **Ctrl+K command palette** — quick-jump to any module, entity, or search.
-- **CSV/PDF export** — per-module data export for offline analysis and presentations.
-- **Institutional PDF briefing** — auto-generated executive briefing in AgriSafe brand format.
-
----
-
-## Reference
-
-### Cron Pipeline (25 jobs, 2 launchd agents)
-
-Smart orchestrator (`sync-orchestrator`, daily 3am) probes all sources and skips unchanged. `sync-market-data` runs independently every 30min. See [`launchd/README.md`](launchd/README.md).
+Smart orchestrator (`sync-orchestrator`, daily 03:00) probes all sources and skips unchanged. `sync-market-data` runs independently every 30min. See [`launchd/README.md`](launchd/README.md).
 
 **Frequent:**
 | Job | Target | Schedule |
@@ -323,24 +162,24 @@ Smart orchestrator (`sync-orchestrator`, daily 3am) probes all sources and skips
 | sync-key-agro-laws | regulatory_norms | 08:00 |
 | sync-worldbank-prices | macro_statistics | 09:00 |
 | sync-source-registry-healthcheck | data_sources | 10:00 |
+| sync-mfrural-fertilizers *(Phase 2a)* | macro_statistics | 11:00 |
+| sync-usda-agtransport *(Phase 2b)* | macro_statistics | 11:30 |
+| sync-events-agrural *(Phase 2d)* | events | 12:00 |
+| sync-bacen-mcr *(Phase 7b)* | regulatory_norms + knowledge_items | 12:30 |
+| sync-cvm-funds *(Phase 7d)* | financial_institution_profile + fund_holdings | 13:00 |
 
-### Strategic Vision
+**Daily additions from Phase 7:**
+| Job | Target | Time |
+|-----|--------|------|
+| sync-bcb-scr-inadimplencia *(Phase 7c)* | macro_statistics | 04:30 |
+
+### Strategic vision
 
 Market Hub is the **knowledge engine** of the AgriSafe ecosystem:
 
-1. **Ingest** — 176 public sources, algorithmic scrapers (no LLM scraping)
-2. **Analyze** — 5-entity model, cross-referencing (e.g. `v_retailers_in_rj` revealed R$ 582.6M distressed channels)
-3. **Create** — LinkedIn articles, campaigns, positioning via Central de Conteudo
-4. **Comply** — regulatory monitoring, CNAE classification, tier-aware access
+1. **Ingest** — 176 public sources, algorithmic scrapers (no LLM scraping).
+2. **Analyze** — 5-entity model, cross-referencing (e.g. `v_retailers_in_rj` surfaced R$ 582.6M distressed channels).
+3. **Create** — LinkedIn articles, campaigns, positioning via Central de Conteúdo.
+4. **Comply** — regulatory monitoring, CNAE classification, tier-aware access.
 
 Downstream products: Admin Portal, App Campo (agenda + email/newsletter outreach — chat moved to Oracle), AgriSafe Oracle (persistent in-app assistant on every page), Financial Institutions Directory.
-
-### Hard Guardrails
-
-See `CLAUDE.md` for full text. Summary:
-1. **Algorithms first, LLMs last** — regex/Cheerio/SQL for extraction; LLMs only for prose + chat
-2. **Vertex AI only, never Gemini API free tier** — free tier lets Google train on your prompts. AgriSafe data is commercial. All LLM calls go through Vertex AI (`src/lib/gemini.ts` auto-detects SA key file `agrisafe-*.json` in project root). R$1,800 GCP credits until July 2026. See `CLAUDE.md` → "AI / LLM Provider" for full setup instructions.
-3. **Everything links to 5 entities** — FK or `entity_mentions`
-4. **Public data only** in the public layer — `confidentiality` enum gates access
-5. **Bilingual always** — PT-BR + EN via `src/lib/i18n.ts`
-6. **MockBadge required** when a section uses mock data

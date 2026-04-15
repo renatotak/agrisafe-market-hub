@@ -1,0 +1,28 @@
+Painel:
+ - Indicator about caacau is wrong: cacao from NA widget is referenced as 83 points, not percentage; revise all units so other commodities do not fails as cacao
+ - Indicator about Revendas exist, but for industries not, and it is also important (modal will show new edits and updates of a company)
+ - Scrapers indicator showing 176 broken links, which may seem too many, and in modal, it only highlight 3 of them, with no action to fix
+ - In map, whenever there is a new update on ag input retailer or industry, it would be good to see in map (new subsidiary, or highlighted news about a company - news attached to a company)
+
+Pulso do Mercado:
+ - Preco de insumos is ok, but I need more updated information; one suggestion is having standard fertilizers to search in this website https://www.mfrural.com.br/produtos/1-11/fertilizantes, and collect and store price data weekly; https://ycharts.com/indicators/fertilizers_index_world_bank also has prices, from world bank, therefore there may be a link in world bank to get those prices also; best option I could find is a public data from usda https://agtransport.usda.gov/Fertilizer/Fertilizer-Prices-by-Region/8bgf-5mdv/data_preview; check all sources, add them (if scrape friendly) to data ingestor, and revise panel to show more updated prices, especially for DAP, MAP, KCL and Urea -- do not lose this website links, they may be useful in the future
+
+Inteligencia de insumos:
+ - This chapter is still messy; suggestion is to start from a more simple ground, which is to understand what are the basic products and then derive more analysis; there is a file in C:\Users\renat\.gemini\antigravity\projects\0 gh_agrisafe\agsf-mkthub\local files\Industry products called  "management view ivan.pdf", which highlights main products per category, with company name of supplier (CTVA is Corteva), and that will provide insight of a better UX
+ - Most important thing is creating data infrastructure: industry name, product name, main molecule (active ingredient), purpose (eg fungicide), culture, and eventually region; I am thinkning about a mindmapping structure, but I accept suggestions
+ - In the tabs, show in greyish what is the expected result of the query
+
+Radar competitivo:
+ - Whenever I add a competitor, I will provide the website link, which should have a button to make AI agent to automatically categorize and add information, that user will approve or edit before adding to the list
+
+Noticias Agro:
+ - Create a button for me to upload news from here, just like adding to reading room
+ - It is missing the AI agent analysis that adds data to other chapters of this app, like adding context and information to Diretorio de canais and Diretorio de Industrias, with a modal to confirm the addition / editing
+
+Diretorio de Canais:
+ - Create a toggle function to select companies that any of this app users have added information, or revised, also if they are or were client, or potential lead (those uploaded from Davi onenote, for instance)
+
+Eventos:
+ - There is a new event (https://agrural.com.br/); add it; also, create a button so I can add by pasting event url (then AI will parse data for me)
+ - In Eventos, whenever I edit, location must be confirmed so I can know upload is correct (create a modal to show that the pin is in correct place)
+
