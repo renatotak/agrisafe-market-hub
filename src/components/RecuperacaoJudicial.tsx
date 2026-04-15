@@ -13,7 +13,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
   PieChart, Pie,
 } from "recharts";
-import { ENTITY_TYPES, RJ_STATUS, type RecuperacaoJudicial as RJType } from "@/data/recuperacao";
+import { ENTITY_TYPES, RJ_STATUS, DEBT_SOURCE_LABELS, type RecuperacaoJudicial as RJType, type DebtValueSource } from "@/data/recuperacao";
 import { mockRecuperacaoJudicial } from "@/data/mock";
 import { MockBadge } from "@/components/ui/MockBadge";
 
@@ -80,7 +80,7 @@ export function RecuperacaoJudicial({ lang }: { lang: Lang }) {
   const fetchAll = async () => {
     const { data } = await supabase
       .from("recuperacao_judicial")
-      .select("id, entity_type, status, state, filing_date, debt_value");
+      .select("id, entity_type, status, state, filing_date, debt_value, debt_value_source");
     if (data && data.length > 0) {
       setAllItems(data as RJType[]);
     } else {
@@ -469,6 +469,13 @@ export function RecuperacaoJudicial({ lang }: { lang: Lang }) {
                           {formatCurrency((item as any).debt_value)}
                         </span>
                       )}
+                      {(item as any).debt_value_source && DEBT_SOURCE_LABELS[(item as any).debt_value_source as DebtValueSource] && (
+                        <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded ${DEBT_SOURCE_LABELS[(item as any).debt_value_source as DebtValueSource].color}`}>
+                          {lang === "pt"
+                            ? DEBT_SOURCE_LABELS[(item as any).debt_value_source as DebtValueSource].pt
+                            : DEBT_SOURCE_LABELS[(item as any).debt_value_source as DebtValueSource].en}
+                        </span>
+                      )}
                     </div>
                     {item.filing_date && (
                       <time className="text-[11px] text-neutral-400 font-medium whitespace-nowrap">
@@ -506,6 +513,16 @@ export function RecuperacaoJudicial({ lang }: { lang: Lang }) {
                       )}
                       <div><span className="font-bold text-neutral-500">{lang === "pt" ? "Fonte:" : "Source:"}</span> <span className="text-neutral-700">{item.source_name || "—"}</span></div>
                       <div><span className="font-bold text-neutral-500">{lang === "pt" ? "Indexado em:" : "Indexed:"}</span> <span className="text-neutral-700">{new Date(item.created_at).toLocaleDateString(lang === "pt" ? "pt-BR" : "en-US")}</span></div>
+                      {(item as any).debt_value_source && DEBT_SOURCE_LABELS[(item as any).debt_value_source as DebtValueSource] && (
+                        <div>
+                          <span className="font-bold text-neutral-500">{lang === "pt" ? "Origem do valor:" : "Value source:"}</span>{" "}
+                          <span className={`inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded ${DEBT_SOURCE_LABELS[(item as any).debt_value_source as DebtValueSource].color}`}>
+                            {lang === "pt"
+                              ? DEBT_SOURCE_LABELS[(item as any).debt_value_source as DebtValueSource].pt
+                              : DEBT_SOURCE_LABELS[(item as any).debt_value_source as DebtValueSource].en}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   )}
 

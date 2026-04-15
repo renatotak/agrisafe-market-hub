@@ -1,6 +1,8 @@
 // Recuperação Judicial monitoring — sourced from public court records and legal news
 // NO proprietary data
 
+export type DebtValueSource = 'legal_rss' | 'ddg_scrape' | 'serasa' | 'manual';
+
 export interface RecuperacaoJudicial {
   id: string;
   entity_name: string;
@@ -15,8 +17,16 @@ export interface RecuperacaoJudicial {
   source_name: string | null;
   state: string | null;
   debt_value: number | null;
+  debt_value_source: DebtValueSource | null;
   created_at: string;
 }
+
+export const DEBT_SOURCE_LABELS: Record<DebtValueSource, { pt: string; en: string; color: string }> = {
+  legal_rss:  { pt: 'RSS Jurídico',  en: 'Legal RSS',  color: 'bg-indigo-100 text-indigo-800' },
+  ddg_scrape: { pt: 'Web Scan',      en: 'Web Scan',   color: 'bg-purple-100 text-purple-800' },
+  serasa:     { pt: 'Serasa',         en: 'Serasa',     color: 'bg-sky-100 text-sky-800' },
+  manual:     { pt: 'Manual',         en: 'Manual',     color: 'bg-neutral-100 text-neutral-700' },
+};
 
 export const ENTITY_TYPES = {
   produtor_rural: { pt: 'Produtor Rural', en: 'Rural Producer' },
