@@ -59,6 +59,8 @@ import { runSyncEventsAgrural } from '@/jobs/sync-events-agrural'
 import { runSyncOrchestrator } from '@/jobs/sync-orchestrator'
 import { runSyncOracleInsights } from '@/jobs/sync-oracle-insights'
 import { runSyncRegulatoryDigest } from '@/jobs/sync-regulatory-digest'
+import { runSyncBcbScrInadimplencia } from '@/jobs/sync-bcb-scr-inadimplencia'
+import { runSyncCvmFunds } from '@/jobs/sync-cvm-funds'
 
 import type { JobResult } from '@/jobs/types'
 
@@ -96,6 +98,8 @@ const JOB_REGISTRY: Record<string, JobFn> = {
   'sync-orchestrator':      runSyncOrchestrator,
   'sync-oracle-insights':   runSyncOracleInsights,
   'sync-regulatory-digest': runSyncRegulatoryDigest,
+  'sync-bcb-scr-inadimplencia': runSyncBcbScrInadimplencia,
+  'sync-cvm-funds':             runSyncCvmFunds,
 }
 
 async function main() {
