@@ -385,7 +385,7 @@ export function DashboardMap({ lang }: { lang: Lang }) {
                 lat: coords.lat + (Math.random() - 0.5) * 0.2, // Spread more for states
                 lng: coords.lng + (Math.random() - 0.5) * 0.2,
                 title: rj.entity_name,
-                subtitle: `${rj.court || "Justiça"} | ${rj.state}`,
+                subtitle: `${rj.court || (lang === "pt" ? "Justiça" : "Court")} | ${rj.state}`,
                 uf: rj.state,
                 // Phase 24B: stamp `date` so the date-range filter (30d/90d/Tudo)
                 // can gate RJ filings by recency the same way it gates events.

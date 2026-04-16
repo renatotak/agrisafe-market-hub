@@ -5,7 +5,7 @@ import { Lang, t } from "@/lib/i18n";
 import { Module } from "@/components/Sidebar";
 import {
   X, ChevronRight, BarChart3, Newspaper, Calendar,
-  Scale, Store, Database, PenTool, TrendingUp, TrendingDown,
+  Scale, Store, Database, PenTool, TrendingUp,
   AlertTriangle, CheckCircle2, Loader2, ExternalLink, ShieldAlert,
   RefreshCw, FileCode, Circle, Factory,
 } from "lucide-react";

@@ -38,6 +38,7 @@ interface Suggestion {
 }
 
 export async function POST(req: NextRequest) {
+  try {
   const body = await req.json().catch(() => ({}))
   const lang = body.lang === "en" ? "en" : "pt"
   const supabase = createAdminClient()
@@ -263,5 +264,8 @@ Sort by relevance_score descending. Be specific — avoid generic topics. Refere
       statusFlipped,
       error: `AI generation failed: ${e.message}`,
     }, { status: 500 })
+  }
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err?.message || 'Internal error' }, { status: 500 });
   }
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { Lang, t } from "@/lib/i18n";
 import { DataSources } from "@/components/DataSources";
 import { KnowledgeBase } from "@/components/KnowledgeBase";
@@ -21,14 +21,13 @@ import { RiskSignals } from "@/components/RiskSignals";
 import { Header } from "@/components/Header";
 import { Sidebar, getModuleTitle } from "@/components/Sidebar";
 import {
-  Database, BarChart3, TrendingUp, TrendingDown, PenTool,
-  BookOpen, AlertTriangle, Zap, ChevronRight, Newspaper, Radar, Calendar,
-  Circle, ExternalLink, Loader2, Settings as SettingsIcon, X, Check, MessageCircle,
+  TrendingUp, TrendingDown, AlertTriangle, Newspaper, Radar, Calendar,
+  Circle, ExternalLink, Loader2, X, MessageCircle,
 } from "lucide-react";
 
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
-import { OracleChat, type OracleEntityContext } from "@/components/OracleChat";
+import { OracleChat } from "@/components/OracleChat";
 
 import type { Module } from "@/components/Sidebar";
 
@@ -347,15 +346,6 @@ function DashboardOverview({ lang, setActiveModule }: { lang: Lang; setActiveMod
     </div>
   );
 }
-
-const COMMODITY_COLORS: Record<string, string> = {
-  soja: "#5B7A2F", milho: "#E8722A", "boi-gordo": "#8B4513", cafe: "#6F4E37",
-  algodao: "#7FA02B", trigo: "#DAA520", acucar: "#2196F3", leite: "#9C27B0",
-  arroz: "#795548", frango: "#FF5722", etanol: "#009688", cacau: "#4E342E",
-  suinos: "#E91E63", amendoim: "#FF9800", "suco-de-laranja": "#F57C00",
-  feijao: "#8D6E63", ovos: "#FFC107", latex: "#607D8B", sorgo: "#CDDC39",
-};
-
 
 // ─── Notícias Agrícolas — News Widget ────────────────────────────────────────
 

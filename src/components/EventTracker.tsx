@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { Lang, t } from "@/lib/i18n";
-import { MapPin, ExternalLink, CalendarDays, Loader2, RefreshCw, LayoutList, Calendar, Search, ArrowUpDown, Globe, Monitor, Sparkles, BookOpen, Database, Edit3, EyeOff, Plus } from "lucide-react";
+import { MapPin, ExternalLink, CalendarDays, Loader2, RefreshCw, LayoutList, Calendar, Search, ArrowUpDown, Globe, Monitor, Sparkles, Database, Edit3, Plus } from "lucide-react";
 import { EventFormModal, type EventEditRecord } from "@/components/EventFormModal";
 
 interface AgroEvent {

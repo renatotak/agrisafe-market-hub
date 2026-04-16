@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/Badge";
 import { MockBadge } from "@/components/ui/MockBadge";
 import {
   ExternalLink, AlertTriangle, Calendar, BookOpen,
-  ChevronDown, ChevronUp, Search, Clock, BarChart3, Filter,
+  ChevronDown, ChevronUp, Search, Clock, BarChart3,
   Upload, List, X, Loader2, Plus, Database, Globe, Building2, FileText, RefreshCw,
 } from "lucide-react";
 import {

@@ -53,6 +53,7 @@ interface NewsEntityMarker {
 }
 
 export async function GET(req: NextRequest) {
+  try {
   const typesParam = req.nextUrl.searchParams.get("types") || "subsidiary_new,news_attached";
   const types = typesParam.split(",").map(t => t.trim());
 
@@ -236,4 +237,7 @@ export async function GET(req: NextRequest) {
     subsidiary_new: result.subsidiary_new,
     news_attached: result.news_attached,
   });
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err?.message || 'Internal error' }, { status: 500 });
+  }
 }

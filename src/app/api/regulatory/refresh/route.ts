@@ -20,6 +20,7 @@ interface JobEntry {
 }
 
 export async function POST() {
+  try {
   const supabase = createAdminClient()
   const start = Date.now()
 
@@ -83,4 +84,7 @@ export async function POST() {
     totalErrors,
     jobs: results,
   })
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err?.message || 'Internal error' }, { status: 500 });
+  }
 }

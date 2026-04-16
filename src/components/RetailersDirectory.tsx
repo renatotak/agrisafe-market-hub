@@ -9,9 +9,8 @@ import {
   Store, Search, ChevronDown, ChevronUp, MapPin, Building2,
   Loader2, ChevronLeft, ChevronRight, Filter, X, Map as MapIcon, LayoutList,
   Users, FileSearch, ExternalLink, Calendar, Briefcase, Shield, CheckCircle2, XCircle,
-  Pencil, Save, Globe, Lock, MessageSquareText, Phone, Mail, ArrowUpDown, ArrowUp, ArrowDown,
+  Pencil, Globe, Lock, Phone, Mail, ArrowUpDown, ArrowUp, ArrowDown,
 } from "lucide-react";
-import { Badge } from "@/components/ui/Badge";
 import { RetailerExpandedPanel } from "@/components/RetailerExpandedPanel";
 import { RiskSignals } from "@/components/RiskSignals";
 import { RetailerKpiRow } from "@/components/RetailerKpiRow";
@@ -646,7 +645,11 @@ function EditableCell({ value, onSave, placeholder, type = "text", options }: {
 
 const GRUPO_OPTIONS = ["DISTRIBUIDOR", "COOPERATIVA", "CANAL RD", "PLATAFORMA", "INDUSTRIA"];
 const CLASS_OPTIONS = ["A", "B", "C", "D"];
-const FATURAMENTO_OPTIONS = ["ATÉ 50 MILHÕES", "ATÉ 500 MILHÕES", "ACIMA 500 MILHÕES"];
+function getFaturamentoOptions(lang: Lang) {
+  return lang === "pt"
+    ? ["ATÉ 50 MILHÕES", "ATÉ 500 MILHÕES", "ACIMA 500 MILHÕES"]
+    : ["UP TO 50 MILLION", "UP TO 500 MILLION", "ABOVE 500 MILLION"];
+}
 
 // ─── Table Row ───────────────────────────────────────────────────────────────
 
@@ -746,7 +749,7 @@ function RetailerRow({ retailer: r, lang, expanded, onToggle, locations, onRetai
             onSave={v => updateField("classificacao", v)} />
         </td>
         <td className="px-4 py-3 text-[12px] text-neutral-600 hidden lg:table-cell">
-          <EditableCell value={r.faixa_faturamento || ""} type="select" options={FATURAMENTO_OPTIONS}
+          <EditableCell value={r.faixa_faturamento || ""} type="select" options={getFaturamentoOptions(lang)}
             onSave={v => updateField("faixa_faturamento", v)} />
         </td>
         <td className="px-4 py-3 text-[12px] text-neutral-600 hidden xl:table-cell">{r.porte_name || "\u2014"}</td>
@@ -797,7 +800,7 @@ function RetailerRow({ retailer: r, lang, expanded, onToggle, locations, onRetai
               </div>
               <div>
                 <span className="font-semibold text-neutral-500 uppercase text-[10px] flex items-center gap-1"><Pencil size={8} className="text-brand-primary" />{lang === "pt" ? "Faturamento" : "Revenue"}</span>
-                <div className="mt-0.5"><EditableCell value={r.faixa_faturamento || ""} type="select" options={FATURAMENTO_OPTIONS} onSave={v => updateField("faixa_faturamento", v)} /></div>
+                <div className="mt-0.5"><EditableCell value={r.faixa_faturamento || ""} type="select" options={getFaturamentoOptions(lang)} onSave={v => updateField("faixa_faturamento", v)} /></div>
               </div>
               <div>
                 <span className="font-semibold text-neutral-500 uppercase text-[10px] flex items-center gap-1"><Pencil size={8} className="text-brand-primary" />Loja Física</span>
@@ -971,14 +974,14 @@ function CompanyModal({ enrichment: e, retailer: r, locations, lang, onClose, re
                 <div><span className="text-[10px] font-semibold text-neutral-400 uppercase block mb-0.5">Porte</span><p className="text-neutral-800">{e.porte || "—"}</p></div>
                 <div><span className="text-[10px] font-semibold text-neutral-400 uppercase block mb-0.5">{lang === "pt" ? "Data Situação" : "Status Date"}</span><p className="text-neutral-800">{e.data_situacao_cadastral ? new Date(e.data_situacao_cadastral + "T00:00:00").toLocaleDateString("pt-BR") : "—"}</p></div>
                 <div><span className="text-[10px] font-semibold text-neutral-400 uppercase block mb-0.5">{lang === "pt" ? "Início Atividade" : "Activity Start"}</span><p className="text-neutral-800 flex items-center gap-1"><Calendar size={11} className="text-neutral-400" />{e.data_inicio_atividade ? new Date(e.data_inicio_atividade + "T00:00:00").toLocaleDateString("pt-BR") : "—"}</p></div>
-                <div><span className="text-[10px] font-semibold text-neutral-400 uppercase block mb-0.5">CNAE Principal</span><p className="text-neutral-800 text-[12px]">{e.cnae_fiscal ? `${e.cnae_fiscal} — ${e.cnae_fiscal_descricao}` : "—"}</p></div>
+                <div><span className="text-[10px] font-semibold text-neutral-400 uppercase block mb-0.5">{lang === "pt" ? "CNAE Principal" : "Main CNAE"}</span><p className="text-neutral-800 text-[12px]">{e.cnae_fiscal ? `${e.cnae_fiscal} — ${e.cnae_fiscal_descricao}` : "—"}</p></div>
               </div>
               <div className="flex items-center gap-3 mt-4 pt-3 border-t border-neutral-100">
                 <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full ${e.opcao_simples ? "bg-success-light text-success-dark" : "bg-neutral-100 text-neutral-500"}`}>
-                  Simples: {e.opcao_simples ? "Sim" : "Não"}
+                  {lang === "pt" ? "Simples Nacional" : "Simples Nacional"}: {e.opcao_simples ? (lang === "pt" ? "Sim" : "Yes") : (lang === "pt" ? "Não" : "No")}
                 </span>
                 <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full ${e.opcao_mei ? "bg-info-light text-info-dark" : "bg-neutral-100 text-neutral-500"}`}>
-                  MEI: {e.opcao_mei ? "Sim" : "Não"}
+                  MEI: {e.opcao_mei ? (lang === "pt" ? "Sim" : "Yes") : (lang === "pt" ? "Não" : "No")}
                 </span>
                 {e.telefone && <span className="text-[12px] text-neutral-600 flex items-center gap-1 ml-auto"><Phone size={11} className="text-neutral-400" />{e.telefone}</span>}
                 {e.email && <span className="text-[12px] text-neutral-600 flex items-center gap-1"><Mail size={11} className="text-neutral-400" /><span className="lowercase">{e.email}</span></span>}

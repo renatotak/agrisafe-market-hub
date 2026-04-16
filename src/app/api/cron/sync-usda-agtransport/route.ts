@@ -19,17 +19,21 @@ export async function GET(request: Request) {
     return new Response('Unauthorized', { status: 401 })
   }
 
-  const result = await runSyncUsdaAgtransport(createAdminClient())
-  return NextResponse.json(
-    {
-      success: result.ok,
-      run_id: result.stats?.runId,
-      status: result.status,
-      rows_fetched: result.recordsFetched,
-      rows_upserted: result.recordsUpdated,
-      duration_ms: result.durationMs,
-      errors: result.errors.length > 0 ? result.errors : undefined,
-    },
-    { status: result.ok ? 200 : 500 },
-  )
+  try {
+    const result = await runSyncUsdaAgtransport(createAdminClient())
+    return NextResponse.json(
+      {
+        success: result.ok,
+        run_id: result.stats?.runId,
+        status: result.status,
+        rows_fetched: result.recordsFetched,
+        rows_upserted: result.recordsUpdated,
+        duration_ms: result.durationMs,
+        errors: result.errors.length > 0 ? result.errors : undefined,
+      },
+      { status: result.ok ? 200 : 500 },
+    )
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err?.message || 'Internal error' }, { status: 500 });
+  }
 }

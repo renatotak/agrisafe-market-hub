@@ -2,10 +2,9 @@
 
 import { useState, useRef, useEffect } from "react";
 import { Lang, t } from "@/lib/i18n";
-import { 
-  Send, Loader2, Bot, User, Sparkles, BookOpen, 
-  MessageSquare, History, Trash2, X, ChevronRight,
-  ExternalLink
+import {
+  Send, Loader2, Bot, User, Sparkles, BookOpen,
+  Trash2, ExternalLink
 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 
