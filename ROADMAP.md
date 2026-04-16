@@ -1,7 +1,7 @@
 # AgriSafe Market Hub — Roadmap
 
-> **Last updated:** 2026-04-15 (Phases 1–4 completed, security audit + RLS fix)
-> 4 verticals · 14 modules · 62 tables · 70 migrations · 28 cron jobs (smart orchestrator) · 9 MCP tools · 176 data sources
+> **Last updated:** 2026-04-16 (Phases 1–6 completed, security audit + RLS fix)
+> 4 verticals · 14 modules · 64 tables · 73 migrations · 30 cron jobs (smart orchestrator) · 9 MCP tools · 176 data sources
 > For phase history, see git log. For setup, see `.env.example`. For ops, see [`launchd/README.md`](launchd/README.md). For hard rules, see [`CLAUDE.md`](CLAUDE.md).
 
 ---
@@ -82,16 +82,14 @@ Today's tabs don't render correctly and the UX doesn't match the buyer's journey
 - **5f Industry → products pivot** — pick an industry, see all commercial products grouped by culture × category. Powered by `industry_products` + the new canonical table.
 - **5g Mindmap view (polish)** — optional graph render over the canonical table (industry → product → molecule → purpose → culture). Gated behind 5a–5f.
 
-### Phase 6 — Knowledge & content depth  **[parallel · 3 agents]**
+### Phase 6 — Knowledge & content depth  **[DONE ✓ 2026-04-16]**
 
-Carried forward from the 2026-04-14 plan; scope unchanged.
-
-- **6a AgriSafe Oracle persistent shell** — floating FAB + side-drawer on every page; page-context capture (active module, entity, filters) into system-prompt metadata; citation chips; tab consolidation (delete `Cobertura do Conhecimento`, merge `Busca Semântica` + `Mapa de Conexões` into a single Knowledge Graph tab). Backend is the already-tier-aware `/api/knowledge/chat`. Weekly `sync-oracle-insights` clusters unanswered prompts into a knowledge-gap backlog.
-- **6b Central de Conteúdo suggestion engine** — `/api/content/suggest-topics` takes the last 14d of news + regulatory changes + RJ filings + price ruptures + entity-mention clusters, returns 5–10 ranked LinkedIn angles with thesis + sources. Preceded by a pipeline-status sweep that flips already-published items to `status='published'`.
-- **6c Briefing do Dia themed lens** — new `analysis_lenses` row `daily_themed_briefing`; `sync-daily-briefing` accepts `?lens=daily_themed_briefing`; prompt builder reads prior 7 days of briefings as anti-repetition memory.
-- **6d Marco Regulatório wrap-up + freshness** — on-demand freshness run of `sync-cvm-agro` / `sync-bcb-rural` / `sync-cnj-atos` / `sync-key-agro-laws`; new `regulatory_digests` table holds a weekly Vertex-AI digest "what changed for agribusiness industries / retailers / producers / FIs" with citations; UI panel under the Marco Regulatório indicators.
-- **6e RJ card detail + debt-source chip** — wire the row-click in `RecuperacaoJudicial.tsx` to actually render the detail payload (case, court, debt, mentions, related news); surface the `debt_value_source` chip from Phase 2e.
-- **6f Meeting reclassification panel** — Settings → "Reclassificar Importações"; walks every `legal_entity` with `role='retailer'` whose only source is `onenote_import` and lets the user reassign role (retailer / industry / cooperative / trading / financial_institution / other). Solves the Biocaz-as-Biocontrol class of errors.
+- ~~**6a AgriSafe Oracle persistent shell**~~ — ✓ Page-context capture (module + entity) in system prompt. Citation chips with tier-colored indicators + clickable links. KnowledgeBase tabs consolidated (Busca + Mapa → Knowledge Graph). Weekly `sync-oracle-insights` job clusters low-confidence prompts into knowledge-gap backlog.
+- ~~**6b Central de Conteúdo suggestion engine**~~ — ✓ `/api/content/suggest-topics` reads 14d signals (news, norms, RJ, price anomalies, entity clusters), generates 5–10 ranked LinkedIn angles via Vertex AI. Pipeline-status sweep auto-flips published items. "Sugerir Tópicos" button + modal in ContentHub.
+- ~~**6c Briefing do Dia themed lens**~~ — ✓ Migration 071 (`theme` column + `daily_themed_briefing` lens seed). Rotating themes Mon–Sun. Anti-repetition memory reads prior 7 days. Theme badge on ExecutiveBriefingWidget. Activated via `?lens=daily_themed_briefing`.
+- ~~**6d Marco Regulatório wrap-up + freshness**~~ — ✓ `/api/regulatory/refresh` triggers 4 regulatory jobs on demand. Migration 072 (`regulatory_digests` table). Weekly `sync-regulatory-digest` job generates bilingual Vertex AI digest with citations. "Resumo Regulatório" panel + "Atualizar Agora" button in RegulatoryFramework.
+- ~~**6e RJ card detail + debt-source chip**~~ — ✓ Expandable `RJDetailPanel` with full fields (case, court, debt, filing date, debt_value_source chip). Linked news via entity_mentions → agro_news join.
+- ~~**6f Meeting reclassification panel**~~ — ✓ Settings → "Reclassificar Importações" panel. `/api/entities/reclassify` endpoint. Migration 073 (expands entity_roles CHECK for `financial_institution`). Batch role reassignment with `logActivity()`.
 
 ### Phase 7 — Instituições Financeiras (FIs) deep build  **[parallel · 4 agents, merge at UI step]**
 

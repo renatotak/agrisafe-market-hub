@@ -15,14 +15,14 @@ Market Hub is the **knowledge engine** of the AgriSafe ecosystem. It captures pu
 | **Ingestão de Dados** | Fontes de Dados (Scraper Health tab + **Source CRUD** with Add / Edit / Delete from the UI, Phase 25), 176 sources in `data_sources` table, weekly auto-healthcheck cron | Monitor and control all data pipelines |
 | **Inteligência de Mercado** | Pulso do Mercado (BCB + NA + FAOSTAT + WB Pink Sheet + MFRural + USDA agtransport), Radar Competitivo (URL paste + AI categorize), Notícias Agro (Reading Room + manual upload + directory enrichment), Eventos Agro (AgroAgenda + AgroAdvance + AgRural + URL paste), Diretório de Canais (CRM-style + curation filters), Diretório de Indústrias, Dashboard Map (subsidiary + news-entity markers) | Capture and analyze market signals |
 | **Marketing & Conteúdo** | Central de Conteúdo (articles, topic pipeline, calendar, campaigns) | Create proprietary content from intelligence |
-| **Regulatório** | Marco Regulatório (CNJ + CVM + BCB + key laws + norms-affecting-entity view), Recuperação Judicial (CRUD with BrasilAPI + DDG debt scrape), AgInput Intelligence (SmartSolos + AGROFIT + Bioinsumos) | Legal compliance & input intelligence |
+| **Regulatório** | Marco Regulatório (CNJ + CVM + BCB + key laws + norms-affecting-entity view + regulatory digest + on-demand refresh), Recuperação Judicial (CRUD + detail panel with linked news + debt-source chips), AgInput Intelligence (SmartSolos + AGROFIT + Bioinsumos) | Legal compliance & input intelligence |
 
 ## Tech Stack
 
 - **Next.js 16** (App Router) + TypeScript strict + Tailwind CSS 4
-- **Supabase** (PostgreSQL + RLS + pgvector) — 62 tables, 70 SQL migrations, 5-entity model live
+- **Supabase** (PostgreSQL + RLS + pgvector) — 64 tables, 73 SQL migrations, 5-entity model live
 - **Recharts** + `@vis.gl/react-google-maps` for Bloomberg-style data visualization
-- **Hybrid deployment** — Vercel hosts the Next.js webapp + manual cron triggers; **28 cron jobs run on a 24/7 Mac mini** via a **smart orchestrator** (Phase 28) that probes sources and skips unchanged — 2 launchd agents replace the prior 25. See [launchd/README.md](launchd/README.md). **MCP server** (`npm run mcp`) exposes 9 tools for AI agent integration.
+- **Hybrid deployment** — Vercel hosts the Next.js webapp + manual cron triggers; **30 cron jobs run on a 24/7 Mac mini** via a **smart orchestrator** (Phase 28) that probes sources and skips unchanged — 2 launchd agents replace the prior 25. See [launchd/README.md](launchd/README.md). **MCP server** (`npm run mcp`) exposes 9 tools for AI agent integration.
 - **Reading Room Chrome extension** at `chrome-extensions/reading-room/` auto-syncs saved articles to `/api/reading-room/ingest`
 
 ## Quick Start
