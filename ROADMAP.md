@@ -101,7 +101,7 @@ Each phase lists concrete tracks. Phases marked **[parallel]** are safe to dispa
 
 ## 4. Backlog (one-liners, lowest-priority)
 
-- Knowledge Agents — cron-driven LLM enrichment of `entity_mentions` beyond the algorithmic matcher.
+- ~~Knowledge Agents~~ ✓ 2026-04-16 — weekly `sync-knowledge-agents` job re-runs the algorithmic matcher on news/norms/events that have no `entity_mentions`, catching entities added since the original ingest (e.g. 2,549 CVM funds, 631 SICOR banks). `extracted_by='knowledge_agents_v1'`. First run added 22 mentions.
 - Expansion Detection alerts — needs `CRAWLERS_DATABASE_URL`; diff on `cnpj_establishments` → daily themed briefing.
 - CRM RBAC + `client_confidential` 4th tier — tier filtering on `/api/crm/*` + role assignment UI.
 - App Campo push notifications (FCM/APNs) + Resend outreach worker + template editor + unsubscribe page.
