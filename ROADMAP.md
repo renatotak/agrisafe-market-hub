@@ -1,7 +1,7 @@
 # AgriSafe Market Hub — Roadmap
 
-> **Last updated:** 2026-04-15 (re-baselined from [`documentation/26-0415 agsf_mkthu to dos.txt`](documentation/26-0415%20agsf_mkthu%20to%20dos.txt))
-> 4 verticals · 14 modules · 62 tables · 62 migrations · 25 cron jobs (smart orchestrator) · 9 MCP tools · 176 data sources
+> **Last updated:** 2026-04-15 (Phases 1–4 completed, security audit + RLS fix)
+> 4 verticals · 14 modules · 62 tables · 70 migrations · 28 cron jobs (smart orchestrator) · 9 MCP tools · 176 data sources
 > For phase history, see git log. For setup, see `.env.example`. For ops, see [`launchd/README.md`](launchd/README.md). For hard rules, see [`CLAUDE.md`](CLAUDE.md).
 
 ---
@@ -41,38 +41,34 @@ Algorithms first, LLMs last. Vertex AI only (never Gemini free tier). Everything
 
 Each phase lists concrete tracks. Phases marked **[parallel]** are safe to dispatch to multiple agents concurrently; **[sequential]** phases have internal ordering.
 
-### Phase 1 — Dashboard bug pass  **[parallel · ≥3 agents]**
+### Phase 1 — Dashboard bug pass  **[DONE ✓ 2026-04-15]**
 
-Fixes Renato called out on 2026-04-15 for the Painel.
+- ~~**1a Unit/cacao KPI bug**~~ — ✓ `topMover` now carries `unit`/`isPercent` from API; formats correctly for pts vs %.
+- ~~**1b Indústrias KPI indicator + modal**~~ — ✓ New Industries card + ChapterModal case (last 30d updates).
+- ~~**1c Scrapers KPI rewrite**~~ — ✓ KPI shows "N active · M broken · K stale" with tooltip; modal lists all broken/stale with "Reprocessar" button + scraper file link.
+- ~~**1d Diretório de Canais curation filter**~~ — ✓ 3 chip toggles (curated/client/lead) in RetailersDirectory, wired to company_notes + onenote-import + entity_roles + leads.
+- ~~**1e Summit Brazil Super Foods 2026 map check**~~ — ✓ Verified: event has valid coords (-15.57, -56.08), correctly filtered as past event (ended 2026-04-13).
 
-- **1a Unit/cacao KPI bug** — cacao NA widget renders "83 points" where a % is expected. Audit every commodity card in [src/app/page.tsx](src/app/page.tsx) and [`/api/prices-na`](src/app/api/prices-na/route.ts); add a `unit` field on every row (`%`, `pts`, `R$/saca`, `USD/t`) + format symmetrically so the next commodity that returns points doesn't silently break.
-- **1b Indústrias KPI indicator + modal** — Revendas indicator exists at [page.tsx:245–251](src/app/page.tsx#L245-L251); clone for industries and add an `industries` case in [ChapterModal.tsx:123–136](src/components/ChapterModal.tsx#L123-L136). Modal shows new edits / updates per industry (last 30d).
-- **1c Scrapers KPI rewrite** — current "5/9 alerts" reading is opaque, and the modal lists only 3 broken with no fix action. Rewrite the KPI as "N active · M broken · K stale" with tooltip; modal in [DataSources.tsx:1242–1366](src/components/DataSources.tsx#L1242-L1366) lists **all** broken/stale rows, each with a "Reprocessar" button (calls `/api/cron/sync-<name>` manually) and a link to the scraper file.
-- **1d Diretório de Canais curation filter** — add `is_user_curated` / `is_client` / `is_lead` chip toggles in [RetailersDirectory.tsx](src/components/RetailersDirectory.tsx); wire to existing `company_notes` + onenote-import flags so Renato can focus on companies this team has touched.
-- **1e Summit Brazil Super Foods 2026 map check** — confirm the manually-edited event now renders on the Painel map; close the carried-over 2026-04-14 item.
+### Phase 2 — New ingestion sources  **[DONE ✓ 2026-04-15]**
 
-### Phase 2 — New ingestion sources  **[parallel · up to 5 agents]**
+- ~~**2a MFrural weekly scraper**~~ — ✓ `sync-mfrural-fertilizers` built (Cheerio, DAP/MAP/KCl/Urea per-region, median BRL/t). Registered in orchestrator, Sunday.
+- ~~**2b USDA agtransport scraper**~~ — ✓ `sync-usda-agtransport` built (SODA API, 11 US regions, 3yr monthly). Registered in orchestrator, Sunday.
+- ~~**2c WB Pink Sheet tagging**~~ — ✓ Verified: all 5 fertilizers (DAP/TSP/Urea/KCl/Phosphate Rock) tagged `category:'fertilizer_price'`, surfaced in Pulso "Preços de Insumos" tab. MAP not available in WB source.
+- ~~**2d AgRural event source**~~ — ✓ `sync-events-agrural` built (Cheerio, Encontro de Mercado + Palestras pages, entity-matcher). Registered in orchestrator, Sunday.
+- ~~**2e Serasa RJ backfill**~~ — ✓ Migration 069 (`debt_value_source` column) applied. UI chip on RJ cards. Backfill script ready at `src/scripts/backfill-serasa-rj.ts` — **pending Serasa CSV files from other machine**.
 
-- **2a MFrural weekly scraper** — `sync-mfrural-fertilizers` against `https://www.mfrural.com.br/produtos/1-11/fertilizantes`. Weekly Sunday 11:00. Targets DAP, MAP, KCl, Urea per-region. Writes to `macro_statistics` with `source_id='mfrural'`.
-- **2b USDA agtransport scraper** — `sync-usda-agtransport` against `agtransport.usda.gov/Fertilizer/Fertilizer-Prices-by-Region/8bgf-5mdv`. Weekly Sunday 11:30. Same schema.
-- **2c WB Pink Sheet tagging** — already in `sync-worldbank-prices`; confirm DAP/MAP/KCl/Urea rows are tagged and surfaced in the existing Pulso "Preços de Insumos" tab alongside the new MFrural/USDA series.
-- **2d AgRural event source** — add `agrural.com.br` via Settings → Ingestão → Adicionar Fonte; new `sync-events-agrural` Cheerio job → `events` table with inline name matcher.
-- **2e Serasa RJ backfill** — parse [local files/Serasa](local%20files/Serasa), match by CNPJ against `legal_entities`, insert missing rows. New column `debt_value_source` (mig 064 — enum `legal_rss` / `ddg_scrape` / `serasa` / `manual`) exposed as a chip on each RJ card.
+### Phase 3 — Painel map completeness  **[DONE ✓ 2026-04-15]**
 
-### Phase 3 — Painel map completeness  **[sequential after 1 and 2]**
+- ~~**3a Subsidiary markers**~~ — ✓ Purple markers for new branches (30d) from `cnpj_establishments`. Click shows CNPJ + entity link. New `/api/map/markers` endpoint.
+- ~~**3b Entity-attached news markers**~~ — ✓ Teal markers with jitter for co-located entities. Click shows headline + date + entity link. 90d recency window.
+- ~~**3c Marker-type extension**~~ — ✓ `MarkerType` extended with `subsidiary_new` + `news_attached`. Layer toggles with counts, distinct colors/icons, respects existing date/UF/city filters.
 
-- **3a Subsidiary markers** — read `cnpj_establishments` with `created_at > now() - interval '30 days'` and drop a marker on each new branch. Click → entity card.
-- **3b Entity-attached news markers** — read `entity_mentions(mention_type='news')` with a recency weight; cluster on zoom-out.
-- **3c Marker-type extension** — add `"subsidiary_new"` and `"news_attached"` to the `MarkerType` union at [DashboardMap.tsx:103–116](src/components/DashboardMap.tsx#L103-L116) plus the fetch/filter logic in the same file's effect block.
+### Phase 4 — AI-assisted input flows  **[DONE ✓ 2026-04-15]**
 
-### Phase 4 — AI-assisted input flows  **[parallel · 3 agents]**
-
-Each track turns a manual data-entry step into a paste-and-confirm flow. Vertex AI only; user always approves before save.
-
-- **4a Competitor URL paste + AI categorize** — URL field in the Add-Competitor modal at [CompetitorRadar.tsx:254–260](src/components/CompetitorRadar.tsx#L254-L260); POST to the existing [enrich-web endpoint](src/app/api/competitors/enrich-web/route.ts) (today unwired); returns AI-extracted fields (name, segment, summary, hq_city, main_lines) that the user edits before save.
-- **4b Notícias Agro manual upload** — button in [AgroNews.tsx](src/components/AgroNews.tsx) mirroring the Reading-Room ingest flow; reuses `/api/reading-room/ingest` with a `source='manual_ui'` tag.
-- **4c News → Directory enrichment** — AI pass on each ingested article picks up entity mentions and proposes a directory update (Canal / Indústria / FI); surfaced as a confirmation modal in the news card. Writes to `entity_mentions` + the target directory only on user approval.
-- **4d Event URL paste + AI parse + location confirm** — paste-URL field in `EventFormModal`; new `/api/events/parse-url` (Cheerio + Vertex AI) extracts name/date/city/state/url/organizer; after save, open a location-confirm modal showing the pin on a mini-map so the user validates geocoding before it lands on the Painel map.
+- ~~**4a Competitor URL paste + AI categorize**~~ — ✓ URL field in Add-Competitor modal. Paste triggers `/api/competitors/enrich-web` (Cheerio + Vertex AI). Pre-fills name/segment/summary/hq_city/main_lines. User edits before save.
+- ~~**4b Notícias Agro manual upload**~~ — ✓ "Adicionar Notícia" button + modal in AgroNews. POSTs to `/api/reading-room/ingest` with `source='manual_ui'`. Note: requires `NEXT_PUBLIC_READING_ROOM_SECRET` env var.
+- ~~**4c News → Directory enrichment**~~ — ✓ "Enriquecer Diretório" button per article card. New `/api/news/propose-enrichment` uses entity-matcher first, Vertex AI fallback. Confirmation modal with per-proposal accept/reject. Writes to `entity_mentions` + `entity_roles`.
+- ~~**4d Event URL paste + AI parse + location confirm**~~ — ✓ "Colar URL" field in EventFormModal. New `/api/events/parse-url` (Cheerio-first, 6 date regex patterns, BR location extraction, Vertex AI fallback). LocationConfirmModal shows Google Static Maps pin after save.
 
 ### Phase 5 — Inteligência de Insumos rebuild  **[sequential, anchored on Ivan's PDF]**
 

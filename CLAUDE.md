@@ -183,6 +183,9 @@ Every cron route is also a `src/jobs/X.ts` module callable from BOTH the Next.js
 23. `sync-key-agro-laws` — Lei CPR / Falências / Nova Lei do Agro seed → `regulatory_norms` — Sunday 08:00
 24. `sync-worldbank-prices` — World Bank Pink Sheet xlsx → `macro_statistics` — Sunday 09:00
 25. **`sync-source-registry-healthcheck`** — Phase 25. Probes all 176 entries in `data_sources`, updates per-row status, summarizes newly-broken in activity_log — Sunday 10:00
+26. **`sync-mfrural-fertilizers`** — Phase 2a. MFRural fertilizer prices (DAP/MAP/KCl/Urea) → `macro_statistics` — Sunday 11:00
+27. **`sync-usda-agtransport`** — Phase 2b. USDA fertilizer prices (SODA API, 11 regions) → `macro_statistics` — Sunday 11:30
+28. **`sync-events-agrural`** — Phase 2d. AgRural events (Encontro de Mercado + Palestras) → `events` — Sunday 12:00
 
 **Live API routes (ISR cached or on-demand):**
 - `/api/prices-na` — Notícias Agrícolas commodity prices (revalidate 10min)
@@ -260,7 +263,10 @@ Every cron route is also a `src/jobs/X.ts` module callable from BOTH the Next.js
 | `src/app/api/rj-add/` | **Phase 24C** manual RJ insert by CNPJ + BrasilAPI + DDG debt scrape |
 | `src/app/api/crm/` | **Phase 24G** — `/key-persons`, `/meetings`, `/leads` CRUD endpoints. All POST/PATCH/DELETE log to `activity_log`. |
 | `src/app/api/activity/` | **Phase 24G2** — read endpoint for the activity log feed |
-| `src/db/migrations/` | **54 SQL migrations.** 035=`cnpj_establishments`, 036=`analysis_lenses`, 037=Phase 24D scrapers, 038=World Bank, 039=CNJ, 040=tier-aware knowledge search, 041=CRM tables, 042=`affected_cnaes` + GIN, 043=`activity_log`, **044=`v_norms_affecting_entity`**, **045=`data_sources` table**, **046=4 macro scrapers in scraper_registry (Phase 26)**, **047=`executive_briefings` (Phase 27)**, **048=`v_commodity_price_stats` + `price_ruptures` (Phase 28)**, **049=AGROFIT UNIQUE + `industry_id`**, **050=`titular_registro` + `manufacturer_entity_uid` + Oracle view rebuild**, **051=`cron_freshness` (smart orchestrator)**, **052=entity_uid UNIQUE constraints**, **053=drop legacy `cnpj_basico`/`cnpj_raiz` from 4 tables**, **054=formalize `retailers.cnpj_raiz` drop + rebuild `v_retailer_profile` / `v_retailers_in_rj` / `v_entity_profile` on entity_uid joins** |
+| `src/app/api/map/markers/` | **Phase 3** — returns subsidiary (30d) and news-entity markers with coordinates for the dashboard map |
+| `src/app/api/news/propose-enrichment/` | **Phase 4c** — algorithmic + AI entity extraction from news articles, returns proposals for directory enrichment |
+| `src/app/api/events/parse-url/` | **Phase 4d** — Cheerio-first URL parser for events (JSON-LD, og:meta, regex dates/locations, Vertex AI fallback) |
+| `src/db/migrations/` | **70 SQL migrations.** 035=`cnpj_establishments`, 036=`analysis_lenses`, 037=Phase 24D scrapers, 038=World Bank, 039=CNJ, 040=tier-aware knowledge search, 041=CRM tables, 042=`affected_cnaes` + GIN, 043=`activity_log`, **044=`v_norms_affecting_entity`**, **045=`data_sources` table**, **046=4 macro scrapers in scraper_registry (Phase 26)**, **047=`executive_briefings` (Phase 27)**, **048=`v_commodity_price_stats` + `price_ruptures` (Phase 28)**, **049=AGROFIT UNIQUE + `industry_id`**, **050=`titular_registro` + `manufacturer_entity_uid` + Oracle view rebuild**, **051=`cron_freshness` (smart orchestrator)**, **052=entity_uid UNIQUE constraints**, **053=drop legacy `cnpj_basico`/`cnpj_raiz` from 4 tables**, **054=formalize `retailers.cnpj_raiz` drop + rebuild `v_retailer_profile` / `v_retailers_in_rj` / `v_entity_profile` on entity_uid joins**, **067=`industry_financials`**, **068=`analysis_lenses_kind`**, **069=`debt_value_source` on `recuperacao_judicial`**, **070=fix 18 open write policies (security audit)** |
 | **`launchd/`** | **Phase 25→26** Mac launchd cron infrastructure. `jobs.json` (source of truth for schedules), `generate-plists.js` (jobs.json → plists/), `install.sh` (idempotent installer with `--reload`/`--uninstall`/`--dry-run`), `README.md` (full ops manual: Quickstart, sleep prevention, Tailscale, troubleshooting), `plists/` (25 generated `.plist` files with REPLACE_ME placeholders) |
 | `src/scripts/apply-migration.js` | **Phase 24B** — applies a single migration via `DATABASE_URL` Postgres pooler |
 | `src/scripts/seed-data-sources.js` | **Phase 25** — one-shot upsert from `source-registry.json` → `data_sources` table |
@@ -270,6 +276,7 @@ Every cron route is also a `src/jobs/X.ts` module callable from BOTH the Next.js
 | `src/scripts/check-source-registry.js` | One-shot health probe over `source-registry.json`. Superseded for the cron use case by `sync-source-registry-healthcheck`, but still useful in dev. |
 | `src/scripts/geocode-events.js` | **Phase 23B** — Nominatim-only geocoder for events. Logs to `activity_log` (Phase 25 backlog). |
 | `src/scripts/geocode-retailers.js` | 3-tier geocoding for `retailer_locations` (Phase 16i) |
+| `src/scripts/backfill-serasa-rj.ts` | **Phase 2e** — Serasa RJ backfill (reads CSVs from `local files/Serasa/`, matches CNPJs, upserts with `debt_value_source='serasa'`). Pending file sync. |
 | `src/scripts/seed-rj-from-receita.ts` | Seed RJ data from crawlers DB |
 | `imports/cnpj-metadados.pdf` | Receita Federal CNPJ data layout reference |
 | `chrome-extensions/reading-room/` | Embedded Chrome MV3 extension. Pushes saved articles to `/api/reading-room/ingest` (Phase 22). |
