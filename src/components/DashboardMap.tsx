@@ -6,6 +6,7 @@ import {
   Calendar, Eye, EyeOff, ExternalLink,
   CloudRain, Thermometer, MapPin, Search, X, RefreshCw,
   Newspaper, Gavel, AlertCircle, Home, Maximize,
+  Building2, Megaphone,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import type { Lang } from "@/lib/i18n";
@@ -100,7 +101,7 @@ function resolveCoords(city?: string | null, state?: string | null): { lat: numb
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-type MarkerType = "event" | "weather" | "news" | "rj";
+type MarkerType = "event" | "weather" | "news" | "rj" | "subsidiary_new" | "news_attached";
 
 type MapMarker = {
   id: string;
@@ -113,13 +114,17 @@ type MapMarker = {
   extra?: React.ReactNode;
   uf?: string;
   date?: string;
+  /** For subsidiary_new: entity_uid to link to entity page */
+  entity_uid?: string;
 };
 
 const LAYER_META: Record<MarkerType, { label: string; labelEn: string; color: string }> = {
-  event:    { label: "Eventos",  labelEn: "Events",   color: "#5B7A2F" },
-  weather:  { label: "Clima / Alertas", labelEn: "Weather / Alerts", color: "#1565C0" },
-  news:     { label: "Notícias", labelEn: "News",     color: "#E8722A" },
-  rj:       { label: "Recup. Judicial", labelEn: "Distress", color: "#C62828" },
+  event:          { label: "Eventos",          labelEn: "Events",            color: "#5B7A2F" },
+  weather:        { label: "Clima / Alertas",  labelEn: "Weather / Alerts",  color: "#1565C0" },
+  news:           { label: "Notícias",         labelEn: "News",              color: "#E8722A" },
+  rj:             { label: "Recup. Judicial",  labelEn: "Distress",          color: "#C62828" },
+  subsidiary_new: { label: "Filiais Novas",    labelEn: "New Branches",      color: "#7B1FA2" },
+  news_attached:  { label: "Entidade + Notícia", labelEn: "Entity News",    color: "#00838F" },
 };
 
 // ─── Component ──────────────────────────────────────────────────────────────
@@ -132,6 +137,8 @@ export function DashboardMap({ lang }: { lang: Lang }) {
   const [showWeather, setShowWeather] = useState(true);
   const [showNews, setShowNews] = useState(true);
   const [showRJ, setShowRJ] = useState(true);
+  const [showSubsidiaryNew, setShowSubsidiaryNew] = useState(true);
+  const [showNewsAttached, setShowNewsAttached] = useState(true);
   // Phase 23B fix: default to 90 days. With 30d default and most agro fairs
   // running May–October, the user only saw ~5 events on the map even though
   // 22 upcoming ones existed in the events table.
@@ -143,6 +150,8 @@ export function DashboardMap({ lang }: { lang: Lang }) {
   const [allWeather, setAllWeather] = useState<MapMarker[]>([]);
   const [allNews, setAllNews] = useState<MapMarker[]>([]);
   const [activeRJ, setActiveRJ] = useState<MapMarker[]>([]);
+  const [allSubsidiaryNew, setAllSubsidiaryNew] = useState<MapMarker[]>([]);
+  const [allNewsAttached, setAllNewsAttached] = useState<MapMarker[]>([]);
 
   const [allCities, setAllCities] = useState<{ label: string; lat: number; lng: number }[]>([]);
   const [activeMarkerId, setActiveMarkerId] = useState<string | null>(null);
@@ -236,6 +245,62 @@ export function DashboardMap({ lang }: { lang: Lang }) {
         });
       }
       setAllWeather(markers);
+    }).catch(() => {});
+
+    // Phase 3 — Subsidiary + news-attached entity markers
+    fetch("/api/map/markers?types=subsidiary_new,news_attached").then(r => r.json()).then(json => {
+      if (!json.success) return;
+
+      // Phase 3a: Subsidiary markers
+      if (json.subsidiary_new) {
+        const subMarkers: MapMarker[] = json.subsidiary_new.map((s: any) => ({
+          id: s.id,
+          type: "subsidiary_new" as MarkerType,
+          lat: s.lat + (Math.random() - 0.5) * 0.005,
+          lng: s.lng + (Math.random() - 0.5) * 0.005,
+          title: s.title,
+          subtitle: s.subtitle,
+          uf: s.uf,
+          date: s.date,
+          entity_uid: s.entity_uid,
+          url: s.entity_uid ? `/entity/${s.entity_uid}` : undefined,
+          extra: (
+            <div className="mt-1 space-y-0.5">
+              <p className="text-[11px] text-neutral-500">CNPJ: {s.cnpj}</p>
+              <p className="text-[10px] text-neutral-400">{new Date(s.date).toLocaleDateString("pt-BR")}</p>
+            </div>
+          ),
+        }));
+        setAllSubsidiaryNew(subMarkers);
+      }
+
+      // Phase 3b: News-attached entity markers
+      if (json.news_attached) {
+        const newsMarkers: MapMarker[] = json.news_attached.map((n: any) => ({
+          id: n.id,
+          type: "news_attached" as MarkerType,
+          lat: n.lat,
+          lng: n.lng,
+          title: n.title,
+          subtitle: n.subtitle,
+          uf: n.uf,
+          date: n.date,
+          entity_uid: n.entity_uid,
+          url: n.news_url || undefined,
+          extra: (
+            <div className="mt-1 space-y-0.5">
+              <p className="text-[11px] text-neutral-600 line-clamp-2">{n.subtitle}</p>
+              <p className="text-[10px] text-neutral-400">{n.date ? new Date(n.date).toLocaleDateString("pt-BR") : ""}</p>
+              {n.entity_uid && (
+                <a href={`/entity/${n.entity_uid}`} className="inline-flex items-center gap-1 text-[10px] text-brand-primary hover:underline">
+                  {lang === "pt" ? "Ver entidade" : "View entity"} <ExternalLink size={9} />
+                </a>
+              )}
+            </div>
+          ),
+        }));
+        setAllNewsAttached(newsMarkers);
+      }
     }).catch(() => {});
 
     // All unique cities from retailer_locations (for city search and parsing)
@@ -379,6 +444,20 @@ export function DashboardMap({ lang }: { lang: Lang }) {
       }
       markers = markers.concat(rj);
     }
+    if (showSubsidiaryNew) {
+      let subs = allSubsidiaryNew;
+      if (pastHorizon) {
+        subs = subs.filter(m => m.date && new Date(m.date) >= pastHorizon);
+      }
+      markers = markers.concat(subs);
+    }
+    if (showNewsAttached) {
+      let nea = allNewsAttached;
+      if (pastHorizon) {
+        nea = nea.filter(m => m.date && new Date(m.date) >= pastHorizon);
+      }
+      markers = markers.concat(nea);
+    }
 
     if (ufFilter) markers = markers.filter(m => m.uf?.toUpperCase().trim() === ufFilter.toUpperCase().trim());
     if (citySearch.trim()) {
@@ -404,7 +483,7 @@ export function DashboardMap({ lang }: { lang: Lang }) {
     // filter) silently no-op'd because the memoized markers never recomputed.
     // The toggle BUTTON would update its visual state via useState rerender,
     // but the map markers stayed stale.
-  }, [showEvents, showWeather, showNews, showRJ, eventTimeFilter, ufFilter, citySearch, allEvents, allWeather, allNews, activeRJ, bbox]);
+  }, [showEvents, showWeather, showNews, showRJ, showSubsidiaryNew, showNewsAttached, eventTimeFilter, ufFilter, citySearch, allEvents, allWeather, allNews, activeRJ, allSubsidiaryNew, allNewsAttached, bbox]);
 
   const activeMarker = filteredMarkers.find(m => m.id === activeMarkerId);
 
@@ -414,6 +493,8 @@ export function DashboardMap({ lang }: { lang: Lang }) {
     weather: filteredMarkers.filter(m => m.type === "weather").length,
     news: filteredMarkers.filter(m => m.type === "news").length,
     rj: filteredMarkers.filter(m => m.type === "rj").length,
+    subsidiary_new: filteredMarkers.filter(m => m.type === "subsidiary_new").length,
+    news_attached: filteredMarkers.filter(m => m.type === "news_attached").length,
   };
 
   // Map center — zoom to selected city, filtered region, or default
@@ -498,6 +579,10 @@ export function DashboardMap({ lang }: { lang: Lang }) {
               color={LAYER_META.news.color} label={lang === "pt" ? "Notícias" : "News"} count={counts.news} />
             <LayerToggle active={showRJ} onClick={() => setShowRJ(!showRJ)}
               color={LAYER_META.rj.color} label={lang === "pt" ? "Alertas RJ" : "Distress"} count={counts.rj} />
+            <LayerToggle active={showSubsidiaryNew} onClick={() => setShowSubsidiaryNew(!showSubsidiaryNew)}
+              color={LAYER_META.subsidiary_new.color} label={lang === "pt" ? "Filiais Novas" : "New Branches"} count={counts.subsidiary_new} />
+            <LayerToggle active={showNewsAttached} onClick={() => setShowNewsAttached(!showNewsAttached)}
+              color={LAYER_META.news_attached.color} label={lang === "pt" ? "Entidade + Notícia" : "Entity News"} count={counts.news_attached} />
           </div>
 
           <div className="h-5 w-px bg-neutral-200 hidden sm:block" />
@@ -546,7 +631,7 @@ export function DashboardMap({ lang }: { lang: Lang }) {
                 news (backward window) and RJ filings (backward window). It is
                 always visible — previously it was hidden when Eventos was off,
                 which made the UI surprising once news/RJ also obey it. */}
-            {(showEvents || showNews || showRJ) && (
+            {(showEvents || showNews || showRJ || showSubsidiaryNew || showNewsAttached) && (
               <div
                 className="flex items-center gap-1 bg-neutral-100 p-0.5 rounded text-[9px]"
                 title={
@@ -606,6 +691,8 @@ export function DashboardMap({ lang }: { lang: Lang }) {
                     {m.type === "weather" && <CloudRain size={13} />}
                     {m.type === "news" && <Newspaper size={13} />}
                     {m.type === "rj" && <Gavel size={13} />}
+                    {m.type === "subsidiary_new" && <Building2 size={13} />}
+                    {m.type === "news_attached" && <Megaphone size={13} />}
                   </div>
                 </AdvancedMarker>
               ))}

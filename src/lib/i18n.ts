@@ -424,6 +424,11 @@ export const translations = {
       noResults: "Nenhuma instituição encontrada.",
       seedDisclaimer: "Dados de exemplo — a tabela ainda não foi populada.",
     },
+    map: {
+      subsidiaryNew: "Filiais Novas",
+      newsAttached: "Entidade + Not\u00edcia",
+      viewEntity: "Ver entidade",
+    },
     nav: {
       dashboard: "Painel",
       settings: "Configura\u00e7\u00f5es",
@@ -965,6 +970,11 @@ export const translations = {
       },
       noResults: "No institutions found.",
       seedDisclaimer: "Sample data — the table has not been populated yet.",
+    },
+    map: {
+      subsidiaryNew: "New Branches",
+      newsAttached: "Entity News",
+      viewEntity: "View entity",
     },
     nav: {
       dashboard: "Dashboard",
