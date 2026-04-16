@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { Lang, t } from "@/lib/i18n";
 import {
   Send, Loader2, Bot, User, Sparkles, BookOpen,
-  Trash2, ExternalLink
+  Trash2, ExternalLink, X
 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 

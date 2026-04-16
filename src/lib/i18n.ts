@@ -152,6 +152,10 @@ export const translations = {
       marketShare: "Market Share",
       costPerHa: "Custo/ha",
       noCanonical: "Nenhum dado canônico disponível para esta cultura.",
+      // Phase 5g — Mindmap
+      mindmapTab: "Mapa de Insumos",
+      mindmapTitle: "Mapa Visual de Insumos",
+      mindmapSubtitle: "Visualização hierárquica: cultura → categoria → produto → indústria / molécula",
     },
     contentHub: {
       title: "Central de Conte\u00fado",
@@ -746,6 +750,10 @@ export const translations = {
       marketShare: "Market Share",
       costPerHa: "Cost/ha",
       noCanonical: "No canonical data available for this crop.",
+      // Phase 5g — Mindmap
+      mindmapTab: "Input Map",
+      mindmapTitle: "Visual Input Map",
+      mindmapSubtitle: "Hierarchical view: crop → category → product → industry / molecule",
     },
     contentHub: {
       title: "Content Hub",

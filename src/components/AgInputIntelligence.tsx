@@ -6,7 +6,7 @@ import {
   Search, Leaf, FlaskConical, Map as MapIcon, Loader2, AlertCircle,
   ChevronLeft, ChevronRight, BookMarked, ExternalLink,
   Link, GitBranch, ChevronDown, ChevronUp, Info, Layers,
-  Sparkles, Zap, TrendingDown, Package, Factory, ArrowRight,
+  Sparkles, Zap, TrendingDown, Package, Factory, ArrowRight, Network,
 } from "lucide-react";
 
 interface ProductRow {
@@ -19,7 +19,7 @@ interface ProductRow {
   holder: string;
 }
 
-type Tab = "oracle" | "package" | "industry" | "chemicals" | "biologicals" | "soils" | "glossary";
+type Tab = "oracle" | "package" | "industry" | "mindmap" | "chemicals" | "biologicals" | "soils" | "glossary";
 
 // Phase 5 — Canonical input types
 interface CanonicalInput {
@@ -70,6 +70,212 @@ const ORACLE_CULTURES = [
   { slug: "arroz", label_pt: "Arroz", label_en: "Rice" },
 ];
 
+// ─── Phase 5g: Mindmap SVG component ────────────────────────────────────────
+
+const CATEGORY_COLORS: Record<string, string> = {
+  fungicida_premium: "#5B7A2F",
+  fungicida_multissitio: "#7FA02B",
+  inseticida_percevejo: "#E8722A",
+  inseticida_lagarta: "#D4532B",
+  herbicida_seletivo: "#2563EB",
+  herbicida_dessecacao: "#1D4ED8",
+  tsi: "#7C3AED",
+};
+
+function InputMindMapSvg({
+  lang, culture, byCategory, categoryLabels,
+}: {
+  lang: Lang;
+  culture: string;
+  byCategory: Record<string, CanonicalInput[]>;
+  categoryLabels: Record<string, string>;
+}) {
+  const [hovered, setHovered] = useState<string | null>(null);
+
+  const categories = Object.entries(byCategory);
+  if (categories.length === 0) return null;
+
+  const catCount = categories.length;
+  // Layout: root left, categories center, products right
+  const W = 1060;
+  const rowH = 28;
+  const totalProducts = categories.reduce((s, [, items]) => s + items.length, 0);
+  const H = Math.max(400, totalProducts * rowH + catCount * 16 + 80);
+
+  const rootX = 60;
+  const rootY = H / 2;
+  const catX = 260;
+  const prodX = 520;
+  const metaX = 780;
+
+  // Compute category Y positions so products are evenly spread
+  let curY = 40;
+  const catPositions: { key: string; label: string; items: CanonicalInput[]; y: number; color: string; productPositions: { item: CanonicalInput; y: number }[] }[] = [];
+
+  for (const [catKey, items] of categories) {
+    const blockH = items.length * rowH;
+    const catY = curY + blockH / 2;
+    const productPositions = items.map((item, i) => ({ item, y: curY + i * rowH + rowH / 2 }));
+    catPositions.push({
+      key: catKey,
+      label: categoryLabels[catKey] || catKey,
+      items,
+      y: catY,
+      color: CATEGORY_COLORS[catKey] || "#64748b",
+      productPositions,
+    });
+    curY += blockH + 16;
+  }
+
+  // Culture label from ORACLE_CULTURES
+  const cultureLabel = ORACLE_CULTURES.find((c) => c.slug === culture);
+  const cultureDisplay = cultureLabel ? (lang === "pt" ? cultureLabel.label_pt : cultureLabel.label_en) : culture;
+
+  // Dedupe unique industries and molecules for stats
+  const uniqueIndustries = new Set<string>();
+  const uniqueMolecules = new Set<string>();
+  for (const [, items] of categories) {
+    for (const item of items) {
+      if (item.industry_name) uniqueIndustries.add(item.industry_name);
+      if (item.active_ingredient) uniqueMolecules.add(item.active_ingredient);
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-lg border border-neutral-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-x-auto">
+      {/* Legend */}
+      <div className="px-5 py-3 border-b border-neutral-100 flex flex-wrap items-center gap-4 text-[11px]">
+        <span className="font-semibold text-neutral-500 uppercase tracking-wider">
+          {lang === "pt" ? "Legenda" : "Legend"}:
+        </span>
+        {catPositions.map((cat) => (
+          <span key={cat.key} className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: cat.color }} />
+            <span className="text-neutral-600">{cat.label}</span>
+          </span>
+        ))}
+        <span className="ml-auto text-neutral-400">
+          {totalProducts} {lang === "pt" ? "produtos" : "products"} · {uniqueIndustries.size} {lang === "pt" ? "indústrias" : "industries"} · {uniqueMolecules.size} {lang === "pt" ? "moléculas" : "molecules"}
+        </span>
+      </div>
+
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ minWidth: 700 }}>
+        {/* Root node — Culture */}
+        <circle cx={rootX} cy={rootY} r={36} fill="#5B7A2F" stroke="#3D5520" strokeWidth={2} />
+        <text x={rootX} y={rootY - 6} textAnchor="middle" className="fill-white font-bold" style={{ fontSize: 12 }}>
+          {cultureDisplay}
+        </text>
+        <text x={rootX} y={rootY + 10} textAnchor="middle" className="fill-white" style={{ fontSize: 9, opacity: 0.8 }}>
+          {totalProducts} {lang === "pt" ? "produtos" : "products"}
+        </text>
+
+        {/* Category nodes + connections */}
+        {catPositions.map((cat) => {
+          const isHoveredCat = hovered === cat.key || cat.productPositions.some((p) => hovered === `prod-${p.item.id}`);
+          return (
+            <g key={cat.key}>
+              {/* Root → Category edge */}
+              <path
+                d={`M ${rootX + 36} ${rootY} C ${rootX + 100} ${rootY}, ${catX - 70} ${cat.y}, ${catX - 40} ${cat.y}`}
+                fill="none"
+                stroke={cat.color}
+                strokeWidth={isHoveredCat ? 2.5 : 1.5}
+                opacity={hovered && !isHoveredCat ? 0.15 : 0.6}
+              />
+
+              {/* Category node */}
+              <g
+                onMouseEnter={() => setHovered(cat.key)}
+                onMouseLeave={() => setHovered(null)}
+                style={{ cursor: "pointer" }}
+              >
+                <rect
+                  x={catX - 40} y={cat.y - 14} width={140} height={28} rx={6}
+                  fill={isHoveredCat ? cat.color : `${cat.color}18`}
+                  stroke={cat.color}
+                  strokeWidth={isHoveredCat ? 2 : 1}
+                />
+                <text x={catX + 30} y={cat.y + 4} textAnchor="middle"
+                  className="font-semibold" style={{ fontSize: 10, fill: isHoveredCat ? "#fff" : cat.color }}>
+                  {cat.label}
+                </text>
+              </g>
+
+              {/* Category → Product edges + Product nodes */}
+              {cat.productPositions.map(({ item, y: prodY }) => {
+                const prodKey = `prod-${item.id}`;
+                const isHoveredProd = hovered === prodKey;
+                const isRelated = hovered === cat.key;
+                const dimmed = hovered && !isHoveredProd && !isRelated;
+                return (
+                  <g key={prodKey}>
+                    {/* Category → Product edge */}
+                    <path
+                      d={`M ${catX + 100} ${cat.y} C ${catX + 130} ${cat.y}, ${prodX - 30} ${prodY}, ${prodX} ${prodY}`}
+                      fill="none"
+                      stroke={cat.color}
+                      strokeWidth={isHoveredProd ? 2 : 1}
+                      opacity={dimmed ? 0.1 : 0.4}
+                    />
+
+                    {/* Product node */}
+                    <g
+                      onMouseEnter={() => setHovered(prodKey)}
+                      onMouseLeave={() => setHovered(null)}
+                      style={{ cursor: "pointer" }}
+                    >
+                      <circle
+                        cx={prodX} cy={prodY} r={6}
+                        fill={isHoveredProd ? cat.color : "#fff"}
+                        stroke={cat.color}
+                        strokeWidth={isHoveredProd ? 2 : 1}
+                      />
+                      {/* Rank badge for leader */}
+                      {item.rank === 1 && (
+                        <circle cx={prodX} cy={prodY} r={9} fill="none" stroke="#F59E0B" strokeWidth={1.5} strokeDasharray="2 2" />
+                      )}
+                      {/* Product name */}
+                      <text x={prodX + 14} y={prodY + 4} className="font-medium"
+                        style={{ fontSize: 10, fill: dimmed ? "#d1d5db" : "#1f2937" }}>
+                        {item.product_name}
+                        {item.rank === 1 ? " ★" : ""}
+                      </text>
+                    </g>
+
+                    {/* Metadata: industry + molecule */}
+                    <text x={metaX} y={prodY - 2}
+                      style={{ fontSize: 9, fill: dimmed ? "#e5e7eb" : cat.color, fontWeight: 600 }}>
+                      {item.industry_name || "—"}
+                    </text>
+                    <text x={metaX} y={prodY + 10}
+                      style={{ fontSize: 8, fill: dimmed ? "#e5e7eb" : "#9ca3af" }}>
+                      {item.active_ingredient ? (item.active_ingredient.length > 40 ? item.active_ingredient.slice(0, 38) + "…" : item.active_ingredient) : ""}
+                    </text>
+                  </g>
+                );
+              })}
+            </g>
+          );
+        })}
+
+        {/* Column headers */}
+        <text x={rootX} y={16} textAnchor="middle" className="font-bold" style={{ fontSize: 9, fill: "#9ca3af", letterSpacing: "0.08em" }}>
+          {(lang === "pt" ? "CULTURA" : "CROP").toUpperCase()}
+        </text>
+        <text x={catX + 30} y={16} textAnchor="middle" className="font-bold" style={{ fontSize: 9, fill: "#9ca3af", letterSpacing: "0.08em" }}>
+          {(lang === "pt" ? "CATEGORIA" : "CATEGORY").toUpperCase()}
+        </text>
+        <text x={prodX + 30} y={16} textAnchor="middle" className="font-bold" style={{ fontSize: 9, fill: "#9ca3af", letterSpacing: "0.08em" }}>
+          {(lang === "pt" ? "PRODUTO" : "PRODUCT").toUpperCase()}
+        </text>
+        <text x={metaX + 40} y={16} textAnchor="middle" className="font-bold" style={{ fontSize: 9, fill: "#9ca3af", letterSpacing: "0.08em" }}>
+          {(lang === "pt" ? "INDÚSTRIA / MOLÉCULA" : "INDUSTRY / MOLECULE").toUpperCase()}
+        </text>
+      </svg>
+    </div>
+  );
+}
+
 export function AgInputIntelligence({ lang }: { lang: Lang }) {
   const tr = t(lang);
   const [searchTerm, setSearchTerm] = useState("");
@@ -117,16 +323,16 @@ export function AgInputIntelligence({ lang }: { lang: Lang }) {
     }
   }, []);
 
-  // Auto-load canonical data when switching to package/industry tab
+  // Auto-load canonical data when switching to package/industry/mindmap tab
   useEffect(() => {
-    if ((activeTab === "package" || activeTab === "industry") && !canonicalLoaded) {
+    if ((activeTab === "package" || activeTab === "industry" || activeTab === "mindmap") && !canonicalLoaded) {
       fetchCanonical(oracleCulture);
     }
   }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Re-fetch canonical when culture changes (if already on those tabs)
   useEffect(() => {
-    if (activeTab === "package" || activeTab === "industry") {
+    if (activeTab === "package" || activeTab === "industry" || activeTab === "mindmap") {
       fetchCanonical(oracleCulture);
     }
   }, [oracleCulture]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -369,6 +575,17 @@ export function AgInputIntelligence({ lang }: { lang: Lang }) {
         >
           <Factory size={16} />
           {tr.inputs.industryTab}
+        </button>
+        <button
+          onClick={() => setActiveTab("mindmap")}
+          className={`flex items-center gap-2 px-4 py-3 text-[14px] font-semibold border-b-2 transition-colors whitespace-nowrap ${
+            activeTab === "mindmap"
+              ? "border-brand-primary text-brand-primary"
+              : "border-transparent text-neutral-500 hover:text-neutral-700"
+          }`}
+        >
+          <Network size={16} />
+          {tr.inputs.mindmapTab}
         </button>
         <button
           onClick={() => setActiveTab("chemicals")}
@@ -823,6 +1040,44 @@ export function AgInputIntelligence({ lang }: { lang: Lang }) {
                 </div>
               ))}
           </div>
+        </div>
+      ) : activeTab === "mindmap" ? (
+        <div className="space-y-4">
+          {/* Culture selector */}
+          <div className="bg-white rounded-lg border border-neutral-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5">
+            <div className="flex items-center gap-2 mb-1">
+              <Network size={16} className="text-brand-primary" />
+              <h3 className="text-[16px] font-bold text-neutral-900">{tr.inputs.mindmapTitle}</h3>
+            </div>
+            <p className="text-[12px] text-neutral-500 mb-4">{tr.inputs.mindmapSubtitle}</p>
+            <div className="flex items-center gap-3">
+              <select
+                value={oracleCulture}
+                onChange={(e) => setOracleCulture(e.target.value)}
+                className="px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-md text-[13px] focus:outline-none focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary"
+              >
+                {ORACLE_CULTURES.map((c) => (
+                  <option key={c.slug} value={c.slug}>
+                    {lang === "pt" ? c.label_pt : c.label_en}
+                  </option>
+                ))}
+              </select>
+              {canonicalLoading && <Loader2 size={14} className="animate-spin text-neutral-400" />}
+            </div>
+          </div>
+
+          {canonicalLoaded && Object.keys(canonicalByCategory).length === 0 ? (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-[13px] text-amber-800">
+              {tr.inputs.noCanonical}
+            </div>
+          ) : canonicalLoaded ? (
+            <InputMindMapSvg
+              lang={lang}
+              culture={oracleCulture}
+              byCategory={canonicalByCategory}
+              categoryLabels={tr.inputs.categoryLabels as Record<string, string>}
+            />
+          ) : null}
         </div>
       ) : activeTab === "glossary" ? (
         <div className="space-y-4">
