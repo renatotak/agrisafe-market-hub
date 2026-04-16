@@ -11,6 +11,7 @@ interface Briefing {
   briefing_date: string;
   generated_at: string;
   executive_summary: string | null;
+  theme: string | null;
   market_moves: { commodity: string; price: number; change_pct: number; unit: string }[];
   top_news: { title: string; summary: string; category: string; source: string; url?: string }[];
   regulatory_updates: { title: string; body: string; impact: string; areas: string[] }[];
@@ -19,6 +20,15 @@ interface Briefing {
   price_ruptures: { commodity: string; price: number; change_pct: number; sigma: number; stddev: number; unit: string }[];
   source_health: { total: number; healthy: number; error: number };
 }
+
+const THEME_LABELS: Record<string, { pt: string; en: string }> = {
+  commodities:           { pt: "Commodities",                en: "Commodities" },
+  regulatory:            { pt: "Regulatório",                en: "Regulatory" },
+  competitors:           { pt: "Concorrentes",               en: "Competitors" },
+  content_opportunities: { pt: "Oport. Conteúdo",            en: "Content Opps" },
+  weekly_recap:          { pt: "Recap Semanal",               en: "Weekly Recap" },
+  market_outlook:        { pt: "Perspectiva Mercado",         en: "Market Outlook" },
+};
 
 export function ExecutiveBriefingWidget({ lang }: { lang: Lang }) {
   const [briefing, setBriefing] = useState<Briefing | null>(null);
@@ -74,11 +84,16 @@ export function ExecutiveBriefingWidget({ lang }: { lang: Lang }) {
             <FileText size={16} className="text-brand-primary" />
           </div>
           <div>
-            <h3 className="text-[14px] font-bold text-neutral-900 flex items-center gap-2">
+            <h3 className="text-[14px] font-bold text-neutral-900 flex items-center gap-2 flex-wrap">
               {lang === "pt" ? "Briefing Executivo" : "Executive Briefing"}
               <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-brand-primary/10 text-brand-primary uppercase">
                 {dateLabel}
               </span>
+              {briefing.theme && THEME_LABELS[briefing.theme] && (
+                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 uppercase">
+                  {lang === "pt" ? THEME_LABELS[briefing.theme].pt : THEME_LABELS[briefing.theme].en}
+                </span>
+              )}
             </h3>
             <p className="text-[10px] text-neutral-400">
               {lang === "pt" ? `Gerado às ${generatedTime}` : `Generated at ${generatedTime}`}

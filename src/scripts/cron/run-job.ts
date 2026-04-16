@@ -57,6 +57,8 @@ import { runSyncMfruralFertilizers } from '@/jobs/sync-mfrural-fertilizers'
 import { runSyncUsdaAgtransport } from '@/jobs/sync-usda-agtransport'
 import { runSyncEventsAgrural } from '@/jobs/sync-events-agrural'
 import { runSyncOrchestrator } from '@/jobs/sync-orchestrator'
+import { runSyncOracleInsights } from '@/jobs/sync-oracle-insights'
+import { runSyncRegulatoryDigest } from '@/jobs/sync-regulatory-digest'
 
 import type { JobResult } from '@/jobs/types'
 
@@ -92,6 +94,8 @@ const JOB_REGISTRY: Record<string, JobFn> = {
   'sync-events-agrural':    runSyncEventsAgrural,
   'sync-daily-briefing':    runSyncDailyBriefing,
   'sync-orchestrator':      runSyncOrchestrator,
+  'sync-oracle-insights':   runSyncOracleInsights,
+  'sync-regulatory-digest': runSyncRegulatoryDigest,
 }
 
 async function main() {

@@ -1,6 +1,9 @@
 /**
- * Phase 27 — thin route wrapper for sync-daily-briefing.
+ * Phase 27 + 6c — thin route wrapper for sync-daily-briefing.
  * Job logic lives in src/jobs/sync-daily-briefing.ts.
+ *
+ * Query params:
+ *   ?lens=daily_themed_briefing — activates rotating theme + anti-repetition memory
  */
 
 import { NextResponse } from 'next/server'
@@ -19,12 +22,16 @@ export async function GET(request: Request) {
     return new Response('Unauthorized', { status: 401 })
   }
 
-  const result = await runSyncDailyBriefing(createAdminClient())
+  const url = new URL(request.url)
+  const lens = url.searchParams.get('lens') || undefined
+
+  const result = await runSyncDailyBriefing(createAdminClient(), { lens })
   return NextResponse.json(
     {
       success: result.ok,
       status: result.status,
       duration_ms: result.durationMs,
+      lens,
       errors: result.errors.length > 0 ? result.errors : undefined,
     },
     { status: result.ok ? 200 : 500 },

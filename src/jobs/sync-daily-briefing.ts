@@ -1,9 +1,13 @@
 /**
- * Phase 27 — sync-daily-briefing job module.
+ * Phase 27 + 6c — sync-daily-briefing job module.
  *
  * Aggregates last 24h of news, prices, regulations, RJ filings, and
  * upcoming events into a structured executive briefing. Uses Gemini
  * for prose generation only — all data aggregation is algorithmic.
+ *
+ * Phase 6c: When lens=daily_themed_briefing, applies a rotating daily
+ * theme (Mon=commodities … Sun=market_outlook) and reads the prior 7
+ * days of briefings as anti-repetition memory for the LLM prompt.
  *
  * Output: one row per day in executive_briefings, upserted by briefing_date.
  */
@@ -11,6 +15,67 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type { JobResult } from "@/jobs/types"
 import { logActivity } from "@/lib/activity-log"
+
+/* ── Phase 6c: themed lens helpers ─────────────────────────────── */
+
+const THEME_SCHEDULE: Record<number, string> = {
+  1: "commodities",
+  2: "regulatory",
+  3: "competitors",
+  4: "content_opportunities",
+  5: "weekly_recap",
+  6: "market_outlook",
+  0: "market_outlook", // Sunday
+}
+
+const THEME_LABELS: Record<string, { pt: string; en: string }> = {
+  commodities:           { pt: "Commodities",                en: "Commodities" },
+  regulatory:            { pt: "Regulatório",                en: "Regulatory" },
+  competitors:           { pt: "Concorrentes",               en: "Competitors" },
+  content_opportunities: { pt: "Oportunidades de Conteúdo",  en: "Content Opportunities" },
+  weekly_recap:          { pt: "Recapitulação Semanal",       en: "Weekly Recap" },
+  market_outlook:        { pt: "Perspectiva de Mercado",      en: "Market Outlook" },
+}
+
+function getTodayTheme(): string {
+  return THEME_SCHEDULE[new Date().getDay()] || "market_outlook"
+}
+
+/** Fetch prior 7 days of briefing summaries as anti-repetition memory */
+async function fetchRecentBriefings(supabase: SupabaseClient): Promise<string[]> {
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+  const { data } = await supabase
+    .from("executive_briefings")
+    .select("briefing_date, theme, executive_summary")
+    .gte("briefing_date", sevenDaysAgo)
+    .order("briefing_date", { ascending: false })
+    .limit(7)
+  if (!data || data.length === 0) return []
+  return data.map((b: any) =>
+    `[${b.briefing_date}${b.theme ? ` / ${b.theme}` : ""}] ${(b.executive_summary || "").slice(0, 300)}`
+  )
+}
+
+function buildThemePromptOverlay(theme: string, priorBriefings: string[]): string {
+  const themeLabel = THEME_LABELS[theme]?.pt || theme
+  let overlay = `\n\nTEMA DO DIA: **${themeLabel}**.\nDê mais ênfase e profundidade ao tema "${themeLabel}" na análise de hoje. Os outros tópicos devem ser cobertos de forma mais concisa, servindo como contexto de apoio.\n`
+
+  if (theme === "weekly_recap") {
+    overlay += `\nHoje é sexta-feira — consolide os destaques da semana inteira em uma recapitulação executiva.\n`
+  }
+  if (theme === "content_opportunities") {
+    overlay += `\nIdentifique 2-3 oportunidades de conteúdo (artigos, posts LinkedIn, webinars) com base nos dados de hoje. Sugira títulos e ângulos.\n`
+  }
+
+  if (priorBriefings.length > 0) {
+    overlay += `\nMEMÓRIA ANTI-REPETIÇÃO — briefings dos últimos 7 dias (NÃO repita os mesmos insights já cobertos, encontre ângulos novos):\n`
+    for (const b of priorBriefings) {
+      overlay += `- ${b}\n`
+    }
+  }
+
+  return overlay
+}
 
 interface PriceRupture {
   commodity: string
@@ -174,11 +239,14 @@ async function gatherData(supabase: SupabaseClient): Promise<BriefingData> {
   }
 }
 
-async function generateSummary(data: BriefingData): Promise<string> {
+async function generateSummary(
+  data: BriefingData,
+  themeOverlay?: string,
+): Promise<string> {
   try {
     const { summarizeText } = await import("@/lib/gemini")
 
-    const systemPrompt = `You are a senior agribusiness analyst at AgriSafe, writing a daily executive briefing for the CEO. Write in Portuguese (PT-BR). Be concise and actionable.
+    let systemPrompt = `You are a senior agribusiness analyst at AgriSafe, writing a daily executive briefing for the CEO. Write in Portuguese (PT-BR). Be concise and actionable.
 
 Output a JSON object with exactly this structure:
 {
@@ -194,6 +262,11 @@ PRIORITY LENS — rank and emphasize information in this order:
 5. **Events & other** — only if they are strategic (e.g., major trade fairs, policy announcements).
 
 If entity mentions data is provided, name the specific companies affected. Focus on what changed, what requires attention, and strategic implications. Do not pad sections with no significant changes.`
+
+    // Phase 6c — append themed lens overlay if present
+    if (themeOverlay) {
+      systemPrompt += themeOverlay
+    }
 
     const context = JSON.stringify({
       date: new Date().toISOString().slice(0, 10),
@@ -228,17 +301,35 @@ If entity mentions data is provided, name the specific companies affected. Focus
   }
 }
 
-export async function runSyncDailyBriefing(supabase: SupabaseClient): Promise<JobResult> {
+export interface BriefingOptions {
+  lens?: string
+}
+
+export async function runSyncDailyBriefing(
+  supabase: SupabaseClient,
+  options?: BriefingOptions,
+): Promise<JobResult> {
   const startIso = new Date().toISOString()
   const start = Date.now()
   const errors: string[] = []
   const today = new Date().toISOString().slice(0, 10)
+  const lens = options?.lens
 
   try {
     const data = await gatherData(supabase)
-    const summary = await generateSummary(data)
 
-    const row = {
+    // Phase 6c — themed lens support
+    let theme: string | undefined
+    let themeOverlay: string | undefined
+    if (lens === "daily_themed_briefing") {
+      theme = getTodayTheme()
+      const priorBriefings = await fetchRecentBriefings(supabase)
+      themeOverlay = buildThemePromptOverlay(theme, priorBriefings)
+    }
+
+    const summary = await generateSummary(data, themeOverlay)
+
+    const row: Record<string, unknown> = {
       briefing_date: today,
       executive_summary: summary,
       market_moves: data.marketMoves,
@@ -250,6 +341,11 @@ export async function runSyncDailyBriefing(supabase: SupabaseClient): Promise<Jo
       source_health: data.sourceHealth,
       data_window_hours: 24,
       model_used: "gemini-2.5-flash",
+    }
+
+    // Phase 6c — store theme if using themed lens
+    if (theme) {
+      row.theme = theme
     }
 
     const { error } = await supabase
@@ -266,7 +362,7 @@ export async function runSyncDailyBriefing(supabase: SupabaseClient): Promise<Jo
       target_id: today,
       source: "sync-daily-briefing",
       source_kind: "cron",
-      summary: `Briefing for ${today}: ${data.newsCount} news, ${data.marketMoves.length} movers, ${data.newRegulations.length} norms`,
+      summary: `Briefing for ${today}${theme ? ` [${theme}]` : ""}: ${data.newsCount} news, ${data.marketMoves.length} movers, ${data.newRegulations.length} norms`,
     }).catch(() => {})
 
     const duration = Date.now() - start
