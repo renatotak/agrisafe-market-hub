@@ -2,24 +2,33 @@ import { NextRequest, NextResponse } from "next/server";
 import * as cheerio from "cheerio";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { logSync } from "@/lib/sync-logger";
+import { summarizeText, isGeminiConfigured } from "@/lib/gemini";
 
 /**
  * Phase 21 — On-demand competitor web enrichment.
  *
- * POST { id }  → looks up the competitor, runs an algorithmic web search
- *                (DuckDuckGo + optional Google CSE), optionally scrapes the
- *                competitor's official website with Cheerio for a clean
- *                meta-description / OG title, and returns a structured
- *                "findings" payload that the UI can append to the notes
- *                field.
+ * Two modes:
+ *
+ * A) POST { id }  → looks up the competitor, runs an algorithmic web search
+ *                   (DuckDuckGo + optional Google CSE), optionally scrapes the
+ *                   competitor's official website with Cheerio for a clean
+ *                   meta-description / OG title, and returns a structured
+ *                   "findings" payload that the UI can append to the notes
+ *                   field.
+ *
+ * B) POST { url } → Phase 4a "URL paste + AI categorize". Scrapes the given
+ *                   URL with Cheerio to extract meta tags, then uses Vertex AI
+ *                   to return structured fields (name, segment, summary,
+ *                   hq_city, main_lines) for the Add-Competitor form.
  *
  * GUARDRAIL — algorithms first:
  *   • Search results: deterministic HTML / JSON parsing.
  *   • Page scrape:    Cheerio selectors only (title, og:title, meta
  *                     description, h1).
- *   • LLM:            ONE optional call at the end, gated on OPENAI_API_KEY,
- *                     for a 3-5 sentence prose summary of the deterministic
- *                     findings. Never used to extract data.
+ *   • LLM:            ONE optional call at the end, gated on OPENAI_API_KEY
+ *                     (mode A) or Vertex AI (mode B), for a prose summary or
+ *                     structured extraction. Never used to extract raw data
+ *                     that Cheerio can get.
  */
 
 interface Finding {
@@ -117,20 +126,132 @@ async function scrapeSiteMeta(website: string): Promise<SiteMeta | null> {
   }
 }
 
+// ─── Phase 4a: URL categorize (Cheerio + Vertex AI) ──────────────────────
+
+interface CategorizeResult {
+  name: string;
+  segment: string;
+  summary_pt: string;
+  summary_en: string;
+  hq_city: string;
+  main_lines: string;
+  website: string;
+}
+
+async function categorizeFromUrl(rawUrl: string): Promise<CategorizeResult> {
+  // 1. Normalize and scrape
+  let url = rawUrl.trim();
+  if (!/^https?:\/\//i.test(url)) url = `https://${url}`;
+
+  const siteMeta = await scrapeSiteMeta(url);
+  const hostname = (() => {
+    try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return url; }
+  })();
+
+  // 2. Cheerio: extract visible text for context (first ~3000 chars)
+  let pageText = "";
+  try {
+    const res = await fetch(url, {
+      headers: { "User-Agent": UA },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (res.ok) {
+      const html = await res.text();
+      const $ = cheerio.load(html);
+      $("script, style, noscript, svg, nav, footer, header").remove();
+      pageText = $("body").text().replace(/\s+/g, " ").trim().slice(0, 3000);
+    }
+  } catch { /* timeout or network error */ }
+
+  // 3. Build algorithmic defaults from meta tags
+  const algoName = siteMeta?.ogTitle || siteMeta?.title || siteMeta?.h1 || hostname;
+  const algoDesc = siteMeta?.description || "";
+
+  // 4. If Vertex AI is available, use it for structured extraction
+  if (isGeminiConfigured() && (pageText || algoDesc)) {
+    try {
+      const systemPrompt = [
+        "Você é um analista de inteligência competitiva no agronegócio brasileiro.",
+        "Dada a URL, meta-tags e texto visível de um site, extraia campos estruturados sobre a empresa.",
+        "Responda APENAS com um JSON válido com estes campos:",
+        '  "name": nome da empresa (curto, sem slogan),',
+        '  "segment": vertical/segmento (ex: Agrifintech, Plataforma de Crédito, Agtech, Seguro Rural, Trading...),',
+        '  "summary_pt": resumo de 2-3 frases em PT-BR sobre o que a empresa faz,',
+        '  "summary_en": mesmo resumo em inglês,',
+        '  "hq_city": cidade-sede se mencionada (ex: "São Paulo, SP"), ou "" se não encontrada,',
+        '  "main_lines": linhas de produto/serviço principais separadas por vírgula.',
+        "Seja factual — não invente dados que não apareçam no texto.",
+      ].join("\n");
+
+      const userPrompt = [
+        `URL: ${url}`,
+        `Hostname: ${hostname}`,
+        `Title: ${siteMeta?.title || "—"}`,
+        `OG Title: ${siteMeta?.ogTitle || "—"}`,
+        `Meta Description: ${algoDesc || "—"}`,
+        `H1: ${siteMeta?.h1 || "—"}`,
+        "",
+        "Texto visível (primeiros 3000 chars):",
+        pageText || "(não disponível)",
+      ].join("\n");
+
+      const raw = await summarizeText(systemPrompt, userPrompt, 600);
+      const parsed = JSON.parse(raw);
+      return {
+        name: parsed.name || algoName,
+        segment: parsed.segment || "",
+        summary_pt: parsed.summary_pt || algoDesc,
+        summary_en: parsed.summary_en || "",
+        hq_city: parsed.hq_city || "",
+        main_lines: parsed.main_lines || "",
+        website: hostname,
+      };
+    } catch {
+      // Vertex AI failed — fall through to algorithmic defaults
+    }
+  }
+
+  // 5. Algorithmic-only fallback (no LLM available)
+  return {
+    name: algoName,
+    segment: "",
+    summary_pt: algoDesc,
+    summary_en: "",
+    hq_city: "",
+    main_lines: "",
+    website: hostname,
+  };
+}
+
+// ─── POST handler ───────────────────────────────────────────────────────────
+
 export async function POST(req: NextRequest) {
   const startedAt = new Date().toISOString();
   const supabase = createAdminClient();
 
-  let body: { id?: string };
+  let body: { id?: string; url?: string };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
+  // ── Mode B: Phase 4a URL categorize ──
+  const pastedUrl = body.url?.trim();
+  if (pastedUrl) {
+    try {
+      const result = await categorizeFromUrl(pastedUrl);
+      return NextResponse.json({ mode: "categorize", ...result });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return NextResponse.json({ error: msg }, { status: 500 });
+    }
+  }
+
+  // ── Mode A: existing enrichment by competitor id ──
   const id = body.id?.trim();
   if (!id) {
-    return NextResponse.json({ error: "id is required" }, { status: 400 });
+    return NextResponse.json({ error: "id or url is required" }, { status: 400 });
   }
 
   const { data: competitor, error: fetchErr } = await supabase

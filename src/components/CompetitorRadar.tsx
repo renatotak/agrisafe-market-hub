@@ -613,12 +613,55 @@ function CompetitorModal({ lang, competitor, onClose, onSaved }: {
   const [enrichResult, setEnrichResult] = useState<{ summary: string | null; findings: { title: string; url: string; source: string }[] } | null>(null);
   const [enrichErr, setEnrichErr] = useState<string | null>(null);
 
+  // Phase 4a — URL paste + AI categorize
+  const [pasteUrl, setPasteUrl] = useState("");
+  const [categorizing, setCategorizing] = useState(false);
+  const [categorizeErr, setCategorizeErr] = useState<string | null>(null);
+  const [categorizeOk, setCategorizeOk] = useState(false);
+
   const update = <K extends keyof ModalFormState>(key: K, value: ModalFormState[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
   const updateHarvey = (key: keyof HarveyScores, value: number) => {
     setForm((prev) => ({ ...prev, harvey: { ...prev.harvey, [key]: value } }));
+  };
+
+  // Phase 4a — categorize from pasted URL
+  const handleCategorize = async () => {
+    const url = pasteUrl.trim();
+    if (!url) return;
+    setCategorizing(true);
+    setCategorizeErr(null);
+    setCategorizeOk(false);
+    try {
+      const res = await fetch("/api/competitors/enrich-web", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "categorize failed");
+      // Pre-fill form fields — user reviews before saving
+      setForm((prev) => ({
+        ...prev,
+        name: data.name || prev.name,
+        vertical: data.segment || prev.vertical,
+        website: data.website || prev.website,
+        description_pt: data.summary_pt || prev.description_pt,
+        description_en: data.summary_en || prev.description_en,
+        notes: data.main_lines
+          ? `${prev.notes ? prev.notes + "\n\n" : ""}${tr.competitors.mainLines}: ${data.main_lines}${data.hq_city ? `\n${tr.competitors.hqCity}: ${data.hq_city}` : ""}`
+          : prev.notes,
+        country: data.hq_city?.includes("BR") || data.hq_city?.match(/,\s*(SP|RJ|MG|PR|RS|SC|BA|GO|MT|MS|TO|MA|PI|CE|PE|PA|AM|DF)\s*$/i) ? "BR" : prev.country,
+      }));
+      setCategorizeOk(true);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setCategorizeErr(msg);
+    } finally {
+      setCategorizing(false);
+    }
   };
 
   const handleSave = async () => {
@@ -710,6 +753,49 @@ function CompetitorModal({ lang, competitor, onClose, onSaved }: {
         </div>
 
         <div className="p-6 space-y-4">
+          {/* Phase 4a — URL paste + AI categorize (add mode only) */}
+          {!isEdit && (
+            <div className="bg-white rounded-lg border border-neutral-200 shadow-sm p-4">
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-neutral-500 mb-1">
+                {tr.competitors.pasteUrl}
+              </label>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Globe size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
+                  <input
+                    type="text"
+                    value={pasteUrl}
+                    onChange={(e) => { setPasteUrl(e.target.value); setCategorizeOk(false); setCategorizeErr(null); }}
+                    onPaste={(e) => {
+                      // Auto-trigger on paste after a short delay
+                      const pasted = e.clipboardData.getData("text").trim();
+                      if (pasted && (pasted.startsWith("http") || pasted.includes("."))) {
+                        setTimeout(() => handleCategorize(), 200);
+                      }
+                    }}
+                    placeholder={tr.competitors.pasteUrlPlaceholder}
+                    className="w-full pl-8 pr-3 py-2 text-sm border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCategorize}
+                  disabled={categorizing || !pasteUrl.trim()}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-brand-primary/10 text-brand-primary hover:bg-brand-primary/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+                >
+                  {categorizing ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                  {categorizing ? tr.competitors.categorizing : tr.competitors.categorize}
+                </button>
+              </div>
+              {categorizeErr && (
+                <p className="text-xs text-red-600 mt-2">{tr.competitors.categorizeError}: {categorizeErr}</p>
+              )}
+              {categorizeOk && (
+                <p className="text-xs text-green-700 mt-2">{tr.competitors.categorizeSuccess}</p>
+              )}
+            </div>
+          )}
+
           {/* Identity card */}
           <div className="bg-white rounded-lg border border-neutral-200 shadow-sm p-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
