@@ -28,7 +28,7 @@ import {
 
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
-import { OracleChat } from "@/components/OracleChat";
+import { OracleChat, type OracleEntityContext } from "@/components/OracleChat";
 
 import type { Module } from "@/components/Sidebar";
 

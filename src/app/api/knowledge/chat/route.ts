@@ -12,7 +12,7 @@ export async function POST(req: Request) {
       }), { status: 400 })
     }
 
-    const { prompt, history = [], lang = 'pt', module } = await req.json()
+    const { prompt, history = [], lang = 'pt', module, entityContext } = await req.json()
     if (!prompt) {
       return new Response(JSON.stringify({
         success: false,
@@ -65,7 +65,8 @@ ${context || 'Nenhuma informação específica encontrada na base de conheciment
 
 HISTÓRICO DA CONVERSA:
 ${history.map((h: any) => `${h.role === 'user' ? 'Usuário' : 'Oráculo'}: ${h.content}`).join('\n')}
-${module ? `\nThe user is currently viewing the "${module}" module. Prioritize information relevant to that context.` : ""}
+${module ? `\nMÓDULO ATIVO: O usuário está no módulo "${module}". Priorize informações relevantes a esse contexto.` : ""}
+${entityContext?.entityName ? `\nENTIDADE EM FOCO: ${entityContext.entityName}${entityContext.cnpj ? ` (CNPJ: ${entityContext.cnpj})` : ''}. Quando possível, relacione a resposta a esta entidade.` : ""}
 `
 
     const answer = await summarizeText(systemPrompt, prompt, 1500)

@@ -9,13 +9,33 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 
+interface Citation {
+  id: string;
+  title: string;
+  tier: number;
+  source_url?: string | null;
+  source_type?: string;
+  confidentiality?: string;
+}
+
 interface Message {
   role: 'user' | 'assistant';
   content: string;
-  context?: any[];
+  context?: Citation[];
 }
 
-export function OracleChat({ lang, module }: { lang: Lang; module?: string }) {
+export interface OracleEntityContext {
+  entityName?: string;
+  entityId?: string;
+  cnpj?: string;
+  module?: string;
+}
+
+export function OracleChat({ lang, module, entityContext }: {
+  lang: Lang;
+  module?: string;
+  entityContext?: OracleEntityContext;
+}) {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
@@ -44,6 +64,7 @@ export function OracleChat({ lang, module }: { lang: Lang; module?: string }) {
           history: messages.slice(-5), // last 5 for context
           lang: lang,
           module: module,
+          entityContext: entityContext || undefined,
         })
       });
 
@@ -159,19 +180,38 @@ export function OracleChat({ lang, module }: { lang: Lang; module?: string }) {
                   ))}
                 </div>
                 
-                {/* Context Badges */}
+                {/* Citation Chips */}
                 {m.context && m.context.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mt-2 opacity-80">
-                    <p className="text-[10px] font-bold text-neutral-400 uppercase w-full mb-1">
-                      {lang === "pt" ? "Fontes da Base:" : "Knowledge Sources:"}
+                  <div className="flex flex-wrap gap-1.5 mt-2 opacity-90">
+                    <p className="text-[10px] font-bold text-neutral-400 uppercase w-full mb-1 flex items-center gap-1">
+                      <BookOpen size={10} />
+                      {lang === "pt" ? "Fontes citadas:" : "Cited sources:"}
                     </p>
-                    {m.context.map((ctx: any, ci: number) => (
-                      <div key={ci} className="flex items-center gap-1.5 px-2 py-1 bg-white border border-neutral-200 rounded-md text-[10px] text-neutral-600 font-medium whitespace-nowrap">
-                        <span className="w-1 h-1 rounded-full bg-brand-primary" />
-                        {ctx.title}
-                        <Badge variant="default" className="px-1 py-0 h-3 text-[8px]">T{ctx.tier}</Badge>
-                      </div>
-                    ))}
+                    {m.context.map((ctx: Citation, ci: number) => {
+                      const chip = (
+                        <div className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-medium whitespace-nowrap transition-colors ${
+                          ctx.source_url
+                            ? 'bg-brand-surface/60 border border-brand-primary/20 text-brand-primary hover:bg-brand-surface cursor-pointer'
+                            : 'bg-white border border-neutral-200 text-neutral-600'
+                        }`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${
+                            ctx.tier === 1 ? 'bg-brand-primary' :
+                            ctx.tier === 2 ? 'bg-info-dark' :
+                            ctx.tier === 3 ? 'bg-warning-dark' : 'bg-error-dark'
+                          }`} />
+                          <span className="max-w-[180px] truncate">{ctx.title}</span>
+                          <Badge variant="default" className="px-1 py-0 h-3 text-[8px]">T{ctx.tier}</Badge>
+                          {ctx.source_url && <ExternalLink size={9} className="shrink-0" />}
+                        </div>
+                      );
+                      return ctx.source_url ? (
+                        <a key={ci} href={ctx.source_url} target="_blank" rel="noopener noreferrer" title={ctx.title}>
+                          {chip}
+                        </a>
+                      ) : (
+                        <div key={ci} title={ctx.title}>{chip}</div>
+                      );
+                    })}
                   </div>
                 )}
               </div>

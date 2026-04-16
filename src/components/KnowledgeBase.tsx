@@ -47,7 +47,7 @@ export function KnowledgeBase({ lang }: { lang: Lang }) {
   const [totalItems, setTotalItems] = useState(0);
   const [isMock, setIsMock] = useState(true);
   const [tierFilter, setTierFilter] = useState<number | null>(null);
-  const [activeTab, setActiveTab] = useState<"explore" | "oracle">("explore");
+  const [activeTab, setActiveTab] = useState<"graph" | "oracle">("graph");
   const [showMindMap, setShowMindMap] = useState(false);
 
   useEffect(() => {
@@ -140,10 +140,10 @@ export function KnowledgeBase({ lang }: { lang: Lang }) {
         {/* Tab Switcher */}
         <div className="flex items-center bg-white border border-neutral-200 rounded-lg p-0.5">
           <button
-            onClick={() => setActiveTab("explore")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-[12px] font-semibold transition-colors ${activeTab === "explore" ? "bg-brand-primary/10 text-brand-primary" : "text-neutral-500 hover:text-neutral-700"}`}
+            onClick={() => setActiveTab("graph")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-[12px] font-semibold transition-colors ${activeTab === "graph" ? "bg-brand-primary/10 text-brand-primary" : "text-neutral-500 hover:text-neutral-700"}`}
           >
-            <Search size={14} /> {lang === "pt" ? "Explorar Base" : "Explore Knowledge"}
+            <Network size={14} /> Knowledge Graph
           </button>
           <button
             onClick={() => setActiveTab("oracle")}
@@ -155,7 +155,7 @@ export function KnowledgeBase({ lang }: { lang: Lang }) {
       </div>
 
       {activeTab === "oracle" ? (
-        <OracleChat lang={lang} />
+        <OracleChat lang={lang} module="knowledgeBase" />
       ) : (<>
 
       {/* Tier Cards */}
