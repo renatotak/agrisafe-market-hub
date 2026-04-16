@@ -58,50 +58,42 @@ export function ContentHub({ lang }: { lang: Lang }) {
   useEffect(() => { refreshLinks(); }, []);
   const articlesWithLink = Object.keys(linksByArticle).length;
 
-  // Phase 29 — Article suggestions from recent news + regulations
-  const [suggestions, setSuggestions] = useState<{ title: string; source: string; angle: string }[]>([]);
+  // Phase 6b — AI-powered topic suggestions from Vertex AI
+  interface TopicSuggestion {
+    rank: number;
+    title: string;
+    thesis: string;
+    sources: string[];
+    relevance_score: number;
+    tags: string[];
+    channel: string;
+  }
+  const [suggestions, setSuggestions] = useState<TopicSuggestion[]>([]);
   const [suggestLoading, setSuggestLoading] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [suggestError, setSuggestError] = useState<string | null>(null);
+  const [statusFlipped, setStatusFlipped] = useState(0);
 
   const fetchSuggestions = async () => {
     setSuggestLoading(true);
     setShowSuggestions(true);
+    setSuggestError(null);
+    setStatusFlipped(0);
     try {
-      // Gather recent news + regulations as raw material for article ideas
-      const [newsRes, regsRes] = await Promise.all([
-        fetch("/api/activity?source_kind=cron&target_table=agro_news&limit=10"),
-        fetch("/api/activity?source_kind=cron&target_table=regulatory_norms&limit=5"),
-      ]);
-      const newsJson = await newsRes.json();
-      const regsJson = await regsRes.json();
-
-      const ideas: { title: string; source: string; angle: string }[] = [];
-
-      // Extract article ideas from recent news activity
-      for (const act of (newsJson.activities || []).slice(0, 5)) {
-        if (act.summary) {
-          ideas.push({
-            title: act.summary.slice(0, 120),
-            source: "agro_news",
-            angle: lang === "pt" ? "Análise de tendência baseada em notícias recentes" : "Trend analysis from recent news",
-          });
-        }
+      const res = await fetch("/api/content/suggest-topics", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lang }),
+      });
+      const data = await res.json();
+      setSuggestions(data.suggestions || []);
+      setStatusFlipped(data.statusFlipped || 0);
+      if (data.error && (!data.suggestions || data.suggestions.length === 0)) {
+        setSuggestError(data.error);
       }
-
-      // Extract ideas from regulatory updates
-      for (const act of (regsJson.activities || []).slice(0, 3)) {
-        if (act.summary) {
-          ideas.push({
-            title: act.summary.slice(0, 120),
-            source: "regulatory_norms",
-            angle: lang === "pt" ? "Impacto regulatório para o agronegócio" : "Regulatory impact on agribusiness",
-          });
-        }
-      }
-
-      setSuggestions(ideas);
     } catch {
       setSuggestions([]);
+      setSuggestError(tr.contentHub.suggestTopicsError);
     } finally {
       setSuggestLoading(false);
     }
@@ -174,46 +166,78 @@ export function ContentHub({ lang }: { lang: Lang }) {
             className="flex items-center gap-1.5 px-3 py-2 rounded-md text-[12px] font-bold bg-brand-primary text-white hover:bg-brand-primary/90 disabled:opacity-50 transition-colors"
           >
             {suggestLoading ? <Loader2 size={13} className="animate-spin" /> : <Lightbulb size={13} />}
-            {lang === "pt" ? "Sugerir Artigos" : "Suggest Articles"}
+            {tr.contentHub.suggestTopicsBtn}
           </button>
         </div>
       </div>
 
-      {/* Suggestions panel (Phase 29) */}
+      {/* Phase 6b — AI-powered topic suggestions modal */}
       {showSuggestions && (
         <div className="bg-amber-50 rounded-lg border border-amber-200 p-4">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              <Lightbulb size={15} className="text-amber-600" />
+              <Sparkles size={15} className="text-amber-600" />
               <h3 className="text-[14px] font-bold text-amber-900">
-                {lang === "pt" ? "Sugestões de Artigos" : "Article Suggestions"}
+                {tr.contentHub.suggestTopicsTitle}
               </h3>
+              {statusFlipped > 0 && (
+                <span className="text-[10px] font-semibold text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
+                  {statusFlipped} {tr.contentHub.suggestTopicsFlipped}
+                </span>
+              )}
             </div>
             <button onClick={() => setShowSuggestions(false)} className="text-amber-400 hover:text-amber-600">
               <X size={14} />
             </button>
           </div>
           {suggestLoading ? (
-            <div className="flex items-center gap-2 py-4 text-amber-600">
+            <div className="flex items-center gap-2 py-6 text-amber-600">
               <Loader2 size={14} className="animate-spin" />
-              <span className="text-[12px]">{lang === "pt" ? "Analisando notícias e regulações recentes..." : "Analyzing recent news and regulations..."}</span>
+              <span className="text-[12px]">{tr.contentHub.suggestTopicsLoading}</span>
             </div>
+          ) : suggestError && suggestions.length === 0 ? (
+            <p className="text-[12px] text-amber-700 py-2">{suggestError}</p>
           ) : suggestions.length === 0 ? (
-            <p className="text-[12px] text-amber-700 py-2">
-              {lang === "pt" ? "Nenhuma sugestão encontrada. Tente novamente após novos dados serem ingeridos." : "No suggestions found. Try again after new data is ingested."}
-            </p>
+            <p className="text-[12px] text-amber-700 py-2">{tr.contentHub.suggestTopicsEmpty}</p>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-2.5">
               {suggestions.map((s, i) => (
-                <div key={i} className="flex items-start gap-3 bg-white rounded-md border border-amber-100 px-3 py-2.5">
-                  <Sparkles size={13} className="text-amber-500 mt-0.5 shrink-0" />
-                  <div className="min-w-0">
-                    <p className="text-[12px] font-bold text-neutral-900 leading-snug">{s.title}</p>
-                    <p className="text-[10px] text-neutral-500 mt-0.5">{s.angle}</p>
+                <div key={i} className="bg-white rounded-lg border border-amber-100 px-4 py-3 space-y-1.5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-2.5 min-w-0">
+                      <span className="text-[11px] font-black text-amber-500 mt-0.5 shrink-0">#{s.rank}</span>
+                      <div className="min-w-0">
+                        <p className="text-[13px] font-bold text-neutral-900 leading-snug">{s.title}</p>
+                        <p className="text-[11px] text-neutral-600 mt-1 leading-relaxed">{s.thesis}</p>
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end gap-1.5 shrink-0">
+                      <span className="text-[9px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
+                        {tr.contentHub.suggestTopicsRelevance}: {Math.round(s.relevance_score * 100)}%
+                      </span>
+                      <button
+                        onClick={() => {
+                          setSearchTerm(s.title);
+                          setActiveTab("pipeline");
+                          setShowSuggestions(false);
+                        }}
+                        className="inline-flex items-center gap-1 text-[10px] font-bold text-brand-primary hover:text-brand-primary/80"
+                      >
+                        <Plus size={10} />
+                        {tr.contentHub.suggestTopicsCreate}
+                      </button>
+                    </div>
                   </div>
-                  <span className="text-[9px] font-bold text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded uppercase shrink-0">
-                    {s.source.replace("_", " ")}
-                  </span>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {s.tags.map((tag) => (
+                      <span key={tag} className="text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-neutral-100 text-neutral-500">{tag}</span>
+                    ))}
+                  </div>
+                  {s.sources.length > 0 && (
+                    <p className="text-[9px] text-neutral-400">
+                      {tr.contentHub.suggestTopicsSources}: {s.sources.join(" · ")}
+                    </p>
+                  )}
                 </div>
               ))}
             </div>
