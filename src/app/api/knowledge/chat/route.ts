@@ -71,6 +71,18 @@ ${entityContext?.entityName ? `\nENTIDADE EM FOCO: ${entityContext.entityName}${
 
     const answer = await summarizeText(systemPrompt, prompt, 1500)
 
+    // Log the prompt for the weekly oracle-insights clustering job.
+    // Non-blocking — if oracle_chat_logs doesn't exist yet, silently skip.
+    void supabase
+      .from('oracle_chat_logs')
+      .insert({
+        prompt,
+        context_count: (contextItems || []).length,
+        module: module || null,
+        lang,
+      })
+      .then(() => {})
+
     return new Response(JSON.stringify({
       success: true,
       answer,
