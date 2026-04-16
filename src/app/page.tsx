@@ -28,6 +28,7 @@ import {
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import { OracleChat } from "@/components/OracleChat";
+import { CommandPalette } from "@/components/CommandPalette";
 
 import type { Module } from "@/components/Sidebar";
 
@@ -36,12 +37,25 @@ export default function Home() {
   const [activeModule, setActiveModule] = useState<Module>("dashboard");
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [oracleOpen, setOracleOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const router = useRouter();
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
     router.push("/login");
   };
+
+  // Ctrl+K / Cmd+K to open command palette
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+        e.preventDefault();
+        setPaletteOpen((o) => !o);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: "#F7F4EF" }}>
@@ -79,6 +93,14 @@ export default function Home() {
           {activeModule === "settings"     && <Settings lang={lang} />}
         </div>
       </main>
+
+      {/* Command palette — Ctrl+K / Cmd+K */}
+      <CommandPalette
+        lang={lang}
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        onNavigate={(mod) => setActiveModule(mod)}
+      />
 
       {/* Phase 29 — Persistent Oracle Chat FAB */}
       {oracleOpen && (

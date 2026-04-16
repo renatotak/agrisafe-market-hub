@@ -105,7 +105,9 @@ Each phase lists concrete tracks. Phases marked **[parallel]** are safe to dispa
 - Expansion Detection alerts — needs `CRAWLERS_DATABASE_URL`; diff on `cnpj_establishments` → daily themed briefing.
 - CRM RBAC + `client_confidential` 4th tier — tier filtering on `/api/crm/*` + role assignment UI.
 - App Campo push notifications (FCM/APNs) + Resend outreach worker + template editor + unsubscribe page.
-- Sentry · WCAG 2.1 · dark mode · Ctrl+K command palette · CSV/PDF export · institutional PDF briefing.
+- Sentry · WCAG 2.1 · dark mode · PDF export · institutional PDF briefing.
+- ~~Ctrl+K command palette~~ ✓ 2026-04-16 — keyboard-driven navigation across all 16 modules.
+- ~~CSV export~~ ✓ 2026-04-16 — reusable `src/lib/csv-export.ts` helper, wired to Financial Institutions directory (exports filtered results).
 
 ---
 

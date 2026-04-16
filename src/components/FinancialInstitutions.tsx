@@ -6,8 +6,9 @@ import { supabase } from "@/lib/supabase";
 import {
   Landmark, Search, X, ExternalLink, Loader2, MapPin,
   ChevronDown, ChevronUp, ChevronLeft, ChevronRight,
-  Shield, Building2, TrendingDown, BookOpen, Filter,
+  Shield, Building2, TrendingDown, BookOpen, Filter, Download,
 } from "lucide-react";
+import { downloadCsv, type CsvColumn } from "@/lib/csv-export";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -426,20 +427,49 @@ export function FinancialInstitutions({ lang }: { lang: Lang }) {
         )}
       </div>
 
-      {/* Results count + pagination top */}
+      {/* Results count + export + pagination top */}
       <div className="flex items-center justify-between">
         <p className="text-[12px] text-neutral-400">
           {filtered.length} {lang === "pt" ? "resultado(s)" : "result(s)"}
           {totalPages > 1 && ` · ${lang === "pt" ? "página" : "page"} ${page}/${totalPages}`}
         </p>
-        {totalPages > 1 && (
-          <div className="flex items-center gap-1">
-            <button onClick={() => setPage(Math.max(1, page - 1))} disabled={page <= 1}
-              className="p-1 rounded hover:bg-neutral-100 disabled:opacity-30"><ChevronLeft size={16} /></button>
-            <button onClick={() => setPage(Math.min(totalPages, page + 1))} disabled={page >= totalPages}
-              className="p-1 rounded hover:bg-neutral-100 disabled:opacity-30"><ChevronRight size={16} /></button>
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          {filtered.length > 0 && (
+            <button
+              onClick={() => {
+                const columns: CsvColumn<FinancialInstitution>[] = [
+                  { key: "name", header: lang === "pt" ? "Nome" : "Name" },
+                  { key: "short_name", header: lang === "pt" ? "Nome Curto" : "Short Name" },
+                  { key: "cnpj", header: "CNPJ" },
+                  { key: "institution_type", header: lang === "pt" ? "Tipo" : "Type" },
+                  { key: "headquarters_uf", header: "UF" },
+                  { key: "headquarters_city", header: lang === "pt" ? "Cidade" : "City" },
+                  { key: "is_sicor_eligible", header: "SICOR", format: (r) => r.is_sicor_eligible ? "Sim" : "Não" },
+                  { key: "sicor_segment", header: lang === "pt" ? "Segmento SICOR" : "SICOR Segment" },
+                  { key: "bcb_code", header: lang === "pt" ? "Código BCB" : "BCB Code" },
+                  { key: "rural_credit_volume_brl", header: lang === "pt" ? "Patrimônio (R$)" : "Net Assets (R$)" },
+                  { key: "active_rural_credit", header: lang === "pt" ? "Ativo" : "Active", format: (r) => r.active_rural_credit ? "Sim" : "Não" },
+                  { key: "website", header: "Website" },
+                ];
+                const ts = new Date().toISOString().slice(0, 10);
+                downloadCsv(`instituicoes-financeiras-${ts}`, filtered, columns);
+              }}
+              className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium rounded border border-neutral-300 text-neutral-700 hover:bg-neutral-50"
+              title={lang === "pt" ? "Exportar CSV" : "Export CSV"}
+            >
+              <Download size={12} />
+              CSV
+            </button>
+          )}
+          {totalPages > 1 && (
+            <div className="flex items-center gap-1">
+              <button onClick={() => setPage(Math.max(1, page - 1))} disabled={page <= 1}
+                className="p-1 rounded hover:bg-neutral-100 disabled:opacity-30"><ChevronLeft size={16} /></button>
+              <button onClick={() => setPage(Math.min(totalPages, page + 1))} disabled={page >= totalPages}
+                className="p-1 rounded hover:bg-neutral-100 disabled:opacity-30"><ChevronRight size={16} /></button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Loading */}
