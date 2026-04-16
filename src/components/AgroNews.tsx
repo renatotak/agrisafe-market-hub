@@ -7,6 +7,7 @@ import {
   Newspaper, ExternalLink, RefreshCw, Loader2, Star,
   ChevronLeft, ChevronRight, BarChart3, Settings2, Plus,
   Pencil, Trash2, X, AlertTriangle, BookOpen, Brain, Bookmark,
+  Zap, Check, ShieldCheck,
 } from "lucide-react";
 import {
   PieChart, Pie, Cell, BarChart, Bar, AreaChart, Area,
@@ -84,6 +85,84 @@ export function AgroNews({ lang }: { lang: Lang }) {
   const [showSourcesPanel, setShowSourcesPanel] = useState(false);
   const [editingSource, setEditingSource] = useState<NewsSource | null>(null);
   const [showSourceModal, setShowSourceModal] = useState(false);
+
+  // Phase 4b — manual news upload
+  const [showAddNewsModal, setShowAddNewsModal] = useState(false);
+  const [addNewsUrl, setAddNewsUrl] = useState("");
+  const [addNewsTitle, setAddNewsTitle] = useState("");
+  const [addNewsSummary, setAddNewsSummary] = useState("");
+  const [addNewsSubmitting, setAddNewsSubmitting] = useState(false);
+  const [addNewsFeedback, setAddNewsFeedback] = useState<{ type: "success" | "error"; msg: string } | null>(null);
+
+  // ─── Phase 4c — News → Directory enrichment ────────────────
+  interface EnrichmentProposal {
+    entity_uid: string;
+    entity_name: string;
+    proposed_role: string;
+    confidence: number;
+    source_snippet: string;
+    source: "algorithmic" | "llm";
+  }
+  const [enrichArticleId, setEnrichArticleId] = useState<string | null>(null);
+  const [enrichProposals, setEnrichProposals] = useState<EnrichmentProposal[]>([]);
+  const [enrichSelected, setEnrichSelected] = useState<Set<string>>(new Set());
+  const [enrichLoading, setEnrichLoading] = useState(false);
+  const [enrichAccepting, setEnrichAccepting] = useState(false);
+  const [enrichFeedback, setEnrichFeedback] = useState<{ type: "success" | "error"; msg: string } | null>(null);
+  const [showEnrichModal, setShowEnrichModal] = useState(false);
+
+  const proposeEnrichment = async (articleId: string) => {
+    setEnrichArticleId(articleId);
+    setEnrichLoading(true);
+    setEnrichProposals([]);
+    setEnrichSelected(new Set());
+    setEnrichFeedback(null);
+    setShowEnrichModal(true);
+    try {
+      const res = await fetch(`/api/news/propose-enrichment?article_id=${encodeURIComponent(articleId)}`);
+      if (!res.ok) throw new Error("fetch failed");
+      const json = await res.json();
+      const proposals: EnrichmentProposal[] = json.proposals || [];
+      setEnrichProposals(proposals);
+      // Pre-select all with confidence >= 0.7
+      setEnrichSelected(new Set(proposals.filter((p) => p.confidence >= 0.7).map((p) => p.entity_uid)));
+    } catch {
+      setEnrichFeedback({ type: "error", msg: tr.enrichError });
+    } finally {
+      setEnrichLoading(false);
+    }
+  };
+
+  const acceptEnrichment = async () => {
+    if (enrichSelected.size === 0 || !enrichArticleId) return;
+    setEnrichAccepting(true);
+    setEnrichFeedback(null);
+    try {
+      const accepted = enrichProposals
+        .filter((p) => enrichSelected.has(p.entity_uid))
+        .map((p) => ({ entity_uid: p.entity_uid, proposed_role: p.proposed_role }));
+      const res = await fetch("/api/news/propose-enrichment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ article_id: enrichArticleId, accepted }),
+      });
+      if (!res.ok) throw new Error("post failed");
+      setEnrichFeedback({ type: "success", msg: tr.enrichSuccess });
+    } catch {
+      setEnrichFeedback({ type: "error", msg: tr.enrichError });
+    } finally {
+      setEnrichAccepting(false);
+    }
+  };
+
+  const toggleEnrichSelection = (uid: string) => {
+    setEnrichSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(uid)) next.delete(uid);
+      else next.add(uid);
+      return next;
+    });
+  };
 
   useEffect(() => { setPage(0); }, [categoryFilter, sourceFilter, producerOnly]);
   useEffect(() => { fetchNews(); }, [page, categoryFilter, sourceFilter, producerOnly]);
@@ -267,6 +346,51 @@ export function AgroNews({ lang }: { lang: Lang }) {
     await fetchSources();
   };
 
+  // Phase 4b — manual news submit
+  const submitManualNews = async () => {
+    if (!addNewsUrl.trim()) {
+      setAddNewsFeedback({ type: "error", msg: tr.addNewsUrlRequired });
+      return;
+    }
+    setAddNewsSubmitting(true);
+    setAddNewsFeedback(null);
+    try {
+      const secret = process.env.NEXT_PUBLIC_READING_ROOM_SECRET || "";
+      const res = await fetch("/api/reading-room/ingest", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-reading-room-secret": secret,
+        },
+        body: JSON.stringify({
+          url: addNewsUrl.trim(),
+          title: addNewsTitle.trim() || undefined,
+          summary: addNewsSummary.trim() || undefined,
+          content: addNewsSummary.trim() || undefined,
+          source: "manual_ui",
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setAddNewsFeedback({ type: "error", msg: `${tr.addNewsError}: ${err.error || res.statusText}` });
+        return;
+      }
+      setAddNewsFeedback({ type: "success", msg: tr.addNewsSuccess });
+      setAddNewsUrl("");
+      setAddNewsTitle("");
+      setAddNewsSummary("");
+      fetchNews();
+      setTimeout(() => {
+        setShowAddNewsModal(false);
+        setAddNewsFeedback(null);
+      }, 1500);
+    } catch (e: any) {
+      setAddNewsFeedback({ type: "error", msg: `${tr.addNewsError}: ${e?.message || "unknown"}` });
+    } finally {
+      setAddNewsSubmitting(false);
+    }
+  };
+
   return (
     <div>
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
@@ -298,6 +422,13 @@ export function AgroNews({ lang }: { lang: Lang }) {
             className={`p-2 rounded-lg text-sm transition-colors ${showCharts ? "bg-brand-primary/10 text-brand-primary" : "text-neutral-400 hover:bg-neutral-100"}`}
           >
             <BarChart3 size={18} />
+          </button>
+          <button
+            onClick={() => { setAddNewsFeedback(null); setShowAddNewsModal(true); }}
+            className="flex items-center gap-2 px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium text-sm transition-colors shadow-sm"
+          >
+            <Plus size={16} />
+            {tr.addNews}
           </button>
           <button
             onClick={() => { setPage(0); fetchNews(); }}
@@ -618,6 +749,83 @@ export function AgroNews({ lang }: { lang: Lang }) {
               className="p-2 rounded-lg hover:bg-neutral-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
               <ChevronRight size={16} />
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Phase 4b — Add News Modal */}
+      {showAddNewsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-xl shadow-xl border border-neutral-200 w-full max-w-lg">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-200">
+              <h3 className="text-lg font-semibold text-neutral-800">{tr.addNewsTitle}</h3>
+              <button onClick={() => setShowAddNewsModal(false)} className="p-1.5 rounded hover:bg-neutral-100">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-neutral-700 mb-1">
+                  {tr.addNewsUrl} *
+                </label>
+                <input
+                  type="url"
+                  value={addNewsUrl}
+                  onChange={(e) => setAddNewsUrl(e.target.value)}
+                  className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                  placeholder={tr.addNewsUrlPlaceholder}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-neutral-700 mb-1">
+                  {tr.addNewsTitleField}
+                </label>
+                <input
+                  type="text"
+                  value={addNewsTitle}
+                  onChange={(e) => setAddNewsTitle(e.target.value)}
+                  className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                  placeholder={tr.addNewsTitlePlaceholder}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-neutral-700 mb-1">
+                  {tr.addNewsSummary}
+                </label>
+                <textarea
+                  value={addNewsSummary}
+                  onChange={(e) => setAddNewsSummary(e.target.value)}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 resize-none"
+                  placeholder={tr.addNewsSummaryPlaceholder}
+                />
+              </div>
+              {addNewsFeedback && (
+                <div className={`text-sm px-3 py-2 rounded-lg ${
+                  addNewsFeedback.type === "success"
+                    ? "bg-green-50 text-green-700 border border-green-200"
+                    : "bg-red-50 text-red-700 border border-red-200"
+                }`}>
+                  {addNewsFeedback.msg}
+                </div>
+              )}
+            </div>
+            <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-neutral-200 bg-neutral-50">
+              <button
+                onClick={() => setShowAddNewsModal(false)}
+                className="px-4 py-2 text-sm font-medium text-neutral-600 hover:bg-neutral-100 rounded-lg"
+              >
+                {tr.cancel}
+              </button>
+              <button
+                onClick={submitManualNews}
+                disabled={addNewsSubmitting}
+                className="px-4 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 rounded-lg flex items-center gap-2"
+              >
+                {addNewsSubmitting && <Loader2 size={14} className="animate-spin" />}
+                {addNewsSubmitting ? tr.addNewsSubmitting : tr.addNewsSubmit}
+              </button>
+            </div>
           </div>
         </div>
       )}

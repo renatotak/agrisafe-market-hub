@@ -104,20 +104,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "invalid JSON body" }, { status: 400 });
   }
 
-  const { url, title, content } = body;
+  const { url, title, content, source } = body;
+  const isManualUi = source === "manual_ui";
+
   if (!isValidUrl(url)) {
     return NextResponse.json({ error: "url is required and must be a valid http(s) URL" }, { status: 400 });
   }
-  if (typeof title !== "string" || !title.trim()) {
+  // manual_ui uploads only require URL; title and content are optional
+  if (!isManualUi && (typeof title !== "string" || !title.trim())) {
     return NextResponse.json({ error: "title is required" }, { status: 400 });
   }
-  if (typeof content !== "string" || !content.trim()) {
+  if (!isManualUi && (typeof content !== "string" || !content.trim())) {
     return NextResponse.json({ error: "content is required" }, { status: 400 });
   }
 
   const sourceName = (typeof body.source_name === "string" && body.source_name.trim())
     ? body.source_name.trim()
-    : "Reading Room";
+    : isManualUi ? "Manual" : "Reading Room";
   const fetchedAt = (typeof body.fetched_at === "string" && body.fetched_at)
     ? body.fetched_at
     : new Date().toISOString();
@@ -125,9 +128,11 @@ export async function POST(req: NextRequest) {
     ? body.tags.filter((t: unknown) => typeof t === "string").slice(0, 10)
     : [];
 
-  const cleanTitle = title.trim();
-  const cleanContent = content.trim();
-  const summary = cleanContent.slice(0, 500);
+  const cleanTitle = (typeof title === "string" && title.trim()) ? title.trim() : url;
+  const cleanContent = (typeof content === "string" && content.trim()) ? content.trim() : "";
+  const summary = (typeof body.summary === "string" && body.summary.trim())
+    ? body.summary.trim()
+    : cleanContent.slice(0, 500) || null;
 
   // ─── 3. Insert into agro_news ───────────────────────────────
   const supabase = createAdminClient();
@@ -180,8 +185,8 @@ export async function POST(req: NextRequest) {
     action: "upsert",
     target_table: "agro_news",
     target_id: newsId,
-    source: "reading-room-extension",
-    source_kind: "extension",
+    source: isManualUi ? "manual-ui" : "reading-room-extension",
+    source_kind: isManualUi ? "manual" : "extension",
     summary: `${cleanTitle.slice(0, 180)}`,
     confidentiality: "agrisafe_published",
     metadata: { source_url: url, source_name: sourceName },
