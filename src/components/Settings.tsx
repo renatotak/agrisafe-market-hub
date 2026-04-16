@@ -15,6 +15,7 @@ import { VertexSearchTestPanel } from "@/components/VertexSearchTestPanel";
 import { OneNoteImportWizard } from "@/components/OneNoteImportWizard";
 import { AppCampoPanel } from "@/components/AppCampoPanel";
 import { IndustryDedupePanel } from "@/components/IndustryDedupePanel";
+import { ReclassifyImportsPanel } from "@/components/ReclassifyImportsPanel";
 import { CopyableCode } from "@/components/ui/CopyableCode";
 
 const EXTENSION_FOLDER_PATH = "chrome-extensions/reading-room";
@@ -254,6 +255,9 @@ export function Settings({ lang }: { lang: Lang }) {
 
       {/* Industry duplicate cleanup */}
       <IndustryDedupePanel lang={lang} />
+
+      {/* Meeting reclassification (Phase 6f) */}
+      <ReclassifyImportsPanel lang={lang} />
 
       {/* App Campo API Integration (Phase 29) */}
       <AppCampoPanel lang={lang} />
