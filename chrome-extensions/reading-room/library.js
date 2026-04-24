@@ -1,5 +1,6 @@
 // ==================== CONSTANTS & CONFIG ====================
 const STORAGE_KEY = 'rr_articles';
+const STAMPS_KEY  = 'rr_article_stamps'; // owned by background.js — do NOT write from here
 
 // AgriSafe Market Hub integration (Phase 22)
 const MKTHUB_URL_STORAGE    = 'rr_mkthub_url';
@@ -91,10 +92,24 @@ function safeHostname(url) {
 }
 
 // ==================== STORAGE FUNCTIONS ====================
+// Merge the sparse stamps map onto the in-memory `articles` (non-persistent —
+// stamps live only in STAMPS_KEY, never written back into STORAGE_KEY from here).
+function mergeStamps(stampsMap) {
+    const m = stampsMap || {};
+    for (const a of articles) {
+        const s = m[a.id];
+        if (s) {
+            a.mkthubSyncedAt = s.syncedAt || a.mkthubSyncedAt || null;
+            a.mkthubNewsId   = s.newsId   || a.mkthubNewsId   || null;
+        }
+    }
+}
+
 function loadArticles() {
     return new Promise((resolve) => {
-        storage.get(STORAGE_KEY, (data) => {
+        storage.get([STORAGE_KEY, STAMPS_KEY], (data) => {
             articles = data[STORAGE_KEY] || [];
+            mergeStamps(data[STAMPS_KEY]);
             resolve();
         });
     });
@@ -103,6 +118,19 @@ function loadArticles() {
 async function saveArticles() {
     return new Promise((resolve) => {
         storage.set({ [STORAGE_KEY]: articles }, () => resolve());
+    });
+}
+
+// Live-update the synced badge when background writes a new stamp while this
+// page is already open. Stamps are also observed when another tab saves an
+// article and its push completes.
+if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged) {
+    chrome.storage.onChanged.addListener((changes, area) => {
+        if (area !== 'local') return;
+        if (changes[STAMPS_KEY]) {
+            mergeStamps(changes[STAMPS_KEY].newValue);
+            renderArticles();
+        }
     });
 }
 
@@ -493,6 +521,40 @@ if (mkthubSaveBtn) {
         } catch (err) {
             if (status) { status.textContent = '✗ ' + (err.message || 'Connection failed'); status.classList.add('error'); }
             showToast('Market Hub connection failed', 'error');
+        }
+    });
+}
+
+// Pull every Reading Room article from the Market Hub into the local library.
+// Matches by URL so it's idempotent: re-clicking never duplicates, and local
+// notes/status/takeaways are always preserved.
+const mkthubPullBtn = document.getElementById('pullMkthubBtn');
+if (mkthubPullBtn) {
+    mkthubPullBtn.addEventListener('click', async () => {
+        const status = document.getElementById('mkthubPullStatus');
+        if (status) { status.textContent = 'Fetching from Market Hub…'; status.classList.remove('error'); }
+        mkthubPullBtn.disabled = true;
+        try {
+            const result = await new Promise((resolve) => {
+                chrome.runtime.sendMessage({ type: 'pull-from-mkthub' }, (r) => {
+                    if (chrome.runtime.lastError) resolve({ ok: false, error: chrome.runtime.lastError.message });
+                    else resolve(r || { ok: false, error: 'No response' });
+                });
+            });
+            if (!result.ok) {
+                if (status) { status.textContent = '✗ ' + (result.error || 'Pull failed'); status.classList.add('error'); }
+                showToast('Market Hub pull failed', 'error');
+                return;
+            }
+            // Storage changed under us — reload in-memory view + re-render.
+            await loadArticles();
+            updateStats();
+            renderArticles();
+            const msg = `✓ ${result.added} added, ${result.updated} already present (total ${result.total})`;
+            if (status) { status.textContent = msg; status.classList.remove('error'); }
+            showToast(`Pulled from Market Hub: +${result.added} new`);
+        } finally {
+            mkthubPullBtn.disabled = false;
         }
     });
 }

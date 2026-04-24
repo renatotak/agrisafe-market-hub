@@ -9,6 +9,7 @@
 // mkthubSyncedAt + mkthubNewsId. The UI never has to manually push.
 
 const STORAGE_KEY           = 'rr_articles';
+const STAMPS_KEY            = 'rr_article_stamps';
 const MKTHUB_URL_STORAGE    = 'rr_mkthub_url';
 const MKTHUB_SECRET_STORAGE = 'rr_mkthub_secret';
 const MKTHUB_DEFAULT_URL    = 'https://agsf-mkthub.vercel.app';
@@ -111,18 +112,24 @@ async function pushArticleToMarketHub(article) {
   }
 }
 
-// Stamp the article in chrome.storage.local with sync metadata after a
-// successful push. Read-modify-write — there's a tiny race window if the
-// user saves another article at the same instant, but in practice the popup
-// closes after save and library re-renders are debounced, so it's fine.
-async function stampArticleSynced(articleId, news_id) {
-  const data = await chrome.storage.local.get(STORAGE_KEY);
-  const articles = data[STORAGE_KEY] || [];
-  const idx = articles.findIndex((a) => a.id === articleId);
-  if (idx === -1) return;
-  articles[idx].mkthubSyncedAt = new Date().toISOString();
-  articles[idx].mkthubNewsId   = news_id;
-  await chrome.storage.local.set({ [STORAGE_KEY]: articles });
+// Stamps are kept in their own sparse key `rr_article_stamps = { [id]: {syncedAt, newsId} }`
+// so UI writes to `rr_articles` never clobber a stamp mid-push. Writes are serialized
+// via a single-slot promise queue to prevent background-vs-background lost updates when
+// several pushes complete concurrently.
+let stampQueue = Promise.resolve();
+function stampArticleSynced(articleId, news_id) {
+  stampQueue = stampQueue.then(async () => {
+    const data = await chrome.storage.local.get(STAMPS_KEY);
+    const stamps = data[STAMPS_KEY] || {};
+    stamps[articleId] = {
+      syncedAt: new Date().toISOString(),
+      newsId:   news_id || null,
+    };
+    await chrome.storage.local.set({ [STAMPS_KEY]: stamps });
+  }).catch((e) => {
+    console.error('[stampArticleSynced] failed:', e && e.message);
+  });
+  return stampQueue;
 }
 
 // ── Message router ──
@@ -154,5 +161,104 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true; // keep the message channel open for async sendResponse
   }
 
+  if (msg.type === 'pull-from-mkthub') {
+    (async () => {
+      const result = await pullFromMarketHub();
+      sendResponse(result);
+    })();
+    return true;
+  }
+
   return false;
 });
+
+// ── Pull from Market Hub ──
+// Fetches /api/reading-room/list and merges into rr_articles. Matches by URL
+// to keep this idempotent: existing local articles are kept (notes/status/
+// takeaways preserved) and only their mkthubNewsId + stamp get refreshed.
+// New articles are inserted with the server's id as their local id.
+async function pullFromMarketHub() {
+  const { url, secret } = await getMarketHubConfig();
+  if (!secret) return { ok: false, error: 'Market Hub secret not set. Open Settings → Market Hub.' };
+
+  let serverArticles;
+  try {
+    const res = await fetch(`${url}/api/reading-room/list`, {
+      method: 'GET',
+      headers: { 'x-reading-room-secret': secret },
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: json.error || `HTTP ${res.status}` };
+    serverArticles = Array.isArray(json.articles) ? json.articles : [];
+  } catch (err) {
+    return { ok: false, error: err.message || 'Network error' };
+  }
+
+  const data = await chrome.storage.local.get([STORAGE_KEY, STAMPS_KEY]);
+  const local = data[STORAGE_KEY] || [];
+  const stamps = data[STAMPS_KEY] || {};
+  const byUrl = new Map(local.map((a) => [a.url, a]));
+
+  let added = 0;
+  let updated = 0;
+  const nowIso = new Date().toISOString();
+
+  for (const s of serverArticles) {
+    if (!s.url || !s.title) continue;
+    const existing = byUrl.get(s.url);
+    if (existing) {
+      // Preserve user edits — only refresh server linkage + stamp.
+      existing.mkthubNewsId = s.id;
+      stamps[existing.id] = {
+        syncedAt: stamps[existing.id]?.syncedAt || s.published_at || nowIso,
+        newsId:   s.id,
+      };
+      updated++;
+    } else {
+      const fresh = {
+        id:         s.id, // reuse server's hash id locally
+        url:        s.url,
+        title:      s.title,
+        category:   mapServerCategory(s.category),
+        status:     'unread',
+        excerpt:    s.summary || '',
+        notes:      '',
+        takeaways:  '',
+        tags:       Array.isArray(s.tags) ? s.tags.slice(0, 10) : [],
+        savedAt:    s.published_at || nowIso,
+        updatedAt:  nowIso,
+        mkthubNewsId: s.id,
+        pulledFromMkthub: true,
+      };
+      local.unshift(fresh);
+      byUrl.set(s.url, fresh);
+      stamps[s.id] = { syncedAt: s.published_at || nowIso, newsId: s.id };
+      added++;
+    }
+  }
+
+  await chrome.storage.local.set({
+    [STORAGE_KEY]: local,
+    [STAMPS_KEY]:  stamps,
+  });
+
+  return { ok: true, added, updated, total: serverArticles.length };
+}
+
+// Map the server's news category (commodities/judicial/etc.) to the
+// extension's extraction taxonomy (marketing/tech/business/industry/
+// research/other). Anything we can't map cleanly falls back to 'other' so
+// the user can re-categorize later.
+function mapServerCategory(cat) {
+  switch ((cat || '').toLowerCase()) {
+    case 'technology':      return 'tech';
+    case 'commodities':
+    case 'credit':
+    case 'judicial':        return 'business';
+    case 'policy':
+    case 'sustainability':  return 'industry';
+    case 'livestock':
+    case 'general':
+    default:                return 'other';
+  }
+}
