@@ -1,7 +1,7 @@
 # AgriSafe Market Hub — Roadmap
 
-> **Last updated:** 2026-04-16 — **All planned work complete. ✓**
-> Phases 1–7 shipped. Active backlog items (Ctrl+K, CSV export, Knowledge Agents) landed. Remaining items are optional enhancements with no committed timeline.
+> **Last updated:** 2026-04-28 — **All planned work complete. ✓**
+> Phases 1–7 shipped. Active backlog items (Ctrl+K, CSV export, Knowledge Agents) landed. 9 new backlog items added (§4.3). Remaining items are optional enhancements with no committed timeline.
 >
 > 4 verticals · 15 modules · 64 tables · 75 migrations · 33 cron jobs (smart orchestrator) · 9 MCP tools · 176 data sources
 > For phase history, see git log. For setup, see `.env.example`. For ops, see [`launchd/README.md`](launchd/README.md). For hard rules, see [`CLAUDE.md`](CLAUDE.md).
@@ -121,6 +121,20 @@ Open items — may or may not be pursued depending on future priorities. All are
 - **Dark mode** — theme toggle + Tailwind dark variant classes across the codebase.
 - **PDF export / institutional PDF briefing** — report generation for directories and daily briefings. Needs a PDF library (jsPDF, pdfkit, or Puppeteer).
 - **CSV export — remaining directories** — add Download button to RetailersDirectory (needs server-side export endpoint due to 9,328 rows + server pagination) and MeetingsLog.
+
+### 4.3 New backlog (2026-04-28)
+
+| # | Module | Task | Type | Notes |
+|---|--------|------|------|-------|
+| 1 | Global UI | **Bell notification icon not working** — upper-right bell does nothing on click | Bug | Investigate handler; wire to notification data or remove placeholder |
+| 2 | Recuperação Judicial | **RJ analysis via Receita Federal + Notícias Agro** — no Serasa CSV exists; query RF table in AgriSafe Postgres (situação cadastral) cross-referenced with RJ-related news from Notícias Agro | Redesign | Replaces the "Serasa RJ backfill" blocker — `backfill-serasa-rj.ts` approach is abandoned |
+| 3 | Diretórios | **Revise all OneNote files (Renato + Davi)** — audit imported OneNote content for classification, data quality, and duplicates | Manual review | Both Renato's and Davi's exports |
+| 4 | Marco Regulatório | **Improve regulatory document type indicators** — better showcase normas, leis, instruções normativas, resoluções, portarias, and other regulatory/legal documents that regulate agribusiness in Brazil | Enhancement | Improve UI to distinguish between document types |
+| 5 | Central de Conteúdo | **Major content overhaul** — feed from LinkedIn published posts; LinkedIn newspaper; Instagram posts; automated content creation based on the knowledge base being built in this project | Major feature | Large feature package — needs its own spec/phasing |
+| 6 | Log de Reuniões | **Company name matching issues** — meeting log entries don't match to correct company names; needs manual revision | Manual fix + code | May also need entity-matcher improvements for meeting imports |
+| 7 | Instituições Financeiras | **Delinquency & defaults charts tab** — new tab with charts of inadimplência and defaults, data downloaded from BCB SGS | New tab | Expands existing SCR inadimplência sparkline (Phase 7c) into a full tab with more series |
+| 8 | Notícias Agro | **Update button not working** — clicking the update/refresh button appears to do nothing | Bug | Investigate "Atualizar" handler in `AgroNews.tsx` |
+| 9 | Painel | **Persona-based Executive Briefing tabs** — develop tabs in Briefing Executivo based on personas (CEO, Head Comercial, Head Crédito, etc.); test now, eventually send via mailing to subscribers | New feature | Builds on `daily_themed_briefing` lens (Phase 6c), adds persona dimension |
 
 ---
 
